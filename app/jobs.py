@@ -12,7 +12,7 @@ cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
 # rough baseline chars/sec; tweak later if you want
-BASELINE_XTTS_CPS = 30.0
+BASELINE_XTTS_CPS = 25.0
 BASELINE_PIPER_CPS = 220.0
 
 
@@ -145,8 +145,8 @@ def worker_loop():
             # --- Convert to MP3 if enabled ---
             if j.make_mp3:
                 update_job(jid, progress=0.99, log="".join(logs)[-20000:])
-                frc, fout = wav_to_mp3(out_wav, out_mp3)
-                logs.append(f"\n[ffmpeg] rc={frc}\n{fout}\n")
+                frc = wav_to_mp3(out_wav, out_mp3, on_output=on_output, cancel_check=cancel_check)
+                logs.append(f"\n[ffmpeg] rc={frc}\n")
                 if frc == 0 and out_mp3.exists():
                     update_job(
                         jid,

@@ -278,7 +278,7 @@ def backfill_mp3_xtts():
         mp3 = wav.with_suffix(".mp3")
         if mp3.exists():
             continue
-        rc, out = wav_to_mp3(wav, mp3)
+        rc = wav_to_mp3(wav, mp3)
         if rc == 0 and mp3.exists():
             converted += 1
         else:
@@ -298,6 +298,14 @@ def api_jobs():
     """Returns jobs from state, augmented with file-based auto-discovery."""
     jobs_dict = {j.chapter_file: asdict(j) for j in get_jobs().values()}
     
+    # Dynamic progress update based on time
+    now = time.time()
+    for j in jobs_dict.values():
+        if j.get('status') == 'running' and j.get('started_at') and j.get('eta_seconds'):
+            elapsed = now - j['started_at']
+            time_prog = min(0.99, elapsed / float(j['eta_seconds']))
+            j['progress'] = max(j.get('progress', 0.0), time_prog)
+
     # Auto-discovery
     chapters = [p.name for p in list_chapters()]
     for c in chapters:

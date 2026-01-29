@@ -27,9 +27,13 @@ def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
                 on_output(rest)
             return proc.returncode or 0
 
-def wav_to_mp3(in_wav: Path, out_mp3: Path) -> Tuple[int, str]:
+def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -> int:
+    def noop(*args): pass
+    if on_output is None: on_output = noop
+    if cancel_check is None: cancel_check = lambda: False
+
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
-    return subprocess.getstatusoutput(cmd)
+    return run_cmd_stream(cmd, on_output, cancel_check)
 
 def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
