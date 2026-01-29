@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>TTS Dashboard</title>
+  <style>
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 18px;
+    }
+
+    .row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .panel {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 14px;
+      flex: 1;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    td,
+    th {
+      border-bottom: 1px solid #eee;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .tag {
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+      margin-left: 6px;
+      display: inline-block;
+    }
+
+    .ok {
+      color: #0a6;
+    }
+
+    .bad {
+      color: #b00020;
+    }
+
+    audio {
+      width: 260px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #444;
+    }
+
+    .statusline {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .linktag {
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>TTS Dashboard</h2>
+
+  <div class="panel">
+    <h3>Quick Start</h3>
+    <div class="mono">cd ~/tts-dashboard
+      source venv/bin/activate
+      python3 -m uvicorn run:app --reload --port 8123
+      open http://127.0.0.1:8123</div>
+    <p>
+      XTTS narrator voice file: <b>narrator_clean.wav</b>
+      {% if narrator_ok %}
+      <span class="tag ok">FOUND</span>
+      {% else %}
+      <span class="tag bad">MISSING</span>
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <h3>Upload + Split</h3>
+      <form method="post" action="/upload" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".txt" />
+        <button type="submit">Upload</button>
+      </form>
+
+      <hr />
+      <h3>Queue Controls</h3>
+
+      <form method="post" action="/queue/start_xtts">
+        <button type="submit">Start XTTS Queue (missing only)</button>
+      </form>
+
+      <form method="post" action="/queue/start_piper">
+        <label>Piper voice:
+          <select name="piper_voice">
+            <option value="">(select)</option>
+            {% for v in piper_voices %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+          </select>
+        </label>
+        <button type="submit">Start Piper Queue (missing only)</button>
+      </form>
+
+      <form method="post" action="/queue/pause">
+        <button type="submit">{{ "Resume Queue" if paused else "Pause Queue" }}</button>
+      </form>
+      <form method="post" action="/queue/reset_stuck"
+        onsubmit="return confirm('Reset any jobs stuck in RUNNING back to QUEUED?');">
+        <button type="submit">Reset stuck RUNNING jobs</button>
+      </form>
+      <form method="post" action="/queue/reconcile">
+        <button type="submit">Reconcile jobs with existing files</button>
+      </form>
+
+      <form method="post" action="/queue/clear_done" onsubmit="return confirm('Clear all DONE jobs from the list?');">
+        <button type="submit">Clear DONE jobs</button>
+      </form>
+      <form method="post" action="/queue/backfill_mp3_xtts">
+        <button type="submit">Backfill MP3 from existing XTTS WAVs</button>
+      </form>
+
+      <hr />
+      <h3>Settings</h3>
+      <form method="post" action="/settings">
+        <label><input type="checkbox" name="safe_mode" value="1" {% if settings.safe_mode %}checked{% endif %} /> Safe
+          Mode (XTTS: split long sentences automatically)</label><br />
+        <label><input type="checkbox" name="make_mp3" value="1" {% if settings.make_mp3 %}checked{% endif %} /> Make MP3
+          (recommended)</label><br />
+        <label>Default Piper voice:
+          <select name="default_piper_voice">
+            <option value="">(none)</option>
+            {% for v in piper_voices %}
+            <option value="{{ v }}" {% if settings.default_piper_voice==v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </label><br /><br />
+        <button type="submit">Save</button>
+      </form>
+
+      <hr />
+      <div class="small">
+        Tip: The 🎧 tag below is now clickable and the chapter list will show an audio player when an MP3 exists.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Chapters</h3>
+      <p>{{ chapters|length }} files in chapters_out/</p>
+      <table>
+        <tr>
+          <th>Chapter</th>
+          <th>Status</th>
+          <th>Listen (MP3)</th>
+        </tr>
+        {% for c in chapters %}
+        <tr>
+          <td><a href="/?chapter={{ c }}">{{ c }}</a></td>
+
+          <td>
+            <div class="statusline">
+              {% if c in xtts_mp3 %}
+              <!-- Link opens the MP3 directly in the browser -->
+              <a class="linktag" href="/out/xtts/{{ c.rsplit('.', 1)[0] }}.mp3" target="_blank">
+                <span class="tag ok">XTTS 🎧</span>
+              </a>
+              {% elif c in xtts_wav_only %}
+              <span class="tag">XTTS 🟡 (wav)</span>
+              {% endif %}
+
+              {% if c in piper_mp3 %}
+              <a class="linktag" href="/out/piper/{{ c.rsplit('.', 1)[0] }}.mp3" target="_blank">
+                <span class="tag ok">Piper 🎧</span>
+              </a>
+              {% elif c in piper_wav_only %}
+              <span class="tag">Piper 🟡 (wav)</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <td>
+            {% if c in xtts_mp3 %}
+            <audio controls preload="none" src="/out/xtts/{{ c.rsplit('.', 1)[0] }}.mp3"></audio>
+            {% elif c in piper_mp3 %}
+            <audio controls preload="none" src="/out/piper/{{ c.rsplit('.', 1)[0] }}.mp3"></audio>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div class="panel">
+      <h3>Preview</h3>
+      <p><b>{{ selected_chapter }}</b></p>
+
+      {% if selected_chapter %}
+      <form method="post" action="/analyze_long">
+        <input type="hidden" name="chapter_file" value="{{ selected_chapter }}" />
+        <button type="submit">Dump long sentences report (this chapter)</button>
+      </form>
+      {% endif %}
+
+      <div class="mono">{{ preview_text }}</div>
+
+      <hr />
+      <h3>Jobs (latest)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Engine</th>
+            <th>Chapter</th>
+            <th>Progress</th>
+            <th>Play</th>
+            <th>Cancel</th>
+          </tr>
+        </thead>
+        <tbody id="jobsBody">
+          {% for j in jobs %}
+          <tr>
+            <td><span class="tag">{{ j.status }}</span></td>
+            <td>{{ j.engine }}</td>
+            <td>{{ j.chapter_file }}</td>
+            <td>{{ (j.progress*100)|round(0) }}% {% if j.eta_seconds %}(~{{ j.eta_seconds }}s){% endif %}</td>
+            <td>
+              {% if j.output_mp3 %}
+              {% if j.engine == "xtts" %}
+              <audio controls preload="none" src="/out/xtts/{{ j.output_mp3 }}"></audio>
+              {% else %}
+              <audio controls preload="none" src="/out/piper/{{ j.output_mp3 }}"></audio>
+              {% endif %}
+              {% endif %}
+            </td>
+            <td>
+              {% if j.status in ["queued","running"] %}
+              <form method="post" action="/cancel">
+                <input type="hidden" name="job_id" value="{{ j.id }}" />
+                <button type="submit">Cancel</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="mono">If audio still won’t play: try opening the linked MP3 in a new tab. If that 404s, your MP3
+        filename doesn’t match the chapter filename stem.</p>
+    </div>
+  </div>
+  <script>
+    function esc(s) {
+      return (s ?? "").toString()
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function jobAudioCell(j) {
+      if (!j.output_mp3) return "";
+      const base = (j.engine === "xtts") ? "/out/xtts/" : "/out/piper/";
+      const src = base + encodeURIComponent(j.output_mp3);
+      return `<audio controls preload="none" src="${src}"></audio>`;
+    }
+
+    function cancelCell(j) {
+      if (j.status !== "queued" && j.status !== "running") return "";
+      // Use a normal form so cancel works without JS frameworks
+      return `
+      <form method="post" action="/cancel">
+        <input type="hidden" name="job_id" value="${esc(j.id)}"/>
+        <button type="submit">Cancel</button>
+      </form>
+    `;
+    }
+
+    function progressText(j) {
+      const pct = Math.round((j.progress ?? 0) * 100);
+      const eta = j.eta_seconds ? ` (~${j.eta_seconds}s)` : "";
+      return `${pct}%${eta}`;
+    }
+
+    async function refreshJobs() {
+      try {
+        const r = await fetch("/api/jobs", { cache: "no-store" });
+        if (!r.ok) return;
+        const jobs = await r.json();
+
+        const rows = jobs.map(j => `
+        <tr>
+          <td><span class="tag">${esc(j.status)}</span></td>
+          <td>${esc(j.engine)}</td>
+          <td>${esc(j.chapter_file)}</td>
+          <td>${esc(progressText(j))}</td>
+          <td>${jobAudioCell(j)}</td>
+          <td>${cancelCell(j)}</td>
+        </tr>
+      `).join("");
+
+        const body = document.getElementById("jobsBody");
+        if (body) body.innerHTML = rows;
+      } catch (e) {
+        // If you stop the server, fetch will fail; ignore quietly.
+      }
+    }
+
+    // Update immediately, then every second
+    refreshJobs();
+    setInterval(refreshJobs, 1000);
+  </script>
+</body>
+
+</html>

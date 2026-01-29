@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Split</title>
+</head>
+
+<body style="font-family:-apple-system,system-ui,sans-serif;margin:18px;">
+  <h2>Split uploaded file into chapters</h2>
+  <p>File: <code>{{ file }}</code></p>
+  <p>Expected chapter markers like: <code>Chapter 1591: Years Later</code></p>
+  <form method="post" action="/split">
+    <input type="hidden" name="file" value="{{ file }}" />
+    <button type="submit">Split into chapters_out/</button>
+  </form>
+  <p><a href="/">Back</a></p>
+</body>
+
+</html>
