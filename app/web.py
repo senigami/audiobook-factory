@@ -25,6 +25,7 @@ templates = Environment(
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 def list_chapters():
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
