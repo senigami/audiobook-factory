@@ -217,7 +217,7 @@ def cancel(job_id: str = Form(...)):
     return RedirectResponse("/", status_code=303)
 
 @app.post("/analyze_long")
-def analyze_long(chapter_file: str = Form(""), ajax: bool = False):
+def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     if not chapter_file:
         return PlainTextResponse("Pick a chapter from the list first.", status_code=400)
 
@@ -315,13 +315,13 @@ def api_jobs():
         
         found_job = None
         if x_mp3.exists():
-            found_job = {"status": "done", "engine": "xtts", "output_mp3": x_mp3.name}
+            found_job = {"status": "done", "engine": "xtts", "output_mp3": x_mp3.name, "log": "Job auto-discovered from existing files."}
         elif p_mp3.exists():
-            found_job = {"status": "done", "engine": "piper", "output_mp3": p_mp3.name}
+            found_job = {"status": "done", "engine": "piper", "output_mp3": p_mp3.name, "log": "Job auto-discovered from existing files."}
         elif x_wav.exists():
-            found_job = {"status": "wav", "engine": "xtts", "output_wav": x_wav.name}
+            found_job = {"status": "wav", "engine": "xtts", "output_wav": x_wav.name, "log": "WAV file found. Waiting for MP3 conversion."}
         elif p_wav.exists():
-            found_job = {"status": "wav", "engine": "piper", "output_wav": p_wav.name}
+            found_job = {"status": "wav", "engine": "piper", "output_wav": p_wav.name, "log": "WAV file found. Waiting for MP3 conversion."}
             
         if found_job:
             if existing:

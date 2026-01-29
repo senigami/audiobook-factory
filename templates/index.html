@@ -150,7 +150,7 @@
       <div class="tab-content active" id="logContent">
         <div class="log-header">
           <span class="log-title" id="logTitle">System Console</span>
-          <span class="text-muted" style="font-size: 0.7rem;">Click a card to see detailed logs</span>
+          <span class="text-muted" style="font-size: 0.7rem;" id="logSubtitle">Click a card to see detailed logs</span>
         </div>
         <div class="log-console" id="logConsole">Welcome to Audiobook Factory. Select a job to view real-time output.
         </div>
@@ -281,6 +281,10 @@
       const job = jobData[currentSelectedCard];
       const consoleEl = document.getElementById('logConsole');
       const logTitle = document.getElementById('logTitle');
+      const logSubtitle = document.getElementById('logSubtitle');
+
+      if (logSubtitle) logSubtitle.innerText = `Viewing: ${currentSelectedCard}`;
+
       if (job) {
         logTitle.innerText = `Logs: ${currentSelectedCard} (${job.engine})`;
         consoleEl.innerText = job.log || "No logs available yet.";
