@@ -31,6 +31,16 @@ def cancel(job_id: str):
         ev.set()
 
 
+def clear_job_queue():
+    """Empty the in-memory task queue."""
+    while not job_queue.empty():
+        try:
+            job_queue.get_nowait()
+            job_queue.task_done()
+        except queue.Empty:
+            break
+
+
 def paused() -> bool:
     return pause_flag.is_set()
 

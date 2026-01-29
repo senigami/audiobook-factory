@@ -11,9 +11,9 @@ from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
     XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV
 )
-from .state import get_jobs, get_settings, update_settings, load_state, save_state
+from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs
 from .models import Job
-from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue
+from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue, clear_job_queue
 from .voices import list_piper_voices
 from .textops import split_by_chapter_markers, write_chapters_to_folder, find_long_sentences
 
@@ -274,111 +274,9 @@ def api_jobs():
     jobs.sort(key=lambda j: j.created_at)  # keep consistent with UI
     return JSONResponse([asdict(j) for j in jobs[:400]])
 
-@app.post("/queue/reset_stuck")
-def reset_stuck_jobs():
-    """
-    Reset any jobs stuck in RUNNING back to QUEUED, clear stale fields,
-    and requeue them so the worker will actually pick them up.
-    """
-    state = load_state()
-    jobs = state.get("jobs", {})
-    reset_count = 0
-
-    for jid, j in jobs.items():
-        if j.get("status") == "running":
-            j["status"] = "queued"
-            j["progress"] = 0.0
-            j["eta_seconds"] = None
-            j["started_at"] = None
-            j["finished_at"] = None
-            j["output_wav"] = None
-            j["output_mp3"] = None
-            j["log"] = ""
-            j["error"] = "Reset from stuck running state."
-            jobs[jid] = j
-            reset_count += 1
-
-            # IMPORTANT: actually put it back on the in-memory queue
-            requeue(jid)
-
-    state["jobs"] = jobs
-    save_state(state)
-
-    return PlainTextResponse(f"Reset and requeued {reset_count} job(s).\n")
-    """
-    Any job marked running gets reset back to queued.
-    Also clears pause so worker can proceed.
-    """
-    state = load_state()
-    jobs = state.get("jobs", {})
-    reset_count = 0
-
-    for jid, j in jobs.items():
-        if j.get("status") == "running":
-            j["status"] = "queued"
-            j["progress"] = 0.0
-            j["error"] = "Reset from stuck running state."
-            reset_count += 1
-            jobs[jid] = j
-
-    state["jobs"] = jobs
-    save_state(state)
-
-    # make sure queue isn't paused
-    set_paused(False)
-
-    return PlainTextResponse(f"Reset {reset_count} running jobs back to queued.\n")
-
-@app.post("/queue/reconcile")
-def reconcile_jobs():
-    """
-    If output files exist on disk, mark matching jobs done and populate output_* fields.
-    Optionally clears queued jobs whose outputs already exist.
-    """
-    state = load_state()
-    jobs = state.get("jobs", {})
-    fixed = 0
-
-    for jid, j in jobs.items():
-        engine = j.get("engine")
-        chapter_file = j.get("chapter_file")
-        if not engine or not chapter_file:
-            continue
-
-        if engine == "xtts":
-            wav, mp3 = xtts_outputs_for(chapter_file)
-        else:
-            wav, mp3 = piper_outputs_for(chapter_file)
-
-        wav_exists = wav.exists()
-        mp3_exists = mp3.exists()
-
-        # If files exist, force status to done and fill outputs.
-        if wav_exists or mp3_exists:
-            j["status"] = "done"
-            j["progress"] = 1.0
-            j["finished_at"] = j.get("finished_at") or time.time()
-            j["started_at"] = j.get("started_at") or j.get("created_at")
-            j["error"] = None  # clear old "Reset..." etc.
-
-            j["output_wav"] = wav.name if wav_exists else None
-            j["output_mp3"] = mp3.name if mp3_exists else None
-
-            jobs[jid] = j
-            fixed += 1
-
-    state["jobs"] = jobs
-    save_state(state)
-    return PlainTextResponse(f"Reconciled {fixed} job(s) with existing output files.\n")
-    
-@app.post("/queue/clear_done")
-def clear_done_jobs():
-    state = load_state()
-    jobs = state.get("jobs", {})
-    before = len(jobs)
-
-    jobs = {jid: j for jid, j in jobs.items() if j.get("status") != "done"}
-
-    state["jobs"] = jobs
-    save_state(state)
-    return PlainTextResponse(f"Cleared {before - len(jobs)} done job(s).\n")
+@app.post("/queue/clear")
+def clear_history():
+    """Wipe job history and empty the in-memory queue."""
+    clear_job_queue()
+    clear_all_jobs()
+    return RedirectResponse("/", status_code=303)

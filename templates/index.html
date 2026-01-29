@@ -128,17 +128,12 @@
       <form method="post" action="/queue/pause">
         <button type="submit">{{ "Resume Queue" if paused else "Pause Queue" }}</button>
       </form>
-      <form method="post" action="/queue/reset_stuck"
-        onsubmit="return confirm('Reset any jobs stuck in RUNNING back to QUEUED?');">
-        <button type="submit">Reset stuck RUNNING jobs</button>
-      </form>
-      <form method="post" action="/queue/reconcile">
-        <button type="submit">Reconcile jobs with existing files</button>
+      <form method="post" action="/queue/clear"
+        onsubmit="return confirm('Clear all job history? This will also empty the current task queue.');">
+        <button type="submit" style="background: #fdf; border-color: #e0e; color: #a0a; font-weight: bold;">Clear All
+          Jobs / Reset</button>
       </form>
 
-      <form method="post" action="/queue/clear_done" onsubmit="return confirm('Clear all DONE jobs from the list?');">
-        <button type="submit">Clear DONE jobs</button>
-      </form>
       <form method="post" action="/queue/backfill_mp3_xtts">
         <button type="submit">Backfill MP3 from existing XTTS WAVs</button>
       </form>

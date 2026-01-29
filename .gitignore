@@ -183,3 +183,4 @@ cython_debug/
 /chapters_out
 /xtts_audio
 /reports
+state.json
