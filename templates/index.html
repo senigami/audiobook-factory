@@ -307,12 +307,10 @@
 
         // Update list status ONLY (logs not included)
         jobs.forEach(j => {
-          if (!jobData[j.chapter_file] || j.created_at > jobData[j.chapter_file].created_at) {
-            // merge existing logs if we have them to avoid losing them on list refresh
-            const existingLog = jobData[j.chapter_file]?.log;
-            jobData[j.chapter_file] = j;
-            if (existingLog) jobData[j.chapter_file].log = existingLog;
-          }
+          // merge existing logs if we have them to avoid losing them on list refresh
+          const existingLog = jobData[j.chapter_file]?.log;
+          jobData[j.chapter_file] = j;
+          if (existingLog) jobData[j.chapter_file].log = existingLog;
         });
 
         document.querySelectorAll('.chapter-card').forEach(card => {
@@ -332,9 +330,8 @@
           backfillBtn.disabled = (wavs === 0);
         }
 
-        // Poll for log updates separately
-        updateLogView();
-
+        // Poll for log updates separately (now handled by own interval)
+        // updateLogView(); 
       } catch (e) {
         console.error("Refresh failed", e);
       }
@@ -446,7 +443,7 @@
         const resp = await fetch('/queue/backfill_mp3', { method: 'POST' });
         const data = await resp.json();
         alert(`Resolved ${data.converted} files. ${data.failed} failures.`);
-        refreshJobs();
+        refreshJobList();
       } catch (err) {
         alert("Failed to run backfill.");
       } finally {
@@ -482,13 +479,24 @@
 
       try {
         await fetch('/queue/clear', { method: 'POST' });
-        setTimeout(refreshJobs, 100);
+        setTimeout(refreshJobList, 100);
       } catch (err) {
         console.error("Failed to clear backend", err);
       }
     }
-    refreshJobs();
-    setInterval(refreshJobs, 1000);
+
+    // Rename main loop to refreshJobList
+    async function refreshJobList() {
+      return refreshJobs();
+    }
+
+    refreshJobList();
+    // Heavy list update: every 5s
+    setInterval(refreshJobList, 5000);
+
+    // Fast log update: every 1s
+    updateLogView();
+    setInterval(updateLogView, 1000);
   </script>
 </body>
 

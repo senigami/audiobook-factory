@@ -12,7 +12,7 @@ cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
 # rough baseline chars/sec; tweak later if you want
-BASELINE_XTTS_CPS = 25.0
+BASELINE_XTTS_CPS = 16.8
 BASELINE_PIPER_CPS = 220.0
 
 
