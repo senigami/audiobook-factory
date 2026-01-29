@@ -50,11 +50,18 @@
           </button>
         </form>
 
-        <form method="post" action="/queue/clear" onsubmit="return confirm('Clear all job history?');">
-          <button type="submit" class="btn btn-danger" style="width: 100%;">
+        <div>
+          <button type="button" onclick="handleClear()" class="btn btn-danger" style="width: 100%;">
             Clear All / Reset
           </button>
-        </form>
+        </div>
+
+        <div>
+          <button type="button" onclick="runBackfill(this)" class="btn btn-secondary"
+            style="width: 100%; margin-top: 12px;">
+            Resolve Missing MP3s
+          </button>
+        </div>
       </div>
     </section>
 
@@ -149,12 +156,10 @@
       <div class="tab-content" id="previewContent">
         <div class="preview-header">
           <span class="preview-title" id="previewTitle">Chapter Preview</span>
-          <form id="analyzeForm" method="post" action="/analyze_long">
-            <input type="hidden" name="chapter_file" id="analyzeChapterInput" value="" />
-            <button type="submit" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.7rem;">
-              Run Long Sentence Analysis
-            </button>
-          </form>
+          <button type="button" onclick="runAnalysis(event)" class="btn btn-outline"
+            style="padding: 4px 10px; font-size: 0.7rem;">
+            Run Long Sentence Analysis
+          </button>
         </div>
         <div class="preview-area" id="previewArea">Select a chapter to see its preview.</div>
       </div>
@@ -200,7 +205,8 @@
         if (job.status === 'done' && job.output_mp3) {
           const enginePath = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
           if (!footer.querySelector('audio')) {
-            footer.innerHTML = `<audio controls preload="none" src="${enginePath}${encodeURIComponent(job.output_mp3)}"></audio>`;
+            const encoded = encodeURIComponent(job.output_mp3);
+            footer.innerHTML = `<audio controls preload="none" src="${enginePath}${encoded}"></audio>`;
           }
         } else if (job.status === 'failed') {
           footer.innerHTML = `<p class="badge badge-failed" style="font-size: 0.7rem; padding: 2px 6px;">Error: ${esc(job.error)}</p>`;
@@ -208,15 +214,12 @@
 
         // Update log if this is the selected card AND log tab is active
         if (currentSelectedCard === filename && document.getElementById('logTab').classList.contains('active')) {
-          const console = document.getElementById('logConsole');
+          const consoleEl = document.getElementById('logConsole');
           const title = document.getElementById('logTitle');
           title.innerText = `Logs: ${filename} (${job.engine})`;
-          console.innerText = job.log || "No logs available yet.";
-          console.scrollTop = console.scrollHeight;
+          consoleEl.innerText = job.log || "No logs available yet.";
+          consoleEl.scrollTop = consoleEl.scrollHeight;
         }
-      } else {
-        // Check if physical files exist even if no job record
-        // (Server-side rendered info is used as fallback, but JS can clear it if needed)
       }
     }
 
@@ -226,22 +229,18 @@
         if (!r.ok) return;
         const jobs = await r.json();
 
-        // Map jobs by chapter_file
         jobData = {};
         jobs.forEach(j => {
-          // If multiple jobs for same file, keep the latest one
           if (!jobData[j.chapter_file] || j.created_at > jobData[j.chapter_file].created_at) {
             jobData[j.chapter_file] = j;
           }
         });
 
-        // Update each chapter card
         document.querySelectorAll('.chapter-card').forEach(card => {
           const filename = card.dataset.filename;
           updateCardStatus(filename, jobData[filename]);
         });
 
-        // Update global status
         const running = jobs.filter(j => j.status === 'running').length;
         const queued = jobs.filter(j => j.status === 'queued').length;
         document.getElementById('globalStatus').innerText = `${running} Running • ${queued} Queued`;
@@ -251,7 +250,7 @@
       }
     }
 
-    // Card selection for logs & preview
+    // Event Listeners
     document.getElementById('chapterGrid').addEventListener('click', async (e) => {
       const card = e.target.closest('.chapter-card');
       if (!card) return;
@@ -265,32 +264,33 @@
 
       // Update Log Tab
       const job = jobData[currentSelectedCard];
-      const console = document.getElementById('logConsole');
+      const consoleEl = document.getElementById('logConsole');
       const logTitle = document.getElementById('logTitle');
       if (job) {
         logTitle.innerText = `Logs: ${currentSelectedCard} (${job.engine})`;
-        console.innerText = job.log || "No logs available yet.";
+        consoleEl.innerText = job.log || "No logs available yet.";
       } else {
         logTitle.innerText = `System Console`;
-        console.innerText = `No job record for ${currentSelectedCard}.`;
+        consoleEl.innerText = `No job record for ${currentSelectedCard}.`;
       }
-      console.scrollTop = console.scrollHeight;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
 
-      // Update Preview Tab
-      document.getElementById('previewTitle').innerText = `Preview: ${currentSelectedCard}`;
-      document.getElementById('analyzeChapterInput').value = currentSelectedCard;
-      document.getElementById('previewArea').innerText = "Loading preview...";
-
-      try {
-        const resp = await fetch(`/api/preview/${encodeURIComponent(currentSelectedCard)}`);
-        const data = await resp.json();
-        document.getElementById('previewArea').innerText = data.text || "No preview available.";
-      } catch (err) {
-        document.getElementById('previewArea').innerText = "Failed to load preview.";
-      }
+      // Update Preview/Analysis Tab
+      restorePreview();
     });
 
-    // Tab Switching Logic
+    document.getElementById('gridToggle').addEventListener('click', () => {
+      document.getElementById('chapterGrid').classList.remove('list-view');
+      document.getElementById('gridToggle').style.background = 'var(--accent)';
+      document.getElementById('listToggle').style.background = 'transparent';
+    });
+
+    document.getElementById('listToggle').addEventListener('click', () => {
+      document.getElementById('chapterGrid').classList.add('list-view');
+      document.getElementById('listToggle').style.background = 'var(--accent)';
+      document.getElementById('gridToggle').style.background = 'transparent';
+    });
+
     document.getElementById('logTab').addEventListener('click', () => {
       document.getElementById('logTab').classList.add('active');
       document.getElementById('previewTab').classList.remove('active');
@@ -305,20 +305,94 @@
       document.getElementById('logContent').classList.remove('active');
     });
 
-    // View Toggle Logic
-    document.getElementById('gridToggle').addEventListener('click', () => {
-      document.getElementById('chapterGrid').classList.remove('list-view');
-      document.getElementById('gridToggle').style.background = 'var(--accent)';
-      document.getElementById('listToggle').style.background = 'transparent';
-    });
+    async function runAnalysis(e) {
+      if (!currentSelectedCard) {
+        alert("Please select a chapter first.");
+        return;
+      }
+      const area = document.getElementById('previewArea');
+      area.innerText = "Running analysis...";
+      try {
+        const formData = new FormData();
+        formData.append('chapter_file', currentSelectedCard);
+        formData.append('ajax', 'true');
+        const resp = await fetch('/analyze_long', { method: 'POST', body: formData });
+        const data = await resp.json();
+        area.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+            <span style="font-weight: 600; color: var(--accent);">Analysis Report</span>
+            <button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.7rem;" onclick="restorePreview()">Back to Preview</button>
+          </div>
+          <div class="report-view">${esc(data.report)}</div>
+        `;
+      } catch (err) {
+        area.innerText = "Analysis failed.";
+      }
+    }
 
-    document.getElementById('listToggle').addEventListener('click', () => {
-      document.getElementById('chapterGrid').classList.add('list-view');
-      document.getElementById('listToggle').style.background = 'var(--accent)';
-      document.getElementById('gridToggle').style.background = 'transparent';
-    });
+    async function restorePreview() {
+      if (!currentSelectedCard) return;
+      document.getElementById('previewTitle').innerText = `Preview: ${currentSelectedCard}`;
+      const area = document.getElementById('previewArea');
+      area.innerText = "Loading preview...";
+      try {
+        const resp = await fetch(`/api/preview/${encodeURIComponent(currentSelectedCard)}`);
+        const data = await resp.json();
+        area.innerText = data.text || "No preview available.";
+      } catch (err) {
+        area.innerText = "Failed to load preview.";
+      }
+    }
 
-    // Initialize
+    async function runBackfill(btn) {
+      const originalText = btn.innerText;
+      btn.innerText = "Resolving...";
+      btn.disabled = true;
+      try {
+        const resp = await fetch('/queue/backfill_mp3', { method: 'POST' });
+        const data = await resp.json();
+        alert(`Resolved ${data.converted} files. ${data.failed} failures.`);
+        refreshJobs();
+      } catch (err) {
+        alert("Failed to run backfill.");
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleClear() {
+      if (!confirm('Clear all job history and reset the queue?')) return;
+
+      // Immediate UI reset
+      jobData = {};
+      currentSelectedCard = null;
+
+      // Clear status badges and progress bars
+      document.querySelectorAll('.status-badge-container').forEach(el => el.innerHTML = '');
+      document.querySelectorAll('.progress-container').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.chapter-card').forEach(el => {
+        el.classList.remove('active');
+        const footer = el.querySelector('.card-footer');
+        if (footer && (footer.querySelector('.badge-failed') || footer.querySelector('p'))) {
+          footer.innerHTML = '<p class="text-muted" style="font-size: 0.8rem;">Ready.</p>';
+        }
+      });
+
+      // Reset bottom panel
+      document.getElementById('logConsole').innerText = 'Queue cleared.';
+      document.getElementById('logTitle').innerText = 'System Console';
+      document.getElementById('previewTitle').innerText = 'Chapter Preview';
+      document.getElementById('previewArea').innerText = 'Select a chapter to see its preview.';
+      document.getElementById('globalStatus').innerText = '0 Running • 0 Queued';
+
+      try {
+        await fetch('/queue/clear', { method: 'POST' });
+        setTimeout(refreshJobs, 100);
+      } catch (err) {
+        console.error("Failed to clear backend", err);
+      }
+    }
     refreshJobs();
     setInterval(refreshJobs, 1000);
   </script>

@@ -382,6 +382,22 @@ audio:hover {
     font-size: 0.9375rem;
 }
 
+.report-view {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8125rem;
+    color: #a5b4fc;
+    white-space: pre-wrap;
+}
+
+.btn-secondary {
+    background: rgba(100, 116, 139, 0.2);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.btn-secondary:hover {
+    background: rgba(100, 116, 139, 0.4);
+}
+
 /* Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;

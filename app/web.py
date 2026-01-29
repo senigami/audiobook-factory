@@ -217,8 +217,7 @@ def cancel(job_id: str = Form(...)):
     return RedirectResponse("/", status_code=303)
 
 @app.post("/analyze_long")
-def analyze_long(chapter_file: str = Form("")):
-    # If chapter_file blank, analyze selected chapter or all later; for now: selected only required.
+def analyze_long(chapter_file: str = Form(""), ajax: bool = False):
     if not chapter_file:
         return PlainTextResponse("Pick a chapter from the list first.", status_code=400)
 
@@ -236,8 +235,33 @@ def analyze_long(chapter_file: str = Form("")):
         lines.append(f"--- Sentence {idx} ({clen} chars) ---")
         lines.append(s)
         lines.append("")
-    report_path.write_text("\n".join(lines), encoding="utf-8")
+    report_text = "\n".join(lines)
+    report_path.write_text(report_text, encoding="utf-8")
+    
+    if ajax:
+        return JSONResponse({"report": report_text})
     return RedirectResponse(f"/report/{report_path.name}", status_code=303)
+
+
+@app.post("/queue/backfill_mp3")
+def backfill_mp3_queue():
+    """Create MP3s for any WAV files missing them in both xtts and piper dirs."""
+    converted = 0
+    failed = 0
+    
+    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+        for wav in d.glob("*.wav"):
+            mp3 = wav.with_suffix(".mp3")
+            if mp3.exists():
+                continue
+            rc, out = wav_to_mp3(wav, mp3)
+            if rc == 0 and mp3.exists():
+                converted += 1
+            else:
+                failed += 1
+                
+    return JSONResponse({"status": "success", "converted": converted, "failed": failed})
 
 @app.post("/queue/backfill_mp3_xtts")
 def backfill_mp3_xtts():
