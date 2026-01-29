@@ -252,13 +252,21 @@ select {
 }
 
 .badge-done {
-    background: rgba(16, 185, 129, 0.2);
-    color: #10b981;
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.badge-wav {
+    background: rgba(234, 179, 8, 0.2);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.4);
 }
 
 .badge-failed {
     background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
 @keyframes pulse {
@@ -390,12 +398,22 @@ audio:hover {
 }
 
 .btn-secondary {
-    background: rgba(100, 116, 139, 0.2);
-    border: 1px solid rgba(100, 116, 139, 0.4);
+    background: rgba(148, 163, 184, 0.15);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: var(--text);
 }
 
-.btn-secondary:hover {
-    background: rgba(100, 116, 139, 0.4);
+.btn-secondary:hover:not(:disabled) {
+    background: rgba(148, 163, 184, 0.3);
+    border-color: var(--text-muted);
+}
+
+button:disabled,
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.8);
+    pointer-events: none;
 }
 
 /* Scrollbars */

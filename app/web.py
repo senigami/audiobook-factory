@@ -319,9 +319,9 @@ def api_jobs():
         elif p_mp3.exists():
             found_job = {"status": "done", "engine": "piper", "output_mp3": p_mp3.name}
         elif x_wav.exists():
-            found_job = {"status": "done", "engine": "xtts", "output_wav": x_wav.name}
+            found_job = {"status": "wav", "engine": "xtts", "output_wav": x_wav.name}
         elif p_wav.exists():
-            found_job = {"status": "done", "engine": "piper", "output_wav": p_wav.name}
+            found_job = {"status": "wav", "engine": "piper", "output_wav": p_wav.name}
             
         if found_job:
             if existing:

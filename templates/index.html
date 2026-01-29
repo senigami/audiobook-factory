@@ -57,8 +57,9 @@
         </div>
 
         <div>
-          <button type="button" onclick="runBackfill(this)" class="btn btn-secondary"
-            style="width: 100%; margin-top: 12px;">
+          <button type="button" id="backfillBtn" onclick="runBackfill(this)" class="btn btn-secondary"
+            style="width: 100%; margin-top: 12px;" {% if (xtts_wav_only|length + piper_wav_only|length)==0 %}disabled{%
+            endif %}>
             Resolve Missing MP3s
           </button>
         </div>
@@ -130,8 +131,10 @@
           {% if c in xtts_mp3 or c in piper_mp3 %}
           {% set engine_path = "/out/xtts/" if c in xtts_mp3 else "/out/piper/" %}
           <audio controls preload="none" src="{{ engine_path }}{{ stem }}.mp3"></audio>
+          {% elif c in xtts_wav_only or c in piper_wav_only %}
+          <p class="badge badge-wav" style="font-size: 0.75rem; padding: 4px 8px;">WAV Generated (MP3 Missing)</p>
           {% else %}
-          <p class="text-muted" style="font-size: 0.8rem;">No audio generated yet.</p>
+          <p class="text-muted" style="font-size: 0.8rem;">Ready.</p>
           {% endif %}
         </div>
       </div>
@@ -208,6 +211,8 @@
             const encoded = encodeURIComponent(job.output_mp3);
             footer.innerHTML = `<audio controls preload="none" src="${enginePath}${encoded}"></audio>`;
           }
+        } else if (job.status === 'wav') {
+          footer.innerHTML = `<p class="badge badge-wav" style="font-size: 0.75rem; padding: 4px 8px;">WAV Generated (MP3 Missing)</p>`;
         } else if (job.status === 'failed') {
           footer.innerHTML = `<p class="badge badge-failed" style="font-size: 0.7rem; padding: 2px 6px;">Error: ${esc(job.error)}</p>`;
         }
@@ -243,7 +248,17 @@
 
         const running = jobs.filter(j => j.status === 'running').length;
         const queued = jobs.filter(j => j.status === 'queued').length;
-        document.getElementById('globalStatus').innerText = `${running} Running • ${queued} Queued`;
+        const wavs = Object.values(jobData).filter(j => j.status === 'wav').length;
+
+        document.getElementById('globalStatus').innerText =
+          `${running} Running • ${queued} Queued • ${wavs} Missing MP3s`;
+
+        const backfillBtn = document.getElementById('backfillBtn');
+        if (backfillBtn) {
+          if (backfillBtn.innerText !== "Resolving...") {
+            backfillBtn.disabled = (wavs === 0);
+          }
+        }
 
       } catch (e) {
         console.error("Refresh failed", e);
