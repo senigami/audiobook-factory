@@ -74,7 +74,9 @@ body {
 }
 
 /* Typography */
-h1, h2, h3 {
+h1,
+h2,
+h3 {
     margin-bottom: 12px;
     font-weight: 600;
     letter-spacing: -0.02em;
@@ -93,7 +95,8 @@ h1, h2, h3 {
     margin-bottom: 20px;
 }
 
-button, .btn {
+button,
+.btn {
     cursor: pointer;
     border: none;
     border-radius: 8px;
@@ -144,7 +147,8 @@ button:active {
     color: white;
 }
 
-input[type="file"], select {
+input[type="file"],
+select {
     background: var(--glass);
     border: 1px solid var(--border);
     color: var(--text);
@@ -165,6 +169,42 @@ input[type="file"], select {
     gap: 16px;
     position: relative;
     cursor: default;
+}
+
+/* List View Overrides */
+.chapter-grid-container.list-view {
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.list-view .chapter-card {
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 24px;
+    gap: 24px;
+    border-radius: 12px;
+}
+
+.list-view .card-header {
+    flex: 0 0 300px;
+    margin-bottom: 0;
+}
+
+.list-view .progress-container {
+    flex: 1;
+    margin: 0;
+}
+
+.list-view .card-footer {
+    flex: 0 0 320px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+}
+
+.list-view audio {
+    width: 260px;
 }
 
 .chapter-card:hover {
@@ -200,15 +240,39 @@ input[type="file"], select {
     text-transform: uppercase;
 }
 
-.badge-queued { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
-.badge-running { background: rgba(99, 102, 241, 0.2); color: #818cf8; animation: pulse 2s infinite; }
-.badge-done { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-.badge-failed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.badge-queued {
+    background: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+.badge-running {
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+    animation: pulse 2s infinite;
+}
+
+.badge-done {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.badge-failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.6; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 /* Progress */
@@ -237,54 +301,101 @@ audio:hover {
     opacity: 1;
 }
 
-/* Log Panel */
+/* Log/Preview Panel */
 .log-panel {
-    height: 240px;
+    height: 300px;
     background: #000;
     border-top: 1px solid var(--border);
-    padding: 16px;
     display: flex;
     flex-direction: column;
     z-index: 100;
 }
 
-.log-header {
+.panel-tabs {
+    display: flex;
+    background: rgba(15, 23, 42, 0.8);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+}
+
+.tab {
+    padding: 10px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.tab-content {
+    flex: 1;
+    overflow: hidden;
+    display: none;
+    padding: 16px;
+}
+
+.tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.log-header,
+.preview-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
 }
 
-.log-title {
+.log-title,
+.preview-title {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
     color: var(--accent);
     text-transform: uppercase;
 }
 
-.log-console {
+.log-console,
+.preview-area {
     flex: 1;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.8125rem;
     color: #a5b4fc;
     overflow-y: auto;
     white-space: pre-wrap;
-    padding: 8px;
-    background: rgba(0,0,0,0.3);
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
     border-radius: 4px;
+}
+
+.preview-area {
+    color: #cbd5e1;
+    line-height: 1.6;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9375rem;
 }
 
 /* Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;
 }
+
 ::-webkit-scrollbar-track {
     background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
 }

@@ -90,8 +90,17 @@
         <h3>Chapters</h3>
         <p class="text-muted">{{ chapters|length }} files ready for processing</p>
       </div>
-      <div id="globalStatus" class="text-muted">
-        <!-- Status summary will be injected here -->
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div class="btn-group"
+          style="display: flex; gap: 4px; background: var(--glass); padding: 4px; border-radius: 8px;">
+          <button class="btn btn-outline" id="gridToggle"
+            style="padding: 6px 12px; font-size: 0.8rem; background: var(--accent); border: none;">Grid</button>
+          <button class="btn btn-outline" id="listToggle"
+            style="padding: 6px 12px; font-size: 0.8rem; border: none;">List</button>
+        </div>
+        <div id="globalStatus" class="text-muted">
+          <!-- Status summary will be injected here -->
+        </div>
       </div>
     </header>
 
@@ -123,11 +132,31 @@
     </div>
 
     <div class="log-panel" id="logPanel">
-      <div class="log-header">
-        <span class="log-title" id="logTitle">System Console</span>
-        <span class="text-muted" style="font-size: 0.7rem;">Click a card to see detailed logs</span>
+      <div class="panel-tabs">
+        <div class="tab active" id="logTab">Logs</div>
+        <div class="tab" id="previewTab">Preview & Analyze</div>
       </div>
-      <div class="log-console" id="logConsole">Welcome to Audiobook Factory. Select a job to view real-time output.
+
+      <div class="tab-content active" id="logContent">
+        <div class="log-header">
+          <span class="log-title" id="logTitle">System Console</span>
+          <span class="text-muted" style="font-size: 0.7rem;">Click a card to see detailed logs</span>
+        </div>
+        <div class="log-console" id="logConsole">Welcome to Audiobook Factory. Select a job to view real-time output.
+        </div>
+      </div>
+
+      <div class="tab-content" id="previewContent">
+        <div class="preview-header">
+          <span class="preview-title" id="previewTitle">Chapter Preview</span>
+          <form id="analyzeForm" method="post" action="/analyze_long">
+            <input type="hidden" name="chapter_file" id="analyzeChapterInput" value="" />
+            <button type="submit" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.7rem;">
+              Run Long Sentence Analysis
+            </button>
+          </form>
+        </div>
+        <div class="preview-area" id="previewArea">Select a chapter to see its preview.</div>
       </div>
     </div>
   </main>
@@ -177,8 +206,8 @@
           footer.innerHTML = `<p class="badge badge-failed" style="font-size: 0.7rem; padding: 2px 6px;">Error: ${esc(job.error)}</p>`;
         }
 
-        // Update log if this is the selected card
-        if (currentSelectedCard === filename) {
+        // Update log if this is the selected card AND log tab is active
+        if (currentSelectedCard === filename && document.getElementById('logTab').classList.contains('active')) {
           const console = document.getElementById('logConsole');
           const title = document.getElementById('logTitle');
           title.innerText = `Logs: ${filename} (${job.engine})`;
@@ -222,8 +251,8 @@
       }
     }
 
-    // Card selection for logs
-    document.getElementById('chapterGrid').addEventListener('click', (e) => {
+    // Card selection for logs & preview
+    document.getElementById('chapterGrid').addEventListener('click', async (e) => {
       const card = e.target.closest('.chapter-card');
       if (!card) return;
 
@@ -234,18 +263,59 @@
       currentSelectedCard = card.dataset.filename;
       card.classList.add('active');
 
-      // Force log update
+      // Update Log Tab
       const job = jobData[currentSelectedCard];
       const console = document.getElementById('logConsole');
-      const title = document.getElementById('logTitle');
+      const logTitle = document.getElementById('logTitle');
       if (job) {
-        title.innerText = `Logs: ${currentSelectedCard} (${job.engine})`;
+        logTitle.innerText = `Logs: ${currentSelectedCard} (${job.engine})`;
         console.innerText = job.log || "No logs available yet.";
       } else {
-        title.innerText = `System Console`;
+        logTitle.innerText = `System Console`;
         console.innerText = `No job record for ${currentSelectedCard}.`;
       }
       console.scrollTop = console.scrollHeight;
+
+      // Update Preview Tab
+      document.getElementById('previewTitle').innerText = `Preview: ${currentSelectedCard}`;
+      document.getElementById('analyzeChapterInput').value = currentSelectedCard;
+      document.getElementById('previewArea').innerText = "Loading preview...";
+
+      try {
+        const resp = await fetch(`/api/preview/${encodeURIComponent(currentSelectedCard)}`);
+        const data = await resp.json();
+        document.getElementById('previewArea').innerText = data.text || "No preview available.";
+      } catch (err) {
+        document.getElementById('previewArea').innerText = "Failed to load preview.";
+      }
+    });
+
+    // Tab Switching Logic
+    document.getElementById('logTab').addEventListener('click', () => {
+      document.getElementById('logTab').classList.add('active');
+      document.getElementById('previewTab').classList.remove('active');
+      document.getElementById('logContent').classList.add('active');
+      document.getElementById('previewContent').classList.remove('active');
+    });
+
+    document.getElementById('previewTab').addEventListener('click', () => {
+      document.getElementById('previewTab').classList.add('active');
+      document.getElementById('logTab').classList.remove('active');
+      document.getElementById('previewContent').classList.add('active');
+      document.getElementById('logContent').classList.remove('active');
+    });
+
+    // View Toggle Logic
+    document.getElementById('gridToggle').addEventListener('click', () => {
+      document.getElementById('chapterGrid').classList.remove('list-view');
+      document.getElementById('gridToggle').style.background = 'var(--accent)';
+      document.getElementById('listToggle').style.background = 'transparent';
+    });
+
+    document.getElementById('listToggle').addEventListener('click', () => {
+      document.getElementById('chapterGrid').classList.add('list-view');
+      document.getElementById('listToggle').style.background = 'var(--accent)';
+      document.getElementById('gridToggle').style.background = 'transparent';
     });
 
     // Initialize

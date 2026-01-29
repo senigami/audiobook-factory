@@ -281,3 +281,11 @@ def clear_history():
     clear_job_queue()
     clear_all_jobs()
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/api/preview/{chapter_file}")
+def api_preview(chapter_file: str):
+    p = CHAPTER_DIR / chapter_file
+    if not p.exists():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"text": read_preview(p, max_chars=10000)})
