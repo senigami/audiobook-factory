@@ -6,26 +6,45 @@ from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUA
 from .textops import safe_split_long_sentences
 from .voices import piper_voice_paths
 
+_active_processes = set()
+
+def terminate_all_subprocesses():
+    for proc in list(_active_processes):
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    _active_processes.clear()
+
 def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    while True:
-        if cancel_check():
-            proc.terminate()
-            try:
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-            return 1
+    _active_processes.add(proc)
+    try:
+        while True:
+            if cancel_check():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                return 1
 
-        line = proc.stdout.readline() if proc.stdout else ""
-        if line:
-            on_output(line)
+            line = proc.stdout.readline() if proc.stdout else ""
+            if line:
+                on_output(line)
 
-        if proc.poll() is not None:
-            rest = proc.stdout.read() if proc.stdout else ""
-            if rest:
-                on_output(rest)
-            return proc.returncode or 0
+            if proc.poll() is not None:
+                rest = proc.stdout.read() if proc.stdout else ""
+                if rest:
+                    on_output(rest)
+                return proc.returncode or 0
+    finally:
+        if proc in _active_processes:
+            _active_processes.remove(proc)
 
 def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -> int:
     def noop(*args): pass
@@ -49,7 +68,7 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     safe_text = " ".join(text.split()).replace('"', '\\"')
 
     cmd = (
-        f"source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
+        f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
         f"tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 "
         f'--text "{safe_text}" '
         f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "

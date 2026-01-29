@@ -182,49 +182,120 @@
         .replaceAll("'", "&#39;");
     }
 
+    async function fetchJobDetails(filename) {
+      if (!filename) return null;
+      try {
+        const r = await fetch(`/api/job/${encodeURIComponent(filename)}`);
+        if (r.ok) return await r.json();
+      } catch (e) { console.error(e); }
+      return null;
+    }
+
+    async function updateLogView() {
+      // If user selected a card, fetch that job's details
+      // If NOT (System Console mode), fetch active job
+      let jobToCheck = null;
+      let title = "System Console";
+      let subtitle = "Waiting for jobs...";
+
+      if (currentSelectedCard) {
+        // User overrides auto-view
+        // We need to fetch full details including log
+        const j = await fetchJobDetails(currentSelectedCard);
+        // If job exists, use it. If not, use local jobData (stat-only)
+        jobToCheck = j || jobData[currentSelectedCard];
+        title = `Logs: ${currentSelectedCard}`;
+        if (jobToCheck?.engine) title += ` (${jobToCheck.engine})`;
+        subtitle = `Viewing: ${currentSelectedCard}`;
+      } else {
+        // Auto-view active job
+        const r = await fetch('/api/active_job', { cache: "no-store" });
+        if (r.ok) {
+          const active = await r.json();
+          if (active) {
+            jobToCheck = active;
+            title = `Logs: ${active.chapter_file} (${active.engine})`;
+            // Update local cache for list view consistency
+            jobData[active.chapter_file] = active;
+          } else {
+            // No active job
+            title = "System Console";
+            subtitle = "No active jobs.";
+          }
+        }
+      }
+
+      // Update DOM
+      const consoleEl = document.getElementById('logConsole');
+      const titleEl = document.getElementById('logTitle');
+      const subEl = document.getElementById('logSubtitle');
+
+      // Safety check if user switched tab or view mid-request
+      if (!document.getElementById('logTab').classList.contains('active')) return;
+
+      titleEl.innerText = title;
+
+      if (jobToCheck && jobToCheck.status === 'running' && jobToCheck.started_at && jobToCheck.eta_seconds) {
+        const elapsed = Math.floor(Date.now() / 1000 - jobToCheck.started_at);
+        const eta = Math.round(jobToCheck.eta_seconds);
+        const em = Math.floor(elapsed / 60);
+        const es = Math.floor(elapsed % 60);
+        const pm = Math.floor(eta / 60);
+        const ps = Math.floor(eta % 60);
+        subEl.innerText = `Elapsed: ${em}m ${es}s / Predicted: ${pm}m ${ps}s`;
+        subEl.style.color = 'var(--accent)';
+        subEl.style.fontSize = '1.2rem';
+        subEl.style.fontWeight = 'bold';
+        subEl.style.display = 'block';
+        subEl.style.marginTop = '4px';
+      } else {
+        subEl.innerText = subtitle;
+        subEl.style.color = '';
+      }
+
+      const logText = jobToCheck?.log || (currentSelectedCard ? "No logs available yet." : "Welcome to Audiobook Factory. Select a job to view details or just watch the show.");
+
+      // Only update if changed (avoids flickering)
+      if (consoleEl.innerText !== logText) {
+        consoleEl.innerText = logText;
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      }
+    }
+
     function updateCardStatus(filename, job) {
-      const badgeCont = document.getElementById(`badge-${filename}`);
-      const progCont = document.getElementById(`progress-container-${filename}`);
+      if (!job) return;
+
+      const badgeContainer = document.getElementById(`badge-${filename}`);
+      const progContainer = document.getElementById(`progress-container-${filename}`);
       const progBar = document.getElementById(`progress-bar-${filename}`);
       const footer = document.getElementById(`footer-${filename}`);
-      const card = document.getElementById(`card-${filename}`);
 
-      if (!badgeCont) return;
+      if (badgeContainer) {
+        let badgeClass = 'badge-queued';
+        let badgeText = job.status || 'Queued';
 
-      if (job) {
-        // Status badge
-        let statusClass = `badge-${job.status}`;
-        badgeCont.innerHTML = `<span class="badge ${statusClass}">${job.status}</span>`;
+        if (job.status === 'running') badgeClass = 'badge-running';
+        else if (job.status === 'done') badgeClass = 'badge-success';
+        else if (job.status === 'failed') badgeClass = 'badge-failed';
+        else if (job.status === 'wav') badgeClass = 'badge-wav';
 
-        // Progress bar
-        if (job.status === 'running' || job.status === 'queued') {
-          progCont.style.display = 'block';
-          progBar.style.width = `${Math.round((job.progress || 0) * 100)}%`;
+        badgeContainer.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
+      }
+
+      if (progContainer && progBar) {
+        if (job.status === 'running') {
+          progContainer.style.display = 'block';
+          const p = Math.round((job.progress || 0) * 100);
+          progBar.style.width = `${p}%`;
         } else {
-          progCont.style.display = 'none';
+          progContainer.style.display = 'none';
         }
+      }
 
-        // Audio player if done
-        if (job.status === 'done' && job.output_mp3) {
-          const enginePath = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
-          if (!footer.querySelector('audio')) {
-            const encoded = encodeURIComponent(job.output_mp3);
-            footer.innerHTML = `<audio controls preload="none" src="${enginePath}${encoded}"></audio>`;
-          }
-        } else if (job.status === 'wav') {
-          footer.innerHTML = `<p class="badge badge-wav" style="font-size: 0.75rem; padding: 4px 8px;">WAV Generated (MP3 Missing)</p>`;
-        } else if (job.status === 'failed') {
-          footer.innerHTML = `<p class="badge badge-failed" style="font-size: 0.7rem; padding: 2px 6px;">Error: ${esc(job.error)}</p>`;
-        }
-
-        // Update log if this is the selected card AND log tab is active
-        if (currentSelectedCard === filename && document.getElementById('logTab').classList.contains('active')) {
-          const consoleEl = document.getElementById('logConsole');
-          const title = document.getElementById('logTitle');
-          title.innerText = `Logs: ${filename} (${job.engine})`;
-          consoleEl.innerText = job.log || "No logs available yet.";
-          consoleEl.scrollTop = consoleEl.scrollHeight;
-        }
+      if (footer && job.status === 'done' && !footer.querySelector('audio')) {
+        const engineDir = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+        const stem = filename.replace(/\.txt$/i, '');
+        footer.innerHTML = `<audio controls src="${engineDir}${stem}.mp3"></audio>`;
       }
     }
 
@@ -234,10 +305,13 @@
         if (!r.ok) return;
         const jobs = await r.json();
 
-        jobData = {};
+        // Update list status ONLY (logs not included)
         jobs.forEach(j => {
           if (!jobData[j.chapter_file] || j.created_at > jobData[j.chapter_file].created_at) {
+            // merge existing logs if we have them to avoid losing them on list refresh
+            const existingLog = jobData[j.chapter_file]?.log;
             jobData[j.chapter_file] = j;
+            if (existingLog) jobData[j.chapter_file].log = existingLog;
           }
         });
 
@@ -254,11 +328,12 @@
           `${running} Running • ${queued} Queued • ${wavs} Missing MP3s`;
 
         const backfillBtn = document.getElementById('backfillBtn');
-        if (backfillBtn) {
-          if (backfillBtn.innerText !== "Resolving...") {
-            backfillBtn.disabled = (wavs === 0);
-          }
+        if (backfillBtn && backfillBtn.innerText !== "Resolving...") {
+          backfillBtn.disabled = (wavs === 0);
         }
+
+        // Poll for log updates separately
+        updateLogView();
 
       } catch (e) {
         console.error("Refresh failed", e);

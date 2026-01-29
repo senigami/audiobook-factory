@@ -4,14 +4,14 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from .engines import wav_to_mp3
+from .engines import wav_to_mp3, terminate_all_subprocesses
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
     XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV
 )
-from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs
+from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
 from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue, clear_job_queue
 from .voices import list_piper_voices
@@ -26,6 +26,28 @@ templates = Environment(
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+@app.on_event("startup")
+def startup_event():
+    # Re-populate in-memory queue from state on restart
+    existing = get_jobs()
+    count = 0
+    for jid, j in existing.items():
+        if j.status == "queued":
+            requeue(jid)
+            count += 1
+        elif j.status == "running":
+            # Reset interrupted running jobs to queued
+            update_job(jid, status="queued", error="Restarted")
+            requeue(jid)
+            count += 1
+    if count > 0:
+        print(f"recovered {count} jobs from state")
+
+@app.on_event("shutdown")
+def shutdown_event():
+    print("Shutting down: killing subprocesses...")
+    terminate_all_subprocesses()
 
 def list_chapters():
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
@@ -226,11 +248,47 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
         return PlainTextResponse("Chapter file not found.", status_code=404)
 
     text = p.read_text(encoding="utf-8", errors="replace")
+    
+    # Stats
+    char_count = len(text)
+    word_count = len(text.split())
+    # Rough sentence count based on punctuation
+    sent_count = text.count('.') + text.count('?') + text.count('!')
+    
+    # Predict time (using XTTS constant for general reference, or make it dynamic later)
+    # Importing BASELINE_XTTS_CPS would be circular if not careful, but web.py imports nothing from jobs.py?
+    # Actually web.py imports from jobs.py (start_xtts_queue -> get_jobs). 
+    # But jobs.py imports web.py? No.
+    # Let's import the constants or just define them/import them from config if possible.
+    # jobs.py has them. Let's move constants to config.py or just use the value 25.0 for now to avoid circular import issues if they exist.
+    # Wait, web.py DOES NOT import jobs.py at top level?
+    # It imports `start_xtts_queue` logic? No, web.py *defines* the routes.
+    # It imports `enqueue` from `jobs`.
+    # Let's see imports in web.py...
+    
+    # Actually, simplistic approach: use the same 25.0 hardcoded or import if safe.
+    # Checking file outline... web.py imports:
+    # from .jobs import enqueue, cancel, paused, resume_queue, pause_queue, clear_job_queue
+    # So importing BASELINE_XTTS_CPS from jobs should be fine.
+    
+    from .jobs import BASELINE_XTTS_CPS
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+    
     hits = find_long_sentences(text)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"long_sentences_{Path(chapter_file).stem}.txt"
 
-    lines = [f"Long sentences in {chapter_file}", f"Hits: {len(hits)}", ""]
+    lines = [
+        f"Analysis Report: {chapter_file}",
+        f"--------------------------------------------------",
+        f"Character Count : {char_count:,}",
+        f"Word Count      : {word_count:,}",
+        f"Sentence Count  : {sent_count:,} (approx)",
+        f"Predicted Time  : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
+        f"--------------------------------------------------",
+        f"Long Sentence Hits: {len(hits)}",
+        ""
+    ]
     for idx, clen, start, end, s in hits:
         lines.append(f"--- Sentence {idx} ({clen} chars) ---")
         lines.append(s)
@@ -345,7 +403,46 @@ def api_jobs():
 
     jobs = list(jobs_dict.values())
     jobs.sort(key=lambda j: j.get('created_at', 0))
+    
+    # Optimization: Remove full logs from list view to save bandwidth
+    for j in jobs:
+        if 'log' in j:
+            del j['log']
+            
     return JSONResponse(jobs[:400])
+
+@app.get("/api/active_job")
+def api_active_job():
+    """Returns the currently running job (if any) with full details."""
+    jobs = get_jobs().values()
+    running = [j for j in jobs if j.status == "running"]
+    if not running:
+        return JSONResponse(None)
+    
+    # Return the first running job (should only be one)
+    j = running[0]
+    
+    # Calculate dynamic progress/elapsed for the API response too
+    if j.started_at and j.eta_seconds:
+        now = time.time()
+        elapsed = now - j.started_at
+        time_prog = min(0.99, elapsed / float(j.eta_seconds))
+        j.progress = max(j.progress, time_prog)
+        
+    return JSONResponse(asdict(j))
+
+@app.get("/api/job/{chapter_file}")
+def api_get_job(chapter_file: str):
+    """Returns full details for a specific job."""
+    jobs = get_jobs().values()
+    # Find job by chapter file
+    found = [j for j in jobs if j.chapter_file == chapter_file]
+    if found:
+        return JSONResponse(asdict(found[0]))
+    
+    # If not found in memory/state, try auto-discovery again for logs?
+    # For now just return 404
+    return JSONResponse(None, status_code=404)
 
 @app.post("/queue/clear")
 def clear_history():

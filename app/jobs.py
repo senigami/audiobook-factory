@@ -99,11 +99,33 @@ def worker_loop():
             chars = len(text)
             eta = _estimate_seconds(chars, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
             update_job(jid, eta_seconds=eta)
+            
+            # Formatted header for logs (explicit newlines)
+            start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+            header = [
+                f"Job Started: {j.chapter_file}\n",
+                f"Started At:  {start_dt}\n",
+                f"Engine: {j.engine.upper()}\n",
+                f"Character Count: {chars:,}\n",
+                f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                "-" * 40 + "\n",
+                "\n"
+            ]
 
-            logs = []
+            logs = header.copy()
             start = time.time()
 
             def on_output(line: str):
+                # Filter out noisy lines provided by XTTS/Piper
+                s = line.strip()
+                if not s: return  # Skip empty lines
+                if s.startswith("> Text:"): return
+                if s.startswith("> Text splitted to sentences"): return
+                if "pkg_resources is deprecated" in s: return
+                if "Using model:" in s: return
+                if "already downloaded" in s: return
+                if "FutureWarning" in s: return
+
                 logs.append(line)
                 elapsed = time.time() - start
                 prog = min(0.98, elapsed / max(1, eta))
