@@ -295,9 +295,49 @@ def report(name: str):
 
 @app.get("/api/jobs")
 def api_jobs():
-    jobs = list(get_jobs().values())
-    jobs.sort(key=lambda j: j.created_at)  # keep consistent with UI
-    return JSONResponse([asdict(j) for j in jobs[:400]])
+    """Returns jobs from state, augmented with file-based auto-discovery."""
+    jobs_dict = {j.chapter_file: asdict(j) for j in get_jobs().values()}
+    
+    # Auto-discovery
+    chapters = [p.name for p in list_chapters()]
+    for c in chapters:
+        # If we already have a job record, don't override it unless it's not 'done'
+        # and we find a finished file.
+        existing = jobs_dict.get(c)
+        if existing and existing['status'] == 'done':
+            continue
+            
+        stem = Path(c).stem
+        x_mp3 = (XTTS_OUT_DIR / f"{stem}.mp3")
+        p_mp3 = (PIPER_OUT_DIR / f"{stem}.mp3")
+        x_wav = (XTTS_OUT_DIR / f"{stem}.wav")
+        p_wav = (PIPER_OUT_DIR / f"{stem}.wav")
+        
+        found_job = None
+        if x_mp3.exists():
+            found_job = {"status": "done", "engine": "xtts", "output_mp3": x_mp3.name}
+        elif p_mp3.exists():
+            found_job = {"status": "done", "engine": "piper", "output_mp3": p_mp3.name}
+        elif x_wav.exists():
+            found_job = {"status": "done", "engine": "xtts", "output_wav": x_wav.name}
+        elif p_wav.exists():
+            found_job = {"status": "done", "engine": "piper", "output_wav": p_wav.name}
+            
+        if found_job:
+            if existing:
+                existing.update(found_job)
+            else:
+                jobs_dict[c] = {
+                    "id": f"discovered-{c}",
+                    "chapter_file": c,
+                    "progress": 1.0,
+                    "created_at": 0, # logical start
+                    **found_job
+                }
+
+    jobs = list(jobs_dict.values())
+    jobs.sort(key=lambda j: j.get('created_at', 0))
+    return JSONResponse(jobs[:400])
 
 @app.post("/queue/clear")
 def clear_history():
