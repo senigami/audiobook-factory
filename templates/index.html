@@ -10,6 +10,17 @@
     .chapter-card.is-finished.hidden-finished {
       display: none;
     }
+
+    .badge-warning {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      cursor: pointer;
+    }
+
+    .badge-warning:hover {
+      background: rgba(255, 193, 7, 0.3);
+    }
   </style>
 </head>
 
@@ -129,7 +140,10 @@
         <div class="card-header">
           <span class="chapter-title">{{ c }}</span>
           <div class="status-badge-container" id="badge-{{ c }}">
-            <!-- Badges injected by JS -->
+            <!-- Status badges injected by JS -->
+          </div>
+          <div class="warning-badge-container" id="warning-{{ c }}" style="display: none;">
+            <!-- Warning count injected by JS -->
           </div>
         </div>
 
@@ -183,6 +197,14 @@
     let currentSelectedCard = null;
     let jobData = {};
     let hideFinished = false;
+
+    function selectCardAndScroll(filename) {
+      const card = document.getElementById(`card-${filename}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.click();
+      }
+    }
 
     function toggleHideFinished() {
       hideFinished = !hideFinished;
@@ -307,6 +329,16 @@
         else if (job.status === 'wav') badgeClass = 'badge-wav';
 
         badgeContainer.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
+      }
+
+      const warningContainer = document.getElementById(`warning-${filename}`);
+      if (warningContainer) {
+        if (job.warning_count > 0) {
+          warningContainer.style.display = 'block';
+          warningContainer.innerHTML = `<span class="badge badge-warning" title="Click to see logs" onclick="selectCardAndScroll('${filename}')">⚠️ ${job.warning_count} Warning${job.warning_count > 1 ? 's' : ''}</span>`;
+        } else {
+          warningContainer.style.display = 'none';
+        }
       }
 
       if (progContainer && progBar) {

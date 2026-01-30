@@ -87,3 +87,22 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
         if len(s) > limit:
             hits.append((idx, len(s), start, end, s))
     return hits
+
+def clean_text_for_tts(text: str) -> str:
+    """Normalize punctuation and characters to avoid TTS speech artifacts."""
+    # Handle smart quotes
+    text = text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    # Handle dashes and ellipses
+    text = text.replace("—", " - ").replace("–", " - ").replace("…", "...")
+    
+    # Common redundant punctuation artifacts
+    text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
+    text = text.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
+    
+    # Normalize spaces after punctuation (if missing)
+    # Match . ! or ? followed by anything that isn't a space, dot, or quote
+    text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
+    # Collapse multiple spaces
+    text = re.sub(r' +', ' ', text)
+    
+    return text.strip()

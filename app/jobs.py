@@ -118,16 +118,41 @@ def worker_loop():
             def on_output(line: str):
                 # Filter out noisy lines provided by XTTS/Piper
                 s = line.strip()
-                if not s: return  # Skip empty lines
-                if s.startswith("> Text:"): return
-                if s.startswith("> Text splitted to sentences"): return
-                # Filter out the raw sentence list printed by the TTS engine (Coqui XTTS)
-                # This prevents the entire chapter text from flooding the logs.
-                if s.startswith("['") or (s.startswith("[") and "Chapter" in s): return
+                if not s: return
+                
+                # Filter out synthesis progress/text logs
+                # Coqui XTTS typically prefixes synthesis text with ' > ' or wraps lists in []
+                if s.startswith("> Text"): return
+                if s.startswith("> Processing sentence:"): return
+                
+                # Raw Python list output (often occurs if the command output is verbose)
+                if s.startswith("['") or s.startswith('["'): return
+                if s.endswith("']") or s.endswith('"]'): return
+                if s.startswith("'") and s.endswith("',"): return # Middle of a list
+                if s.startswith('"') and s.endswith('",'): return # Middle of a list
+                
+                # Filter out noisy metadata/warnings we don't need
                 if "pkg_resources is deprecated" in s: return
                 if "Using model:" in s: return
                 if "already downloaded" in s: return
-                if "FutureWarning" in s: return
+                if "futurewarning" in s.lower(): return
+                if "loading model" in s.lower(): return
+                if "tensorboard" in s.lower(): return
+                
+                # Track long sentence warnings as job alerts
+                if "exceeds the character limit of 250" in s:
+                    # Update warning count in state
+                    current_warnings = getattr(j, 'warning_count', 0) + 1
+                    j.warning_count = current_warnings
+                    update_job(jid, warning_count=current_warnings)
+
+                # If the line is raw text from the chapter (heuristic)
+                # Usually these lines don't have brackets or the specific log prefixes we want.
+                # Important warnings start with [!] or [v]
+                if not s.startswith("[") and not s.startswith(">"):
+                    # If it's more than a few words, it's likely chapter text leaking from output
+                    if len(s) > 20:
+                        return
 
                 logs.append(line)
                 elapsed = time.time() - start
