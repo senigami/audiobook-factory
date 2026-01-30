@@ -55,6 +55,8 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     return run_cmd_stream(cmd, on_output, cancel_check)
 
 def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
+    from .textops import clean_text_for_tts
+    text = clean_text_for_tts(text)
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
@@ -65,7 +67,9 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     if safe_mode:
         text = safe_split_long_sentences(text)
 
-    safe_text = " ".join(text.split()).replace('"', '\\"')
+    # Preserve double-newlines (paragraphs) but normalize single newlines/spaces
+    # and escape double quotes for the shell command.
+    safe_text = text.replace('"', '\\"')
 
     cmd = (
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
@@ -78,6 +82,18 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     return run_cmd_stream(cmd, on_output, cancel_check)
 
 def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, on_output, cancel_check) -> int:
+    from .textops import clean_text_for_tts
+    # For Piper, we read the file and clean it before writing to a temp location if needed,
+    # but since piper reads from file, let's just clean the text if we were reading it.
+    # Actually, piper --input_file is convenient. Let's stick to cleaning in memory for XTTS
+    # and maybe leave Piper alone unless it's a big issue, or clean it then write to a tmp file.
+    # To keep it simple and consistent:
+    text = chapter_file.read_text(encoding="utf-8", errors="replace")
+    text = clean_text_for_tts(text)
+    
+    tmp_path = chapter_file.with_suffix(".tmp.txt")
+    tmp_path.write_text(text, encoding="utf-8")
+    
     model, cfg = piper_voice_paths(voice_name)
     if not model.exists() or not cfg.exists():
         on_output(f"[error] Missing Piper voice files: {model} / {cfg}\n")

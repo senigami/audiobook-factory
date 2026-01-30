@@ -278,6 +278,7 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"long_sentences_{Path(chapter_file).stem}.txt"
 
+    from .config import SENT_CHAR_LIMIT
     lines = [
         f"Analysis Report: {chapter_file}",
         f"--------------------------------------------------",
@@ -286,11 +287,11 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
         f"Sentence Count  : {sent_count:,} (approx)",
         f"Predicted Time  : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
         f"--------------------------------------------------",
-        f"Long Sentence Hits: {len(hits)}",
+        f"Long Sentence Hits (> {SENT_CHAR_LIMIT} chars): {len(hits)}",
         ""
     ]
     for idx, clen, start, end, s in hits:
-        lines.append(f"--- Sentence {idx} ({clen} chars) ---")
+        lines.append(f"--- Sentence #{idx} ({clen} chars) ---")
         lines.append(s)
         lines.append("")
     report_text = "\n".join(lines)

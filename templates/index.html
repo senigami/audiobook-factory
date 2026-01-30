@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audiobook Factory</title>
   <link rel="stylesheet" href="/static/dashboard.css">
+  <style>
+    .chapter-card.is-finished.hidden-finished {
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
@@ -51,6 +56,10 @@
         </form>
 
         <div>
+          <button type="button" id="hideFinishedBtn" onclick="toggleHideFinished()" class="btn btn-outline"
+            style="width: 100%; margin-bottom: 8px;">
+            Hide Finished
+          </button>
           <button type="button" onclick="handleClear()" class="btn btn-danger" style="width: 100%;">
             Clear All / Reset
           </button>
@@ -114,8 +123,9 @@
 
     <div class="chapter-grid-container" id="chapterGrid">
       {% for c in chapters %}
+      {% set is_finished = (c in xtts_mp3 or c in piper_mp3 or c in xtts_wav_only or c in piper_wav_only) %}
       {% set stem = c.rsplit('.', 1)[0] %}
-      <div class="chapter-card" id="card-{{ c }}" data-filename="{{ c }}">
+      <div class="chapter-card{% if is_finished %} is-finished{% endif %}" id="card-{{ c }}" data-filename="{{ c }}">
         <div class="card-header">
           <span class="chapter-title">{{ c }}</span>
           <div class="status-badge-container" id="badge-{{ c }}">
@@ -172,6 +182,18 @@
   <script>
     let currentSelectedCard = null;
     let jobData = {};
+    let hideFinished = false;
+
+    function toggleHideFinished() {
+      hideFinished = !hideFinished;
+      const btn = document.getElementById('hideFinishedBtn');
+      btn.innerText = hideFinished ? "Show Finished" : "Hide Finished";
+      btn.classList.toggle('btn-primary', hideFinished);
+
+      document.querySelectorAll('.chapter-card.is-finished').forEach(card => {
+        card.classList.toggle('hidden-finished', hideFinished);
+      });
+    }
 
     function esc(s) {
       return (s ?? "").toString()
@@ -238,11 +260,16 @@
       if (jobToCheck && jobToCheck.status === 'running' && jobToCheck.started_at && jobToCheck.eta_seconds) {
         const elapsed = Math.floor(Date.now() / 1000 - jobToCheck.started_at);
         const eta = Math.round(jobToCheck.eta_seconds);
-        const em = Math.floor(elapsed / 60);
-        const es = Math.floor(elapsed % 60);
-        const pm = Math.floor(eta / 60);
-        const ps = Math.floor(eta % 60);
-        subEl.innerText = `Elapsed: ${em}m ${es}s / Predicted: ${pm}m ${ps}s`;
+        const remaining = eta - elapsed;
+
+        if (remaining > 0) {
+          const rm = Math.floor(remaining / 60);
+          const rs = Math.floor(remaining % 60);
+          subEl.innerText = `ETA: ${rm}m ${rs}s`;
+        } else {
+          subEl.innerText = `ETA: Almost done...`;
+        }
+
         subEl.style.color = 'var(--accent)';
         subEl.style.fontSize = '1.2rem';
         subEl.style.fontWeight = 'bold';
@@ -292,10 +319,21 @@
         }
       }
 
-      if (footer && job.status === 'done' && !footer.querySelector('audio')) {
-        const engineDir = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
-        const stem = filename.replace(/\.txt$/i, '');
-        footer.innerHTML = `<audio controls src="${engineDir}${stem}.mp3"></audio>`;
+      if (footer) {
+        if (job.status === 'queued' || job.status === 'running') {
+          footer.innerHTML = '';
+          document.getElementById(`card-${filename}`).classList.remove('is-finished');
+        } else if ((job.status === 'done' || job.status === 'wav') && !footer.querySelector('audio')) {
+          const card = document.getElementById(`card-${filename}`);
+          card.classList.add('is-finished');
+          if (hideFinished) card.classList.add('hidden-finished');
+
+          if (job.status === 'done') {
+            const engineDir = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+            const stem = filename.replace(/\.txt$/i, '');
+            footer.innerHTML = `<audio controls src="${engineDir}${stem}.mp3"></audio>`;
+          }
+        }
       }
     }
 
@@ -338,6 +376,20 @@
     }
 
     // Event Listeners
+    document.addEventListener('click', (e) => {
+      // If clicking inside a card or the sidebar/controls, do nothing
+      if (e.target.closest('.chapter-card') || e.target.closest('.sidebar') || e.target.closest('.btn')) return;
+
+      // If clicking on the grid container or main background, deselect
+      if (currentSelectedCard) {
+        document.getElementById(`card-${currentSelectedCard}`)?.classList.remove('active');
+        currentSelectedCard = null;
+        updateLogView(); // Will reset to System Console
+        document.getElementById('previewTitle').innerText = 'Chapter Preview';
+        document.getElementById('previewArea').innerText = 'Select a chapter to see its preview.';
+      }
+    });
+
     document.getElementById('chapterGrid').addEventListener('click', async (e) => {
       const card = e.target.closest('.chapter-card');
       if (!card) return;

@@ -1,2 +1,2 @@
 from app.web import app
-# Trigger reload
+# Trigger reload again for log filter

@@ -4,7 +4,7 @@ from typing import List, Tuple
 from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
 
 CHAPTER_RE = re.compile(r"^(Chapter\s+(\d+)\s*:\s*.+)$", re.MULTILINE)
-SENT_SPLIT_RE = re.compile(r"(.+?)(?:(?<=[.!?])\s+|$)", re.DOTALL)
+SENT_SPLIT_RE = re.compile(r'(.+?[.!?]["\'”’]*)(\s+|$)', re.DOTALL)
 
 def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
     matches = list(CHAPTER_RE.finditer(full_text))

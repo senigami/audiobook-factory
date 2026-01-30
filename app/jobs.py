@@ -12,7 +12,7 @@ cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
 # rough baseline chars/sec; tweak later if you want
-BASELINE_XTTS_CPS = 16.8
+BASELINE_XTTS_CPS = 16.7
 BASELINE_PIPER_CPS = 220.0
 
 
@@ -121,6 +121,9 @@ def worker_loop():
                 if not s: return  # Skip empty lines
                 if s.startswith("> Text:"): return
                 if s.startswith("> Text splitted to sentences"): return
+                # Filter out the raw sentence list printed by the TTS engine (Coqui XTTS)
+                # This prevents the entire chapter text from flooding the logs.
+                if s.startswith("['") or (s.startswith("[") and "Chapter" in s): return
                 if "pkg_resources is deprecated" in s: return
                 if "Using model:" in s: return
                 if "already downloaded" in s: return
