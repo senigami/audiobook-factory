@@ -9,13 +9,17 @@ from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV
+    XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT
 )
 from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
 from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue, clear_job_queue
 from .voices import list_piper_voices
-from .textops import split_by_chapter_markers, write_chapters_to_folder, find_long_sentences
+from .textops import (
+    split_by_chapter_markers, write_chapters_to_folder, 
+    find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
+    split_into_parts
+)
 
 app = FastAPI()
 templates = Environment(
@@ -153,20 +157,30 @@ async def upload(file: UploadFile = File(...)):
 @app.get("/split", response_class=HTMLResponse)
 def split_page(file: str):
     tpl = templates.get_template("split.html")
-    return HTMLResponse(tpl.render(file=file))
+    return HTMLResponse(tpl.render(file=file, part_limit=PART_CHAR_LIMIT))
 
 @app.post("/split")
-def do_split(file: str = Form(...)):
+def do_split(
+    file: str = Form(...),
+    mode: str = Form("chapter"),
+    max_chars: int = Form(PART_CHAR_LIMIT)
+):
     path = UPLOAD_DIR / file
     if not path.exists():
         return JSONResponse({"error": "upload not found"}, status_code=404)
 
     full_text = path.read_text(encoding="utf-8", errors="replace")
-    chapters = split_by_chapter_markers(full_text)
-    if not chapters:
-        return PlainTextResponse("No chapter markers found. Expected: Chapter 1591: Years Later", status_code=400)
+    
+    if mode == "parts":
+        chapters = split_into_parts(full_text, max_chars)
+        prefix = "part"
+    else:
+        chapters = split_by_chapter_markers(full_text)
+        prefix = "chapter"
+        if not chapters:
+            return PlainTextResponse("No chapter markers found. Expected: Chapter 1591: Years Later", status_code=400)
 
-    written = write_chapters_to_folder(chapters, CHAPTER_DIR)
+    written = write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=prefix)
     return RedirectResponse(f"/?chapter={written[0].name}", status_code=303)
 
 @app.post("/queue/start_xtts")
@@ -272,34 +286,111 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     # So importing BASELINE_XTTS_CPS from jobs should be fine.
     
     from .jobs import BASELINE_XTTS_CPS
+    from .config import SENT_CHAR_LIMIT
+
     pred_seconds = int(char_count / BASELINE_XTTS_CPS)
     
-    hits = find_long_sentences(text)
+    # Analysis logic
+    raw_hits = find_long_sentences(text)
+    
+    # Processed text analysis
+    cleaned_text = clean_text_for_tts(text)
+    split_text = safe_split_long_sentences(cleaned_text)
+    cleaned_hits = find_long_sentences(split_text)
+    
+    uncleanable = len(cleaned_hits)
+    auto_fixed = len(raw_hits) - uncleanable
+
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"long_sentences_{Path(chapter_file).stem}.txt"
 
-    from .config import SENT_CHAR_LIMIT
     lines = [
         f"Analysis Report: {chapter_file}",
         f"--------------------------------------------------",
-        f"Character Count : {char_count:,}",
-        f"Word Count      : {word_count:,}",
-        f"Sentence Count  : {sent_count:,} (approx)",
-        f"Predicted Time  : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
+        f"Character Count   : {char_count:,}",
+        f"Word Count        : {word_count:,}",
+        f"Sentence Count    : {sent_count:,} (approx)",
+        f"Predicted Time    : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
         f"--------------------------------------------------",
-        f"Long Sentence Hits (> {SENT_CHAR_LIMIT} chars): {len(hits)}",
+        f"Limit Threshold   : {SENT_CHAR_LIMIT} characters",
+        f"Raw Long Sentences: {len(raw_hits)}",
+        f"Auto-Fixable      : {auto_fixed} (handled by Safe Mode)",
+        f"Action Required   : {uncleanable} (STILL too long after split!)",
+        f"--------------------------------------------------",
         ""
     ]
-    for idx, clen, start, end, s in hits:
-        lines.append(f"--- Sentence #{idx} ({clen} chars) ---")
-        lines.append(s)
+    
+    if uncleanable > 0:
+        lines.append("!!! ACTION REQUIRED: The following sentences could not be auto-split !!!")
         lines.append("")
+        for idx, clen, start, end, s in cleaned_hits:
+            lines.append(f"--- Uncleanable Sentence ({clen} chars) ---")
+            lines.append(s)
+            lines.append("")
+    elif len(raw_hits) > 0:
+        lines.append("✓ All long sentences will be successfully handled by Safe Mode.")
+    else:
+        lines.append("✓ No long sentences found.")
+
     report_text = "\n".join(lines)
     report_path.write_text(report_text, encoding="utf-8")
     
+    settings = get_settings()
+    is_safe = settings.get("safe_mode", True)
+
     if ajax:
-        return JSONResponse({"report": report_text})
+        return JSONResponse({
+            "report": report_text,
+            "safe_mode": is_safe
+        })
     return RedirectResponse(f"/report/{report_path.name}", status_code=303)
+@app.get("/analyze_batch", response_class=HTMLResponse)
+def analyze_batch():
+    chapters = list_chapters()
+    results = []
+    
+    from .config import SENT_CHAR_LIMIT
+    
+    for p in chapters:
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            raw_hits = find_long_sentences(text)
+            
+            # Analyze what safe split would do
+            cleaned_text = clean_text_for_tts(text)
+            split_text = safe_split_long_sentences(cleaned_text)
+            cleaned_hits = find_long_sentences(split_text)
+            
+            uncleanable_count = len(cleaned_hits)
+            
+            results.append({
+                "filename": p.name,
+                "char_count": len(text),
+                "raw_count": len(raw_hits),
+                "auto_fixed": len(raw_hits) - uncleanable_count,
+                "uncleanable": uncleanable_count,
+                "report_name": f"long_sentences_{p.stem}.txt"
+            })
+        except Exception as e:
+            print(f"Error processing {p.name}: {e}")
+            results.append({
+                "filename": p.name,
+                "char_count": 0,
+                "raw_count": 0,
+                "auto_fixed": 0,
+                "uncleanable": 0,
+                "error": str(e)
+            })
+    
+    settings = get_settings()
+    is_safe = settings.get("safe_mode", True)
+
+    tpl = templates.get_template("report_batch.html")
+    return HTMLResponse(tpl.render(
+        results=results,
+        limit=SENT_CHAR_LIMIT,
+        safe_mode=is_safe
+    ))
 
 
 @app.post("/queue/backfill_mp3")

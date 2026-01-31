@@ -20,15 +20,72 @@ def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
         spans.append((chap_num, heading, body))
     return spans
 
+def split_into_parts(text: str, max_chars: int = 30000) -> List[Tuple[int, str, str]]:
+    """
+    Split text into parts of approximately max_chars length.
+    Tries to split at paragraph boundaries (\n\n), then single newlines, then sentence boundaries.
+    """
+    if not text:
+        return []
+
+    parts = []
+    part_num = 1
+    
+    remaining_text = text.strip()
+    
+    while remaining_text:
+        if len(remaining_text) <= max_chars:
+            parts.append((part_num, f"Part {part_num}", remaining_text))
+            break
+            
+        # Look for a split point
+        split_point = -1
+        
+        # 1. Try paragraph break (\n\n)
+        chunk = remaining_text[:max_chars]
+        p_break = chunk.rfind("\n\n")
+        if p_break > max_chars * 0.7:  # Only if it's "close enough" to the end of the chunk
+            split_point = p_break + 2
+        else:
+            # 2. Try newline
+            nl_break = chunk.rfind("\n")
+            if nl_break > max_chars * 0.8:
+                split_point = nl_break + 1
+            else:
+                # 3. Try sentence break
+                # Look for . ! ? followed by space or end of line
+                # We search in the last 20% of the chunk
+                search_start = int(max_chars * 0.8)
+                sent_match = None
+                for m in re.finditer(r'[.!?](\s+|$)', chunk[search_start:]):
+                    sent_match = m
+                
+                if sent_match:
+                    split_point = search_start + sent_match.end()
+                else:
+                    # 4. Try word break (space)
+                    space_break = chunk.rfind(" ")
+                    if space_break > 0:
+                        split_point = space_break + 1
+                    else:
+                        # 5. Last resort: hard cut
+                        split_point = max_chars
+        
+        parts.append((part_num, f"Part {part_num}", remaining_text[:split_point].strip()))
+        remaining_text = remaining_text[split_point:].strip()
+        part_num += 1
+        
+    return parts
+
 def safe_filename(s: str, max_len: int = 80) -> str:
     s = re.sub(r"[^\w\s\-:]", "", s).strip()
     return s.replace(" ", "_")[:max_len]
 
-def write_chapters_to_folder(chapters, out_dir: Path) -> List[Path]:
+def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter") -> List[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for chap_num, heading, body in chapters:
-        fname = out_dir / f"chapter_{chap_num:04}_{safe_filename(heading)}.txt"
+        fname = out_dir / f"{prefix}_{chap_num:04}_{safe_filename(heading)}.txt"
         fname.write_text(body + "\n", encoding="utf-8")
         written.append(fname)
     return written

@@ -7,14 +7,56 @@
 </head>
 
 <body style="font-family:-apple-system,system-ui,sans-serif;margin:18px;">
-  <h2>Split uploaded file into chapters</h2>
-  <p>File: <code>{{ file }}</code></p>
-  <p>Expected chapter markers like: <code>Chapter 1591: Years Later</code></p>
-  <form method="post" action="/split">
-    <input type="hidden" name="file" value="{{ file }}" />
-    <button type="submit">Split into chapters_out/</button>
-  </form>
-  <p><a href="/">Back</a></p>
+  <h2>Split Analysis</h2>
+  <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #ddd; max-width: 600px;">
+    <p>File: <strong>{{ file }}</strong></p>
+
+    <form method="post" action="/split">
+      <input type="hidden" name="file" value="{{ file }}" />
+
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; font-weight: bold;">
+          <input type="radio" name="mode" value="chapter" checked onchange="toggleInputs()">
+          Split by Chapter Markers
+        </label>
+        <p style="margin-left: 25px; color: #666; font-size: 0.9em;">
+          Looks for headers like <code>Chapter 1591: Years Later</code>
+        </p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; font-weight: bold;">
+          <input type="radio" name="mode" value="parts" onchange="toggleInputs()">
+          Split into Parts (Bulk Text)
+        </label>
+        <div id="parts_options" style="margin-left: 25px; display: none;">
+          <p style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+            Splits large text into chunks, honoring paragraph and sentence breaks where possible.
+          </p>
+          <label>
+            Target Size (chars):
+            <input type="number" name="max_chars" value="{{ part_limit }}" step="1000"
+              style="padding: 5px; width: 100px;">
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top: 30px;">
+        <button type="submit"
+          style="padding: 10px 20px; background: #007aff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+          Process and Split
+        </button>
+        <a href="/" style="margin-left: 15px; color: #666; text-decoration: none;">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function toggleInputs() {
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      document.getElementById('parts_options').style.display = (mode === 'parts') ? 'block' : 'none';
+    }
+  </script>
 </body>
 
 </html>

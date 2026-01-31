@@ -8,6 +8,7 @@ REPORT_DIR = BASE_DIR / "reports"
 XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
 PIPER_OUT_DIR = BASE_DIR / "piper_audio"
 VOICES_DIR = BASE_DIR / "voices"
+AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
 
 # IMPORTANT: narrator file is in project root: ~/tts-dashboard/narrator_clean.wav
 NARRATOR_WAV = BASE_DIR / "narrator_clean.wav"
@@ -20,5 +21,6 @@ PIPER_ENV_ACTIVATE = Path.home() / "piper-env" / "bin" / "activate"
 SENT_CHAR_LIMIT = 250
 SAFE_SPLIT_TARGET = 200
 
+PART_CHAR_LIMIT = 30000
 MAKE_MP3_DEFAULT = True
 MP3_QUALITY = "2"  # ffmpeg -q:a 2

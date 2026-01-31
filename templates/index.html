@@ -83,6 +83,13 @@
             Resolve Missing MP3s
           </button>
         </div>
+
+        <div>
+          <a href="/analyze_batch" class="btn btn-secondary"
+            style="width: 100%; margin-top: 12px; text-decoration: none; display: block; text-align: center;">
+            Run Batch Analysis
+          </a>
+        </div>
       </div>
     </section>
 
@@ -581,6 +588,15 @@
     // Fast log update: every 1s
     updateLogView();
     setInterval(updateLogView, 1000);
+
+    // Handle selected chapter on load
+    window.addEventListener('scroll', () => { }, { passive: true }); // dummy to allow scroll check
+    const initialChapter = "{{ selected_chapter }}";
+    if (initialChapter) {
+      setTimeout(() => {
+        selectCardAndScroll(initialChapter);
+      }, 500);
+    }
   </script>
 </body>
 
