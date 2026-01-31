@@ -4,8 +4,8 @@ from typing import Dict
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR
-from .engines import xtts_generate, piper_generate, wav_to_mp3
+from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR
+from .engines import xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
@@ -163,8 +163,28 @@ def worker_loop():
             def cancel_check():
                 return cancel_ev.is_set()
 
-            # --- Generate WAV ---
-            if j.engine == "xtts":
+            # --- Generate WAV or Audiobook ---
+            if j.engine == "audiobook":
+                # Audiobook creation uses the selected output dir (xtts or piper)
+                # For now, let's assume we use whichever one has more files, or just piper_audio if not specified.
+                # The user's request says "from the output of this app". 
+                # Let's check both and use the one that exists. 
+                # Actually, better to let the user specify. But for now, check xtts then piper.
+                src_dir = XTTS_OUT_DIR
+                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
+                    src_dir = PIPER_OUT_DIR
+                
+                title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
+                out_file = AUDIOBOOK_DIR / f"{title}.m4b"
+                rc = assemble_audiobook(src_dir, title, out_file, on_output, cancel_check)
+                
+                if rc == 0 and out_file.exists():
+                    update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_mp3=out_file.name, log="".join(logs))
+                else:
+                    update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Audiobook assembly failed (rc={rc})", log="".join(logs))
+                continue
+
+            elif j.engine == "xtts":
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
                 rc = xtts_generate(text=text, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)

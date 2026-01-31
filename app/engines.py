@@ -1,4 +1,4 @@
-import shlex, subprocess
+import shlex, subprocess, os, re
 from pathlib import Path
 from typing import Tuple
 
@@ -106,3 +106,86 @@ def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, on_output
         f"--input_file {shlex.quote(str(chapter_file))} --output_file {shlex.quote(str(out_wav))}"
     )
     return run_cmd_stream(cmd, on_output, cancel_check)
+
+def get_audio_duration(file_path: Path) -> float:
+    """Uses ffprobe to get the duration of an audio file in seconds."""
+    cmd = [
+        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', str(file_path)
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        return float(result.stdout.strip())
+    except Exception:
+        return 0.0
+
+def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check) -> int:
+    # 1. Gather and sort files
+    all_files = [f for f in os.listdir(input_folder) if f.endswith(('.wav', '.mp3'))]
+    
+    # Group by stem to avoid duplicates
+    chapters_found = {}
+    def extract_number(filename):
+        # Match digits in the filename to sort numerically
+        match = re.search(r'(\d+)', filename)
+        return int(match.group(1)) if match else 0
+
+    for f in all_files:
+        stem = Path(f).stem
+        ext = Path(f).suffix.lower()
+        if stem not in chapters_found or ext == '.mp3': 
+             chapters_found[stem] = f
+
+    sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
+    files = [chapters_found[s] for s in sorted_stems]
+
+    if not files:
+        on_output("No audio files found to combine.\n")
+        return 1
+
+    # 2. Build Metadata and Concat List
+    metadata_file = output_m4b.with_suffix(".metadata.txt")
+    list_file = output_m4b.with_suffix(".list.txt")
+    
+    metadata = ";FFMETADATA1\n"
+    metadata += f"title={shlex.quote(book_title)}\n\n"
+    
+    current_offset = 0.0
+    
+    try:
+        with open(list_file, 'w') as lf:
+            for f in files:
+                file_path = input_folder / f
+                duration = get_audio_duration(file_path)
+                
+                lf.write(f"file '{file_path}'\n")
+                
+                start_ms = int(current_offset * 1000)
+                end_ms = int((current_offset + duration) * 1000)
+                
+                metadata += "[CHAPTER]\nTIMEBASE=1/1000\n"
+                metadata += f"START={start_ms}\n"
+                metadata += f"END={end_ms}\n"
+                metadata += f"title={shlex.quote(Path(f).stem)}\n\n"
+                
+                current_offset += duration
+
+        metadata_file.write_text(metadata, encoding="utf-8")
+
+        # 3. Run FFmpeg
+        on_output(f"Assembling audiobook: {book_title}\n")
+        on_output(f"Combining {len(files)} files into {output_m4b.name}...\n")
+        
+        cmd = (
+            f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
+            f"-i {shlex.quote(str(metadata_file))} -map_metadata 1 "
+            f"-c:a aac -b:a 128k {shlex.quote(str(output_m4b))}"
+        )
+        
+        rc = run_cmd_stream(cmd, on_output, cancel_check)
+        
+        return rc
+    finally:
+        # Cleanup
+        if list_file.exists(): list_file.unlink()
+        if metadata_file.exists(): metadata_file.unlink()

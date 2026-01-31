@@ -9,7 +9,7 @@ from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT
+    XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT, AUDIOBOOK_DIR
 )
 from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
@@ -29,6 +29,7 @@ templates = Environment(
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
+app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 @app.on_event("startup")
@@ -78,6 +79,10 @@ def piper_outputs_for(chapter_file: str):
     wav = PIPER_OUT_DIR / f"{stem}.wav"
     mp3 = PIPER_OUT_DIR / f"{stem}.mp3"
     return wav, mp3
+
+def list_audiobooks():
+    if not AUDIOBOOK_DIR.exists(): return []
+    return sorted([p.name for p in AUDIOBOOK_DIR.glob("*.m4b")], reverse=True)
 
 @app.get("/", response_class=HTMLResponse)
 def home(chapter: str = ""):
@@ -131,6 +136,7 @@ def home(chapter: str = ""):
         xtts_wav_only=xtts_wav_only,
         piper_mp3=piper_mp3,
         piper_wav_only=piper_wav_only,
+        audiobooks=list_audiobooks(),
     ))
 
 @app.post("/settings")
@@ -245,6 +251,21 @@ def pause_queue():
 @app.post("/queue/resume")
 def resume_queue():
     set_paused(False)
+    return RedirectResponse("/", status_code=303)
+
+@app.post("/create_audiobook")
+def create_audiobook(title: str = Form(...)):
+    AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    jid = uuid.uuid4().hex[:12]
+    enqueue(Job(
+        id=jid,
+        engine="audiobook",
+        chapter_file=title, # use this field for the title
+        status="queued",
+        created_at=time.time(),
+        safe_mode=False,
+        make_mp3=False
+    ))
     return RedirectResponse("/", status_code=303)
 
 @app.post("/cancel")

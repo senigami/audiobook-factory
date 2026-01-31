@@ -66,7 +66,21 @@
           </button>
         </form>
 
-        <div>
+        <div style="margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
+          <h3 style="margin-bottom: 8px;">Export Audiobook</h3>
+          <form method="post" action="/create_audiobook" class="form-group">
+            <input type="text" name="title" placeholder="Book Title" required
+              style="width: 100%; margin-bottom: 8px;" />
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+              📦 Assemble M4B
+            </button>
+          </form>
+          <p class="text-muted" style="font-size: 0.7rem; margin-top: 4px;">
+            Combines all generated wav/mp3 files with chapter markers into a single M4B file.
+          </p>
+        </div>
+
+        <div style="margin-top: 12px;">
           <button type="button" id="hideFinishedBtn" onclick="toggleHideFinished()" class="btn btn-outline"
             style="width: 100%; margin-bottom: 8px;">
             Hide Finished
@@ -75,6 +89,20 @@
             Clear All / Reset
           </button>
         </div>
+
+        {% if audiobooks %}
+        <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
+          <h3 style="margin-bottom: 8px;">Audiobook Exports</h3>
+          <ul style="list-style: none; padding: 0; font-size: 0.8rem;">
+            {% for b in audiobooks %}
+            <li style="margin-bottom: 4px;">
+              <a href="/out/audiobook/{{ b }}" download style="color: var(--accent); text-decoration: none;">📦 {{ b
+                }}</a>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
 
         <div>
           <button type="button" id="backfillBtn" onclick="runBackfill(this)" class="btn btn-secondary"
