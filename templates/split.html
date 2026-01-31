@@ -15,38 +15,37 @@
       <input type="hidden" name="file" value="{{ file }}" />
 
       <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 10px; font-weight: bold;">
-          <input type="radio" name="mode" value="chapter" checked onchange="toggleInputs()">
-          Split by Chapter Markers
+        <label style="display: block; margin-bottom: 10px; font-size: 1.1em; cursor: pointer;">
+          <input type="radio" name="mode" value="parts" checked onchange="toggleInputs()">
+          <strong>Split into Parts (Bulk Text)</strong>
         </label>
-        <p style="margin-left: 25px; color: #666; font-size: 0.9em;">
-          Looks for headers like <code>Chapter 1591: Years Later</code>
-        </p>
-      </div>
-
-      <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 10px; font-weight: bold;">
-          <input type="radio" name="mode" value="parts" onchange="toggleInputs()">
-          Split into Parts (Bulk Text)
-        </label>
-        <div id="parts_options" style="margin-left: 25px; display: none;">
-          <p style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
-            Splits large text into chunks, honoring paragraph and sentence breaks where possible.
+        <div id="parts_options" style="margin-left: 28px; display: block; color: #555;">
+          <p style="margin: 0; font-size: 0.9em;">
+            Best for novels or documents without clear "Chapter X:" headers.
+            Automatically chunks text while maintaining paragraph integrity.
           </p>
-          <label>
-            Target Size (chars):
-            <input type="number" name="max_chars" value="{{ part_limit }}" step="1000"
-              style="padding: 5px; width: 100px;">
-          </label>
         </div>
       </div>
 
-      <div style="margin-top: 30px;">
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; font-size: 1.1em; cursor: pointer;">
+          <input type="radio" name="mode" value="chapter" onchange="toggleInputs()">
+          <strong>Split by Chapter Markers</strong>
+        </label>
+        <div id="chapter_options" style="margin-left: 28px; display: none; color: #555;">
+          <p style="margin: 0; font-size: 0.9em;">
+            Looks for headers like <code>Chapter 10: Title</code>.
+            Will fail if markers are not found.
+          </p>
+        </div>
+      </div>
+
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
         <button type="submit"
-          style="padding: 10px 20px; background: #007aff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-          Process and Split
+          style="padding: 12px 24px; background: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem;">
+          Continue to Processing
         </button>
-        <a href="/" style="margin-left: 15px; color: #666; text-decoration: none;">Cancel</a>
+        <a href="/" style="margin-left: 20px; color: #666; text-decoration: none; font-size: 0.9rem;">Cancel</a>
       </div>
     </form>
   </div>
@@ -55,6 +54,7 @@
     function toggleInputs() {
       const mode = document.querySelector('input[name="mode"]:checked').value;
       document.getElementById('parts_options').style.display = (mode === 'parts') ? 'block' : 'none';
+      document.getElementById('chapter_options').style.display = (mode === 'chapter') ? 'block' : 'none';
     }
   </script>
 </body>

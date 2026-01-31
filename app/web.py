@@ -1,4 +1,5 @@
-import time, uuid
+import time, uuid, re
+from typing import Optional, List, Tuple
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
@@ -168,23 +169,40 @@ def split_page(file: str):
 @app.post("/split")
 def do_split(
     file: str = Form(...),
-    mode: str = Form("chapter"),
-    max_chars: int = Form(PART_CHAR_LIMIT)
+    mode: str = Form("parts"),
+    max_chars: Optional[int] = Form(None)
 ):
+    if max_chars is None:
+        max_chars = PART_CHAR_LIMIT
     path = UPLOAD_DIR / file
     if not path.exists():
         return JSONResponse({"error": "upload not found"}, status_code=404)
 
     full_text = path.read_text(encoding="utf-8", errors="replace")
     
-    if mode == "parts":
-        chapters = split_into_parts(full_text, max_chars)
-        prefix = "part"
-    else:
+    # Normalize mode for comparison
+    mode_clean = str(mode).strip().lower()
+    print(f"DEBUG: do_split mode='{mode}' (clean='{mode_clean}') file='{file}'")
+
+    if mode_clean == "chapter":
+        print(f"DEBUG: Splitting by chapter markers")
         chapters = split_by_chapter_markers(full_text)
         prefix = "chapter"
         if not chapters:
-            return PlainTextResponse("No chapter markers found. Expected: Chapter 1591: Years Later", status_code=400)
+            return PlainTextResponse(f"No chapter markers found. Expected: Chapter 1591: Years Later", status_code=400)
+    else:
+        # Default to parts for anything else
+        print(f"DEBUG: Defaulting to part splitting (current mode='{mode_clean}')")
+        existing_files = list(CHAPTER_DIR.glob("part_*.txt"))
+        max_idx = 0
+        for f in existing_files:
+            m = re.search(r"part_(\d+)", f.name)
+            if m:
+                max_idx = max(max_idx, int(m.group(1)))
+        
+        start_idx = max_idx + 1
+        chapters = split_into_parts(full_text, max_chars, start_index=start_idx)
+        prefix = "part"
 
     written = write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=prefix)
     return RedirectResponse(f"/?chapter={written[0].name}", status_code=303)

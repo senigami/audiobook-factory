@@ -185,3 +185,4 @@ cython_debug/
 /reports
 state.json
 /shadow_slave_summaries
+/uploads

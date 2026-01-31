@@ -20,7 +20,7 @@ def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
         spans.append((chap_num, heading, body))
     return spans
 
-def split_into_parts(text: str, max_chars: int = 30000) -> List[Tuple[int, str, str]]:
+def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) -> List[Tuple[int, str, str]]:
     """
     Split text into parts of approximately max_chars length.
     Tries to split at paragraph boundaries (\n\n), then single newlines, then sentence boundaries.
@@ -29,7 +29,7 @@ def split_into_parts(text: str, max_chars: int = 30000) -> List[Tuple[int, str, 
         return []
 
     parts = []
-    part_num = 1
+    part_num = start_index
     
     remaining_text = text.strip()
     
