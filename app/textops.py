@@ -78,10 +78,16 @@ def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter") -
     return written
 
 def split_sentences(text: str):
+    last_end = 0
     for m in SENT_SPLIT_RE.finditer(text):
         s = m.group(1).strip()
         if s:
             yield s, m.start(1), m.end(1)
+        last_end = m.end()
+    
+    remainder = text[last_end:].strip()
+    if remainder:
+        yield remainder, last_end, len(text)
 
 def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str:
     def split_one(s: str) -> List[str]:
@@ -163,6 +169,11 @@ def sanitize_for_xtts(text: str) -> str:
     text = re.sub(r'[^\x00-\x7F]+', '', text) 
     # Collapse multiple spaces and trim
     text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
+    if text and not text[-1] in ".!?":
+        text += "."
+        
     return text
 
 def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:

@@ -140,6 +140,35 @@
       padding: 8px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
+
+    /* Engine View Visualization */
+    .engine-chunk {
+      display: block;
+      margin-bottom: 16px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      position: relative;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    .engine-chunk::before {
+      content: attr(data-label);
+      position: absolute;
+      top: -10px;
+      right: 12px;
+      font-size: 0.6rem;
+      background: var(--accent);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
   </style>
 </head>
 
@@ -350,7 +379,15 @@
 
       <div class="tab-content" id="previewContent">
         <div class="preview-header">
-          <span class="preview-title" id="previewTitle">Chapter Preview</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="preview-title" id="previewTitle">Chapter Preview</span>
+            <div class="btn-group" style="padding: 2px; background: rgba(0,0,0,0.3); border-radius: 6px;">
+              <button onclick="setPreviewMode('raw')" id="modeRawBtn" class="btn active"
+                style="font-size: 0.65rem; padding: 2px 8px; min-width: 60px;">Raw</button>
+              <button onclick="setPreviewMode('engine')" id="modeEngineBtn" class="btn"
+                style="font-size: 0.65rem; padding: 2px 8px; min-width: 60px;">Engine</button>
+            </div>
+          </div>
           <button type="button" onclick="runAnalysis(event)" class="btn btn-outline"
             style="padding: 4px 10px; font-size: 0.7rem;">
             Run Long Sentence Analysis
@@ -412,6 +449,7 @@
   <script>
     let currentSelectedCard = null;
     let jobData = {};
+    let previewMode = 'raw'; // 'raw' or 'engine'
     let hideFinished = false;
 
     function selectCardAndScroll(filename) {
@@ -810,15 +848,40 @@
       }
     }
 
+    function setPreviewMode(mode) {
+      previewMode = mode;
+      document.getElementById('modeRawBtn').classList.toggle('active', mode === 'raw');
+      document.getElementById('modeEngineBtn').classList.toggle('active', mode === 'engine');
+      restorePreview();
+    }
+
     async function restorePreview() {
       if (!currentSelectedCard) return;
-      document.getElementById('previewTitle').innerText = `Preview: ${currentSelectedCard}`;
+      document.getElementById('previewTitle').innerText = (previewMode === 'engine' ? `Engine: ` : `Preview: `) + currentSelectedCard;
       const area = document.getElementById('previewArea');
       area.innerText = "Loading preview...";
       try {
-        const resp = await fetch(`/api/preview/${encodeURIComponent(currentSelectedCard)}`);
+        const isProcessed = previewMode === 'engine';
+        const resp = await fetch(`/api/preview/${encodeURIComponent(currentSelectedCard)}?processed=${isProcessed}`);
         const data = await resp.json();
-        area.innerText = data.text || "No preview available.";
+
+        if (data.error) {
+          area.innerText = data.error;
+          return;
+        }
+
+        if (isProcessed) {
+          const lines = data.text.split('\n').filter(l => l.trim().length > 0);
+          if (lines.length === 0) {
+            area.innerText = "[Empty Output - Possible context packing issue]";
+          } else {
+            area.innerHTML = lines.map((line, i) =>
+              `<div class="engine-chunk" data-label="Chunk ${i + 1}">${esc(line)}</div>`
+            ).join('');
+          }
+        } else {
+          area.innerText = data.text || "No preview available.";
+        }
       } catch (err) {
         area.innerText = "Failed to load preview.";
       }

@@ -19,7 +19,7 @@ from .voices import list_piper_voices
 from .textops import (
     split_by_chapter_markers, write_chapters_to_folder, 
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
-    split_into_parts
+    split_into_parts, sanitize_for_xtts, pack_text_to_limit
 )
 
 app = FastAPI()
@@ -692,8 +692,20 @@ def clear_history():
 
 
 @app.get("/api/preview/{chapter_file}")
-def api_preview(chapter_file: str):
+def api_preview(chapter_file: str, processed: bool = False):
     p = CHAPTER_DIR / chapter_file
     if not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return JSONResponse({"text": read_preview(p, max_chars=10000)})
+    
+    text = read_preview(p, max_chars=10000)
+    
+    if processed:
+        # Mimic the engine processing pipeline
+        settings = get_settings()
+        if settings.get("safe_mode", True):
+            text = safe_split_long_sentences(text)
+        
+        text = sanitize_for_xtts(text)
+        text = pack_text_to_limit(text)
+        
+    return JSONResponse({"text": text})

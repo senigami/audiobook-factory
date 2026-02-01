@@ -49,16 +49,25 @@ def main():
     # to what most users mean by 'streaming' (sentence-by-sentence).
     
     # Let's use the most stable approach: tts_to_file with specific kwargs
-    tts.tts_to_file(
-        text=args.text,
-        speaker_wav=args.speaker_wav,
-        language=args.language,
-        file_path=args.out_path,
-        split_sentences=True,
-        repetition_penalty=args.repetition_penalty,
-        temperature=args.temperature,
-    )
-    print("Done.")
+    print(f"Debug: text='{args.text}'", file=sys.stderr)
+    print(f"Debug: speaker_wav='{args.speaker_wav}'", file=sys.stderr)
+    print(f"Debug: out_path='{args.out_path}'", file=sys.stderr)
+
+    try:
+        tts.tts_to_file(
+            text=args.text,
+            speaker_wav=args.speaker_wav,
+            language=args.language,
+            file_path=args.out_path,
+            split_sentences=True,
+            repetition_penalty=args.repetition_penalty,
+            temperature=args.temperature,
+        )
+    except Exception as e:
+        print(f"\n[CRITICAL ERROR] XTTS failed: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
