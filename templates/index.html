@@ -49,6 +49,97 @@
       padding: 2px 6px;
       outline: none;
     }
+
+    .title-input {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 2px 6px;
+      outline: none;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-container {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      transform: translateY(20px);
+      transition: transform 0.3s;
+    }
+
+    .modal-overlay.active .modal-container {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .chapter-preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      margin-top: 12px;
+    }
+
+    .chapter-preview-table th {
+      text-align: left;
+      padding: 8px;
+      border-bottom: 2px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .chapter-preview-table td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
   </style>
 </head>
 
@@ -96,13 +187,13 @@
 
         <div style="margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
           <h3 style="margin-bottom: 8px;">Export Audiobook</h3>
-          <form method="post" action="/create_audiobook" class="form-group">
-            <input type="text" name="title" placeholder="Book Title" required
+          <div class="form-group">
+            <input type="text" id="exportTitleInput" placeholder="Book Title" required
               style="width: 100%; margin-bottom: 8px;" />
-            <button type="submit" class="btn btn-primary" style="width: 100%;">
+            <button type="button" onclick="openAssemblyModal()" class="btn btn-primary" style="width: 100%;">
               📦 Assemble M4B
             </button>
-          </form>
+          </div>
           <p class="text-muted" style="font-size: 0.7rem; margin-top: 4px;">
             Combines all generated wav/mp3 files with chapter markers into a single M4B file.
           </p>
@@ -269,6 +360,54 @@
       </div>
     </div>
   </main>
+
+  <!-- Assembly Preview Modal -->
+  <div class="modal-overlay" id="assemblyModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>Assemble Audiobook</h3>
+        <button class="btn-icon" onclick="closeAssemblyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="text-muted" style="font-size: 0.75rem; display: block; margin-bottom: 4px;">Book Title</label>
+          <input type="text" id="modalFieldTitle" style="width: 100%;">
+        </div>
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="text-muted" style="font-size: 0.75rem; display: block; margin-bottom: 4px;">Author</label>
+            <input type="text" id="modalFieldAuthor" placeholder="Optional" style="width: 100%;">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="text-muted" style="font-size: 0.75rem; display: block; margin-bottom: 4px;">Narrator</label>
+            <input type="text" id="modalFieldNarrator" placeholder="Optional" style="width: 100%;">
+          </div>
+        </div>
+
+        <h4 style="margin-bottom: 8px; font-size: 0.9rem;">Chapter Markers Preview</h4>
+        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 4px;">
+          <table class="chapter-preview-table">
+            <thead>
+              <tr>
+                <th>Chapter</th>
+                <th>Start</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="chapterPreviewList">
+              <!-- Content injected via JS -->
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted" id="totalDurationText" style="margin-top: 12px; font-size: 0.75rem; text-align: right;">
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeAssemblyModal()">Cancel</button>
+        <button class="btn btn-primary" id="confirmAssemblyBtn" onclick="confirmAssembly()">Confirm & Assemble</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     let currentSelectedCard = null;
@@ -747,6 +886,97 @@
     // Fast log update: every 1s
     updateLogView();
     setInterval(updateLogView, 1000);
+
+    async function openAssemblyModal() {
+      const title = document.getElementById('exportTitleInput').value.trim();
+      if (!title) {
+        alert("Please enter a book title.");
+        return;
+      }
+
+      document.getElementById('modalFieldTitle').value = title;
+
+      const modal = document.getElementById('assemblyModal');
+      const list = document.getElementById('chapterPreviewList');
+      const durationText = document.getElementById('totalDurationText');
+
+      list.innerHTML = '<tr><td colspan="3" style="text-align: center;">Calculating durations...</td></tr>';
+      modal.classList.add('active');
+
+      try {
+        const resp = await fetch('/api/audiobook/prepare');
+        const data = await resp.json();
+
+        if (!data.chapters || data.chapters.length === 0) {
+          list.innerHTML = '<tr><td colspan="3" style="text-align: center;">No audio files found.</td></tr>';
+          return;
+        }
+
+        list.innerHTML = data.chapters.map(c => {
+          const m = Math.floor(c.duration / 60);
+          const s = Math.floor(c.duration % 60);
+          const startM = Math.floor(c.start_sec / 60);
+          const startS = Math.floor(c.start_sec % 60);
+
+          return `<tr>
+            <td style="font-weight: 500;">${esc(c.title)}</td>
+            <td class="text-muted">${startM}m ${startS}s</td>
+            <td class="text-muted">${m}m ${s}s</td>
+          </tr>`;
+        }).join('');
+
+        const totalM = Math.floor(data.total_duration / 60);
+        const totalS = Math.floor(data.total_duration % 60);
+        durationText.innerText = `Total Duration: ${totalM}m ${totalS}s`;
+
+      } catch (err) {
+        console.error("Prep failed", err);
+        list.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--error);">Error loading preview.</td></tr>';
+      }
+    }
+
+    function closeAssemblyModal() {
+      document.getElementById('assemblyModal').classList.remove('active');
+    }
+
+    async function confirmAssembly() {
+      const btn = document.getElementById('confirmAssemblyBtn');
+      const title = document.getElementById('modalFieldTitle').value.trim();
+      const author = document.getElementById('modalFieldAuthor').value.trim();
+      const narrator = document.getElementById('modalFieldNarrator').value.trim();
+
+      if (!title) {
+        alert("Title is required.");
+        return;
+      }
+
+      const originalText = btn.innerText;
+      btn.innerText = "Queueing...";
+      btn.disabled = true;
+
+      try {
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('author', author);
+        formData.append('narrator', narrator);
+
+        const resp = await fetch('/create_audiobook', { method: 'POST', body: formData });
+        if (resp.ok) {
+          closeAssemblyModal();
+          refreshJobList();
+          // Clear input
+          document.getElementById('exportTitleInput').value = '';
+        } else {
+          alert("Failed to enqueue assembly job.");
+        }
+      } catch (err) {
+        console.error("Assembly enqueue failed", err);
+        alert("Error starting assembly.");
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+      }
+    }
 
     // Handle selected chapter on load
     window.addEventListener('scroll', () => { }, { passive: true }); // dummy to allow scroll check

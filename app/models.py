@@ -30,3 +30,5 @@ class Job:
     error: Optional[str] = None
     warning_count: int = 0
     custom_title: Optional[str] = None
+    author_meta: Optional[str] = None
+    narrator_meta: Optional[str] = None

@@ -200,7 +200,12 @@ def worker_loop():
                     if val.custom_title
                 }
                 
-                rc = assemble_audiobook(src_dir, title, out_file, on_output, cancel_check, chapter_titles=chapter_titles)
+                rc = assemble_audiobook(
+                    src_dir, title, out_file, on_output, cancel_check, 
+                    chapter_titles=chapter_titles,
+                    author=j.author_meta,
+                    narrator=j.narrator_meta
+                )
                 
                 if rc == 0 and out_file.exists():
                     update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_mp3=out_file.name, log="".join(logs))

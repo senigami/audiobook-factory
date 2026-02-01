@@ -1,4 +1,4 @@
-import time, uuid, re
+import time, uuid, re, os
 from typing import Optional, List, Tuple
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form
@@ -23,6 +23,11 @@ from .textops import (
 )
 
 app = FastAPI()
+
+# Ensure directories exist before mounting
+for d in [XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR, BASE_DIR / "static"]:
+    d.mkdir(parents=True, exist_ok=True)
+
 templates = Environment(
     loader=FileSystemLoader(str(BASE_DIR / "templates")),
     autoescape=select_autoescape(["html"])
@@ -272,7 +277,11 @@ def resume_queue():
     return RedirectResponse("/", status_code=303)
 
 @app.post("/create_audiobook")
-def create_audiobook(title: str = Form(...)):
+def create_audiobook(
+    title: str = Form(...),
+    author: str = Form(None),
+    narrator: str = Form(None)
+):
     AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
     jid = uuid.uuid4().hex[:12]
     enqueue(Job(
@@ -282,9 +291,68 @@ def create_audiobook(title: str = Form(...)):
         status="queued",
         created_at=time.time(),
         safe_mode=False,
-        make_mp3=False
+        make_mp3=False,
+        # We'll store Author/Narrator in the log or as extra fields if we had them,
+        # but for now let's pass them through the enqueue system.
+        # Actually, let's just use j.author/narrator if we add them to model.
+        # For a quick fix without model migration, let's put them in the log start
+        # or use a dedicated field. I'll add them to the model for cleanliness.
+        author_meta=author,
+        narrator_meta=narrator
     ))
     return RedirectResponse("/", status_code=303)
+
+@app.get("/api/audiobook/prepare")
+def prepare_audiobook():
+    """Scans folders and returns a preview of chapters/durations for the modal."""
+    from .engines import get_audio_duration
+    from .config import XTTS_OUT_DIR, PIPER_OUT_DIR
+    
+    src_dir = XTTS_OUT_DIR
+    if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
+        src_dir = PIPER_OUT_DIR
+        
+    if not src_dir.exists():
+        return JSONResponse({"title": "", "chapters": []})
+
+    all_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))]
+    chapters_found = {}
+    for f in all_files:
+        stem = Path(f).stem
+        ext = Path(f).suffix.lower()
+        if stem not in chapters_found or ext == '.mp3': 
+             chapters_found[stem] = f
+
+    def extract_number(filename):
+        match = re.search(r'(\d+)', filename)
+        return int(match.group(1)) if match else 0
+
+    sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
+    
+    # Get custom titles from state
+    from .state import get_jobs
+    job_titles = {j.chapter_file: j.custom_title for j in get_jobs().values() if j.custom_title}
+    
+    preview = []
+    total_sec = 0.0
+    for stem in sorted_stems:
+        fname = chapters_found[stem]
+        dur = get_audio_duration(src_dir / fname)
+        
+        display_name = job_titles.get(stem + ".txt") or job_titles.get(stem) or stem
+        
+        preview.append({
+            "filename": fname,
+            "title": display_name,
+            "start_sec": total_sec,
+            "duration": dur
+        })
+        total_sec += dur
+        
+    return JSONResponse({
+        "chapters": preview,
+        "total_duration": total_sec
+    })
 
 @app.post("/cancel")
 def cancel(job_id: str = Form(...)):

@@ -118,7 +118,7 @@ def get_audio_duration(file_path: Path) -> float:
     except Exception:
         return 0.0
 
-def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check, chapter_titles: dict[str, str] = None) -> int:
+def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check, chapter_titles: dict[str, str] = None, author: str = None, narrator: str = None) -> int:
     # 1. Gather and sort files
     all_files = [f for f in os.listdir(input_folder) if f.endswith(('.wav', '.mp3'))]
     
@@ -147,7 +147,12 @@ def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on
     list_file = output_m4b.with_suffix(".list.txt")
     
     metadata = ";FFMETADATA1\n"
-    metadata += f"title={shlex.quote(book_title)}\n\n"
+    metadata += f"title={shlex.quote(book_title)}\n"
+    if author:
+        metadata += f"artist={shlex.quote(author)}\n"
+    if narrator:
+        metadata += f"comment={shlex.quote(narrator)}\n"
+    metadata += "\n"
     
     current_offset = 0.0
     

@@ -90,7 +90,15 @@ def get_jobs() -> Dict[str, Job]:
     with _STATE_LOCK:
         state = _load_state_no_lock()
         raw = state.get("jobs", {})
-        return {jid: Job(**j) for jid, j in raw.items()}
+        # Safety: only pass keys that exist in the current Job dataclass
+        import dataclasses
+        job_fields = {f.name for f in dataclasses.fields(Job)}
+        
+        jobs = {}
+        for jid, jdata in raw.items():
+            filtered = {k: v for k, v in jdata.items() if k in job_fields}
+            jobs[jid] = Job(**filtered)
+        return jobs
 
 
 def put_job(job: Job) -> None:
