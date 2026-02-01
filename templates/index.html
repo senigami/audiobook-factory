@@ -21,6 +21,34 @@
     .badge-warning:hover {
       background: rgba(255, 193, 7, 0.3);
     }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 4px;
+      transition: color 0.2s;
+    }
+
+    .btn-icon:hover {
+      color: var(--accent);
+    }
+
+    .chapter-title.customized {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .title-input {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 2px 6px;
+      outline: none;
+    }
   </style>
 </head>
 
@@ -180,8 +208,14 @@
       {% set is_finished = (c in xtts_mp3 or c in piper_mp3 or c in xtts_wav_only or c in piper_wav_only) %}
       {% set stem = c.rsplit('.', 1)[0] %}
       <div class="chapter-card{% if is_finished %} is-finished{% endif %}" id="card-{{ c }}" data-filename="{{ c }}">
-        <div class="card-header">
-          <span class="chapter-title">{{ c }}</span>
+        <div class="card-header" style="align-items: flex-start;">
+          <div style="flex: 1; min-width: 0;">
+            <span class="chapter-title" id="title-text-{{ c }}">{{ c }}</span>
+            <input type="text" class="title-input" id="title-input-{{ c }}"
+              style="display: none; width: 100%; margin-top: 4px;" value="{{ c }}" onblur="saveTitle('{{ c }}')"
+              onkeyup="handleTitleKey(event, '{{ c }}')" onclick="event.stopPropagation()">
+          </div>
+          <button class="btn-icon" onclick="editTitle(event, '{{ c }}')" title="Rename chapter">✏️</button>
           <div class="status-badge-container" id="badge-{{ c }}">
             <!-- Status badges injected by JS -->
           </div>
@@ -374,6 +408,18 @@
         badgeContainer.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
       }
 
+      if (job.custom_title) {
+        const titleEl = document.getElementById(`title-text-${filename}`);
+        if (titleEl) {
+          titleEl.innerText = job.custom_title;
+          titleEl.classList.add('customized');
+        }
+        const inputEl = document.getElementById(`title-input-${filename}`);
+        if (inputEl && !inputEl.matches(':focus')) {
+          inputEl.value = job.custom_title;
+        }
+      }
+
       const warningContainer = document.getElementById(`warning-${filename}`);
       if (warningContainer) {
         if (job.warning_count > 0) {
@@ -520,6 +566,59 @@
       // Update Preview/Analysis Tab
       restorePreview();
     });
+
+    function editTitle(event, filename) {
+      event.stopPropagation();
+      const textEl = document.getElementById(`title-text-${filename}`);
+      const inputEl = document.getElementById(`title-input-${filename}`);
+      if (textEl && inputEl) {
+        textEl.style.display = 'none';
+        inputEl.style.display = 'block';
+        inputEl.focus();
+        inputEl.select();
+      }
+    }
+
+    function handleTitleKey(event, filename) {
+      if (event.key === 'Enter') {
+        event.target.blur();
+      } else if (event.key === 'Escape') {
+        const textEl = document.getElementById(`title-text-${filename}`);
+        const inputEl = document.getElementById(`title-input-${filename}`);
+        inputEl.value = textEl.innerText;
+        event.target.blur();
+      }
+    }
+
+    async function saveTitle(filename) {
+      const textEl = document.getElementById(`title-text-${filename}`);
+      const inputEl = document.getElementById(`title-input-${filename}`);
+      const newTitle = inputEl.value.strip ? inputEl.value.strip() : inputEl.value.trim();
+
+      textEl.style.display = 'block';
+      inputEl.style.display = 'none';
+
+      if (!newTitle || newTitle === textEl.innerText) return;
+
+      try {
+        const formData = new FormData();
+        formData.append('chapter_file', filename);
+        formData.append('new_title', newTitle);
+        const resp = await fetch('/api/job/update_title', { method: 'POST', body: formData });
+        if (resp.ok) {
+          textEl.innerText = newTitle;
+          textEl.classList.add('customized');
+          if (jobData[filename]) jobData[filename].custom_title = newTitle;
+        } else {
+          const data = await resp.json();
+          alert(data.error || "Failed to update title.");
+          inputEl.value = textEl.innerText;
+        }
+      } catch (err) {
+        console.error("Failed to save title", err);
+        inputEl.value = textEl.innerText;
+      }
+    }
 
     document.getElementById('gridToggle').addEventListener('click', () => {
       document.getElementById('chapterGrid').classList.remove('list-view');

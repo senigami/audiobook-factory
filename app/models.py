@@ -29,3 +29,4 @@ class Job:
     log: str = ""
     error: Optional[str] = None
     warning_count: int = 0
+    custom_title: Optional[str] = None

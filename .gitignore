@@ -186,3 +186,4 @@ cython_debug/
 state.json
 /shadow_slave_summaries
 /uploads
+/audiobooks

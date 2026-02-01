@@ -118,7 +118,7 @@ def get_audio_duration(file_path: Path) -> float:
     except Exception:
         return 0.0
 
-def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check) -> int:
+def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check, chapter_titles: dict[str, str] = None) -> int:
     # 1. Gather and sort files
     all_files = [f for f in os.listdir(input_folder) if f.endswith(('.wav', '.mp3'))]
     
@@ -162,10 +162,17 @@ def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on
                 start_ms = int(current_offset * 1000)
                 end_ms = int((current_offset + duration) * 1000)
                 
+                # Use custom title if provided, else use stem
+                stem = Path(f).stem
+                # Try both stem and stem + .txt to match job chapter_file
+                display_name = stem
+                if chapter_titles:
+                    display_name = chapter_titles.get(stem + ".txt") or chapter_titles.get(stem) or stem
+
                 metadata += "[CHAPTER]\nTIMEBASE=1/1000\n"
                 metadata += f"START={start_ms}\n"
                 metadata += f"END={end_ms}\n"
-                metadata += f"title={shlex.quote(Path(f).stem)}\n\n"
+                metadata += f"title={shlex.quote(display_name)}\n\n"
                 
                 current_offset += duration
 

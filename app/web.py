@@ -505,6 +505,9 @@ def api_jobs():
             del all_jobs[jid]
 
     jobs_dict = {j.chapter_file: asdict(j) for j in all_jobs.values()}
+    for j in all_jobs.values():
+        if j.custom_title:
+            jobs_dict[j.chapter_file]['custom_title'] = j.custom_title
     
     # Dynamic progress update based on time
     now = time.time()
@@ -593,6 +596,24 @@ def api_get_job(chapter_file: str):
     # If not found in memory/state, try auto-discovery again for logs?
     # For now just return 404
     return JSONResponse(None, status_code=404)
+
+@app.post("/api/job/update_title")
+def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
+    """Updates the custom title for a specific job."""
+    from .state import get_jobs, update_job
+    jobs = get_jobs().values()
+    found = [j for j in jobs if j.chapter_file == chapter_file]
+    if not found:
+        # If no job exists yet, we should probably create one or just return error
+        # For now, if it's a known chapter file, find its discovered ID
+        if (CHAPTER_DIR / chapter_file).exists():
+            # In a real app we might want to put_job here, 
+            # but usually the user is editing an existing job record.
+            return JSONResponse({"error": "Job record not found. Please start processing first."}, status_code=404)
+        return JSONResponse({"error": "Chapter not found."}, status_code=404)
+    
+    update_job(found[0].id, custom_title=new_title)
+    return JSONResponse({"status": "success", "custom_title": new_title})
 
 @app.post("/queue/clear")
 def clear_history():

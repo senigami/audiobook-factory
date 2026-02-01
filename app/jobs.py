@@ -192,7 +192,15 @@ def worker_loop():
                 
                 title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
                 out_file = AUDIOBOOK_DIR / f"{title}.m4b"
-                rc = assemble_audiobook(src_dir, title, out_file, on_output, cancel_check)
+                
+                # Collect custom titles from all jobs
+                chapter_titles = {
+                    val.chapter_file: val.custom_title 
+                    for val in get_jobs().values() 
+                    if val.custom_title
+                }
+                
+                rc = assemble_audiobook(src_dir, title, out_file, on_output, cancel_check, chapter_titles=chapter_titles)
                 
                 if rc == 0 and out_file.exists():
                     update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_mp3=out_file.name, log="".join(logs))
