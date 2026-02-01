@@ -2,8 +2,8 @@ import shlex, subprocess, os, re
 from pathlib import Path
 from typing import Tuple
 
-from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY
-from .textops import safe_split_long_sentences
+from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
+from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
 from .voices import piper_voice_paths
 
 _active_processes = set()
@@ -55,8 +55,6 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     return run_cmd_stream(cmd, on_output, cancel_check)
 
 def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
-    from .textops import clean_text_for_tts
-    text = clean_text_for_tts(text)
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
@@ -66,17 +64,18 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
 
     if safe_mode:
         text = safe_split_long_sentences(text)
-
-    # Preserve double-newlines (paragraphs) but normalize single newlines/spaces
-    # and escape double quotes for the shell command.
-    safe_text = text.replace('"', '\\"')
+    
+    # Advanced sanitization and packing
+    text = sanitize_for_xtts(text)
+    text = pack_text_to_limit(text)
 
     cmd = (
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
-        f"tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 "
-        f'--text "{safe_text}" '
+        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
+        f"--text {shlex.quote(text)} "
         f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "
-        f"--language_idx en "
+        f"--language en "
+        f"--repetition_penalty 2.0 "
         f"--out_path {shlex.quote(str(out_wav))}"
     )
     return run_cmd_stream(cmd, on_output, cancel_check)

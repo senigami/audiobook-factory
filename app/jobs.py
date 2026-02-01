@@ -86,7 +86,7 @@ def worker_loop():
             update_job(jid, status="running", started_at=time.time(), progress=0.01, error=None)
 
             chapter_path = CHAPTER_DIR / j.chapter_file
-            if not chapter_path.exists():
+            if j.engine != "audiobook" and not chapter_path.exists():
                 update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="Chapter file not found.")
                 continue
 

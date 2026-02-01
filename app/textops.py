@@ -21,10 +21,6 @@ def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
     return spans
 
 def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) -> List[Tuple[int, str, str]]:
-    """
-    Split text into parts of approximately max_chars length.
-    Tries to split at paragraph boundaries (\n\n), then single newlines, then sentence boundaries.
-    """
     if not text:
         return []
 
@@ -38,23 +34,16 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
             parts.append((part_num, f"Part {part_num}", remaining_text))
             break
             
-        # Look for a split point
         split_point = -1
-        
-        # 1. Try paragraph break (\n\n)
         chunk = remaining_text[:max_chars]
         p_break = chunk.rfind("\n\n")
-        if p_break > max_chars * 0.7:  # Only if it's "close enough" to the end of the chunk
+        if p_break > max_chars * 0.7:
             split_point = p_break + 2
         else:
-            # 2. Try newline
             nl_break = chunk.rfind("\n")
             if nl_break > max_chars * 0.8:
                 split_point = nl_break + 1
             else:
-                # 3. Try sentence break
-                # Look for . ! ? followed by space or end of line
-                # We search in the last 20% of the chunk
                 search_start = int(max_chars * 0.8)
                 sent_match = None
                 for m in re.finditer(r'[.!?](\s+|$)', chunk[search_start:]):
@@ -63,12 +52,10 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
                 if sent_match:
                     split_point = search_start + sent_match.end()
                 else:
-                    # 4. Try word break (space)
                     space_break = chunk.rfind(" ")
                     if space_break > 0:
                         split_point = space_break + 1
                     else:
-                        # 5. Last resort: hard cut
                         split_point = max_chars
         
         parts.append((part_num, f"Part {part_num}", remaining_text[:split_point].strip()))
@@ -146,20 +133,62 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
     return hits
 
 def clean_text_for_tts(text: str) -> str:
-    """Normalize punctuation and characters to avoid TTS speech artifacts."""
+    \"\"\"Normalize punctuation and characters to avoid TTS speech artifacts.\"\"\"
     # Handle smart quotes
-    text = text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
-    # Handle dashes and ellipses
-    text = text.replace("—", " - ").replace("–", " - ").replace("…", "...")
+    text = text.replace('“', '\"').replace('”', '\"').replace('‘', \"'\").replace('’', \"'\")
+    # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
+    text = text.replace(\"—\", \" - \").replace(\"–\", \" - \").replace(\"…\", \", \").replace(\"...\", \", \")
     
     # Common redundant punctuation artifacts
-    text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
-    text = text.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
+    text = text.replace(\".' .\", \". \").replace(\".' \", \". \").replace(\"'.\", \".'\")
+    text = text.replace('\".', '.\"').replace('?\"', '\"?').replace('!\"', '\"!')
     
     # Normalize spaces after punctuation (if missing)
-    # Match . ! or ? followed by anything that isn't a space, dot, or quote
-    text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
+    text = re.sub(r'([.!?])(?=[^ \s.!?\'\"])', r'\1 ', text)
     # Collapse multiple spaces
     text = re.sub(r' +', ' ', text)
     
     return text.strip()
+
+def sanitize_for_xtts(text: str) -> str:
+    \"\"\"
+    Advanced sanitization to prevent XTTS hallucinations (e.g., 'nahnday').
+    Based on Gemini feedback: handles smart quotes, ellipses, and non-ASCII chars.
+    \"\"\"
+    # Convert smart quotes to straight quotes
+    text = text.replace('“', '\"').replace('”', '\"').replace('‘', \"'\").replace('’', \"'\")
+    # Replace ellipses with a comma for better natural pauses without breaking the thought
+    text = text.replace('...', ', ').replace('…', ', ')
+    # Remove any non-standard characters/emojis
+    text = re.sub(r'[^\x00-\x7F]+', '', text) 
+    # Collapse multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
+    \"\"\"
+    Greedily packs sentences into larger chunks as close to the limit as possible.
+    This gives XTTS the maximum context and prevents choppiness from short lines.
+    \"\"\"
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if not lines:
+        return \"\"
+        
+    packed = []
+    current_chunk = \"\"
+    
+    for line in lines:
+        if len(current_chunk) + len(line) + 1 < (limit - 5):
+            if current_chunk:
+                current_chunk += \" \" + line
+            else:
+                current_chunk = line
+        else:
+            if current_chunk:
+                packed.append(current_chunk)
+            current_chunk = line
+            
+    if current_chunk:
+        packed.append(current_chunk)
+        
+    return '\n'.join(packed)

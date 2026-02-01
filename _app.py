@@ -164,6 +164,52 @@ def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str
     # preserve paragraph breaks loosely
     return "\n".join(pieces)
 
+def sanitize_for_xtts(text: str) -> str:
+    """
+    Advanced sanitization to prevent XTTS hallucinations (e.g., 'nahnday').
+    Based on Gemini feedback: handles smart quotes, ellipses, and non-ASCII chars.
+    """
+    import re
+    # Convert smart quotes to straight quotes
+    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+    # Replace ellipses with a comma for better natural pauses without breaking the thought
+    text = text.replace('...', ', ')
+    # Remove any non-standard characters/emojis
+    text = re.sub(r'[^\x00-\x7F]+', '', text) 
+    # Collapse multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
+    """
+    Greedily packs sentences into larger chunks as close to the limit as possible.
+    This gives XTTS the maximum context and prevents choppiness from short lines.
+    """
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if not lines:
+        return ""
+        
+    packed = []
+    current_chunk = ""
+    
+    for line in lines:
+        # Check if adding this line (plus a space) exceeds the limit
+        # We use a small buffer (5 chars) for safety
+        if len(current_chunk) + len(line) + 1 < (limit - 5):
+            if current_chunk:
+                current_chunk += " " + line
+            else:
+                current_chunk = line
+        else:
+            if current_chunk:
+                packed.append(current_chunk)
+            current_chunk = line
+            
+    if current_chunk:
+        packed.append(current_chunk)
+        
+    return '\n'.join(packed)
+
 # ----------------
 # Chapter handling
 # ----------------
@@ -232,17 +278,20 @@ def xtts_generate(chapter_path: Path, out_wav: Path, safe_mode: bool, cancel_eve
     text = chapter_path.read_text(encoding="utf-8", errors="replace").strip()
     if safe_mode:
         text = safe_split_long_sentences(text)
-
-    # Safer than raw cat: flatten whitespace and escape quotes
-    safe_text = " ".join(text.split())
-    safe_text = safe_text.replace('"', '\\"')
+    
+    # Apply advanced sanitization for XTTS stability
+    text = sanitize_for_xtts(text)
+    
+    # Pack sentences to the limit to maximize context and stability
+    text = pack_text_to_limit(text)
 
     cmd = (
         f"source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
-        f"tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 "
-        f'--text "{safe_text}" '
+        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
+        f"--text {shlex.quote(text)} "
         f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "
-        f"--language_idx en "
+        f"--language en "
+        f"--repetition_penalty 2.0 "
         f"--out_path {shlex.quote(str(out_wav))}"
     )
     return run_cmd_capture(cmd, cancel_event)
