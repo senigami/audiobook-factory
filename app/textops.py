@@ -133,30 +133,30 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
     return hits
 
 def clean_text_for_tts(text: str) -> str:
-    \"\"\"Normalize punctuation and characters to avoid TTS speech artifacts.\"\"\"
+    """Normalize punctuation and characters to avoid TTS speech artifacts."""
     # Handle smart quotes
-    text = text.replace('“', '\"').replace('”', '\"').replace('‘', \"'\").replace('’', \"'\")
+    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
-    text = text.replace(\"—\", \" - \").replace(\"–\", \" - \").replace(\"…\", \", \").replace(\"...\", \", \")
+    text = text.replace("—", " - ").replace("–", " - ").replace("…", ", ").replace("...", ", ")
     
     # Common redundant punctuation artifacts
-    text = text.replace(\".' .\", \". \").replace(\".' \", \". \").replace(\"'.\", \".'\")
-    text = text.replace('\".', '.\"').replace('?\"', '\"?').replace('!\"', '\"!')
+    text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
+    text = text.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
     
     # Normalize spaces after punctuation (if missing)
-    text = re.sub(r'([.!?])(?=[^ \s.!?\'\"])', r'\1 ', text)
+    text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
     # Collapse multiple spaces
     text = re.sub(r' +', ' ', text)
     
     return text.strip()
 
 def sanitize_for_xtts(text: str) -> str:
-    \"\"\"
+    """
     Advanced sanitization to prevent XTTS hallucinations (e.g., 'nahnday').
     Based on Gemini feedback: handles smart quotes, ellipses, and non-ASCII chars.
-    \"\"\"
+    """
     # Convert smart quotes to straight quotes
-    text = text.replace('“', '\"').replace('”', '\"').replace('‘', \"'\").replace('’', \"'\")
+    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     # Replace ellipses with a comma for better natural pauses without breaking the thought
     text = text.replace('...', ', ').replace('…', ', ')
     # Remove any non-standard characters/emojis
@@ -166,21 +166,21 @@ def sanitize_for_xtts(text: str) -> str:
     return text
 
 def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
-    \"\"\"
+    """
     Greedily packs sentences into larger chunks as close to the limit as possible.
     This gives XTTS the maximum context and prevents choppiness from short lines.
-    \"\"\"
+    """
     lines = [l.strip() for l in text.split('\n') if l.strip()]
     if not lines:
-        return \"\"
+        return ""
         
     packed = []
-    current_chunk = \"\"
+    current_chunk = ""
     
     for line in lines:
         if len(current_chunk) + len(line) + 1 < (limit - 5):
             if current_chunk:
-                current_chunk += \" \" + line
+                current_chunk += " " + line
             else:
                 current_chunk = line
         else:

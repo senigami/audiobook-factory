@@ -63,6 +63,8 @@ def _estimate_seconds(text_chars: int, cps: float) -> int:
 
 def _output_exists(engine: str, chapter_file: str) -> bool:
     stem = Path(chapter_file).stem
+    if engine == "audiobook":
+        return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
     if engine == "xtts":
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
     return (PIPER_OUT_DIR / f"{stem}.mp3").exists() or (PIPER_OUT_DIR / f"{stem}.wav").exists()
@@ -95,22 +97,36 @@ def worker_loop():
                 update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
                 continue
 
-            text = chapter_path.read_text(encoding="utf-8", errors="replace")
-            chars = len(text)
-            eta = _estimate_seconds(chars, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
-            update_job(jid, eta_seconds=eta)
-            
-            # Formatted header for logs (explicit newlines)
-            start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
-            header = [
-                f"Job Started: {j.chapter_file}\n",
-                f"Started At:  {start_dt}\n",
-                f"Engine: {j.engine.upper()}\n",
-                f"Character Count: {chars:,}\n",
-                f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
-                "-" * 40 + "\n",
-                "\n"
-            ]
+            if j.engine != "audiobook":
+                text = chapter_path.read_text(encoding="utf-8", errors="replace")
+                chars = len(text)
+                eta = _estimate_seconds(chars, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                update_job(jid, eta_seconds=eta)
+                
+                # Formatted header for logs (explicit newlines)
+                start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+                header = [
+                    f"Job Started: {j.chapter_file}\n",
+                    f"Started At:  {start_dt}\n",
+                    f"Engine: {j.engine.upper()}\n",
+                    f"Character Count: {chars:,}\n",
+                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                    "-" * 40 + "\n",
+                    "\n"
+                ]
+            else:
+                text = ""
+                chars = 0
+                eta = 60 # placeholder
+                update_job(jid, eta_seconds=eta)
+                start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+                header = [
+                    f"Job Started: Audiobook {j.chapter_file}\n",
+                    f"Started At:  {start_dt}\n",
+                    f"Engine: AUDIOBOOK ASSEMBLY\n",
+                    "-" * 40 + "\n",
+                    "\n"
+                ]
 
             logs = header.copy()
             start = time.time()

@@ -113,6 +113,16 @@ def update_job(job_id: str, **updates) -> None:
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
 
+def delete_jobs(job_ids: list[str]) -> None:
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        jobs = state.get("jobs", {})
+        for jid in job_ids:
+            if jid in jobs:
+                del jobs[jid]
+        _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+
+
 def clear_all_jobs() -> None:
     with _STATE_LOCK:
         state = _load_state_no_lock()

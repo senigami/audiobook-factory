@@ -93,7 +93,7 @@
         {% if audiobooks %}
         <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
           <h3 style="margin-bottom: 8px;">Audiobook Exports</h3>
-          <ul style="list-style: none; padding: 0; font-size: 0.8rem;">
+          <ul id="audiobookList" style="list-style: none; padding: 0; font-size: 0.8rem;">
             {% for b in audiobooks %}
             <li style="margin-bottom: 4px;">
               <a href="/out/audiobook/{{ b }}" download style="color: var(--accent); text-decoration: none;">📦 {{ b
@@ -103,6 +103,14 @@
           </ul>
         </div>
         {% endif %}
+
+        <div id="assemblySection"
+          style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; display: none;">
+          <h3 style="margin-bottom: 8px;">Recent Activity</h3>
+          <ul id="assemblyJobs" style="list-style: none; padding: 0; font-size: 0.8rem;">
+            <!-- Non-chapter jobs injected here -->
+          </ul>
+        </div>
 
         <div>
           <button type="button" id="backfillBtn" onclick="runBackfill(this)" class="btn btn-secondary"
@@ -429,6 +437,30 @@
 
         document.getElementById('globalStatus').innerText =
           `${running} Running • ${queued} Queued • ${wavs} Missing MP3s`;
+
+        // Update Assembly Jobs (non-chapters)
+        const chapterSet = new Set(Array.from(document.querySelectorAll('.chapter-card')).map(c => c.dataset.filename));
+        const assemblyJobs = jobs.filter(j => !chapterSet.has(j.chapter_file));
+        const assemblyList = document.getElementById('assemblyJobs');
+        const assemblySection = document.getElementById('assemblySection');
+
+        if (assemblyJobs.length > 0) {
+          assemblySection.style.display = 'block';
+          assemblyList.innerHTML = assemblyJobs.slice(-5).reverse().map(j => {
+            let statusClass = 'text-muted';
+            if (j.status === 'running') statusClass = 'badge-running';
+            else if (j.status === 'done') statusClass = 'badge-success';
+            else if (j.status === 'failed') statusClass = 'badge-failed';
+
+            return `<li style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: top;">
+                <span style="font-weight: 500; font-size: 0.75rem;">${esc(j.chapter_file)}</span>
+                <span class="badge ${statusClass}" style="font-size: 0.6rem; padding: 2px 4px;">${j.status}</span>
+              </div>
+              ${j.error ? `<div class="text-error" style="font-size: 0.65rem; margin-top: 2px;">${esc(j.error)}</div>` : ''}
+            </li>`;
+          }).join('');
+        }
 
         const backfillBtn = document.getElementById('backfillBtn');
         if (backfillBtn && backfillBtn.innerText !== "Resolving...") {

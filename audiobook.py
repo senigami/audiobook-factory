@@ -1,3 +1,5 @@
+# NOTE: This is a standalone reference script for creating audiobooks.
+# The main application uses app/engines.py instead of this file.
 import os
 import re
 import subprocess

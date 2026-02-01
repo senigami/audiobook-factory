@@ -484,8 +484,27 @@ def report(name: str):
 
 @app.get("/api/jobs")
 def api_jobs():
-    """Returns jobs from state, augmented with file-based auto-discovery."""
-    jobs_dict = {j.chapter_file: asdict(j) for j in get_jobs().values()}
+    """Returns jobs from state, augmented with file-based auto-discovery and pruning."""
+    from .state import get_jobs, delete_jobs
+    all_jobs = get_jobs()
+    
+    # Pruning: Remove job records for chapters that no longer exist
+    chapters_disk = {p.name for p in list_chapters()}
+    stale_ids = []
+    
+    # We only prune jobs that are tied to a specific chapter file 
+    # (audiobook jobs are tied to a title, so they persist)
+    for jid, j in all_jobs.items():
+        if j.engine != "audiobook" and j.chapter_file not in chapters_disk:
+            stale_ids.append(jid)
+            
+    if stale_ids:
+        delete_jobs(stale_ids)
+        # Refresh local view
+        for jid in stale_ids:
+            del all_jobs[jid]
+
+    jobs_dict = {j.chapter_file: asdict(j) for j in all_jobs.values()}
     
     # Dynamic progress update based on time
     now = time.time()
