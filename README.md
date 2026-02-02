@@ -12,7 +12,8 @@ chapter-marked text files into full audiobook audio using:
 ![Audiobook Factory Dashboard](assets/home.png)
 
 > [!TIP]
-> **Listen to the Overview**: You can find an audible summary of the project features in [assets/Overview.mp3](assets/Overview.mp3).
+> **Listen to the Overview**:
+> <audio src="assets/Overview.mp3" controls></audio>
 
 It runs entirely locally and supports queued batch processing, live
 progress tracking, WAV + MP3 generation, and browser audio preview.
