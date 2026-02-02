@@ -7,23 +7,23 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8123',
+        target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'http://localhost:8123',
+        target: 'http://127.0.0.1:8123',
         ws: true,
       },
       '/out': {
-        target: 'http://localhost:8123',
+        target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
       '/queue': {
-        target: 'http://localhost:8123',
+        target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
       '/upload': {
-        target: 'http://localhost:8123',
+        target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       }
     }

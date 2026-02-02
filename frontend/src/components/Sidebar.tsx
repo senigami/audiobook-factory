@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleBackfill = async () => {
     try {
-        await fetch('/queue/backfill', { method: 'POST' });
+        await fetch('/queue/backfill_mp3', { method: 'POST' });
         onRefresh();
     } catch (e) {
         console.error('Backfill failed', e);

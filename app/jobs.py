@@ -123,10 +123,32 @@ def cleanup_and_reconcile():
     reset_ids = []
     for jid, j in all_jobs.items():
         if j.status == "done":
-            if not _output_exists(j.engine, j.chapter_file, j.make_mp3):
-                # File missing! Revert status to queued
-                update_job(jid, status="queued", output_mp3=None, output_wav=None)
-                reset_ids.append(jid)
+            # Check if ANY output exists (WAV or MP3)
+            # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
+            # However, if the WAV exists but MP3 is missing, we don't necessarily want to 
+            # reset it to 'queued' YET if we are about to run backfill_mp3_queue.
+            # But the 'reconcile' function is general purpose. 
+            
+            # Change: Only reset if BOTH are missing OR engine specific requirements aren't met.
+            # Let's use a more granular check.
+            has_mp3 = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.mp3"
+            has_wav = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.wav"
+            
+            if j.make_mp3:
+                if not has_mp3.exists() and not has_wav.exists():
+                    # Both gone! Must re-run.
+                    update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                    reset_ids.append(jid)
+                elif not has_mp3.exists() and has_wav.exists():
+                    # WAV exists, MP3 missing. In general 'reconcile' should mark this as needing attention.
+                    # If we mark as 'queued' here, but don't clear output_wav, worker might skip it?
+                    # No, let's keep it 'done' but with output_mp3=None so backfill can find it.
+                    # Actually, the safest state for a job needing conversion is 'done' with missing MP3.
+                    pass 
+            else:
+                if not has_wav.exists():
+                    update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                    reset_ids.append(jid)
     
     return reset_ids
 

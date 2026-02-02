@@ -74,7 +74,8 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-    except Exception:
+    except Exception as e:
+        print(f"WS error: {e}")
         manager.disconnect(websocket)
 
 @app.on_event("startup")
