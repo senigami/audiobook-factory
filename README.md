@@ -12,7 +12,7 @@ chapter-marked text files into full audiobook audio using:
 ![Audiobook Factory Dashboard](assets/home.png)
 
 > [!TIP]
-> **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://stevendunn.github.io/audiobook-factory/)
+> **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://senigami.github.io/audiobook-factory/)
 > *(Includes an embedded audio player and interactive feature tour)*
 
 It runs entirely locally and supports queued batch processing, live
