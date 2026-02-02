@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Factory | Local AI Speech Synthesis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --surface: #121217;
+            --accent: #8b5cf6;
+            --accent-glow: rgba(139, 92, 246, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --glass: rgba(255, 255, 255, 0.03);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.15) 0%, transparent 40%);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.lead {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(20px);
+            margin-bottom: 3rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .audio-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            text-align: center;
+        }
+
+        audio {
+            width: 100%;
+            max-width: 400px;
+            filter: invert(100%) hue-rotate(180deg) brightness(1.5);
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+
+        audio:hover {
+            opacity: 1;
+        }
+
+        .visual-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-top: 4rem;
+        }
+
+        .screenshot-container {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .screenshot-container:hover {
+            transform: scale(1.02);
+            border-color: var(--accent);
+        }
+
+        img {
+            width: 100%;
+            display: block;
+        }
+
+        .caption {
+            padding: 1rem;
+            background: var(--surface);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .feature-item {
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+
+        .feature-item h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .cta-box {
+            text-align: center;
+            margin-top: 5rem;
+            padding: 4rem;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border-radius: 32px;
+            border: 1px solid var(--accent-glow);
+        }
+
+        .button {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 15px -3px var(--accent-glow);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px var(--accent-glow);
+            filter: brightness(1.1);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 5rem;
+            padding-bottom: 4rem;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.8s ease forwards;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .container {
+                padding: 2rem 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header class="fade-in">
+            <span class="badge">Local Intelligence</span>
+            <h1>Audiobook Factory</h1>
+            <p class="lead">Personal production suite for high-quality, local speech synthesis. No cloud, no
+                subscription, total control.</p>
+        </header>
+
+        <div class="card fade-in" style="animation-delay: 0.2s;">
+            <div class="audio-section">
+                <h2 style="margin-bottom: 0.5rem;">Audible Overview</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Synthesized locally with XTTS-v2</p>
+                <audio controls>
+                    <source src="../assets/Overview.mp3" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        </div>
+
+        <div class="features-grid fade-in" style="animation-delay: 0.4s;">
+            <div class="feature-item">
+                <h3>Voice Cloning</h3>
+                <p>Leverage XTTS-v2 to clone any voice from just 60 seconds of clean audio.</p>
+            </div>
+            <div class="feature-item">
+                <h3>Auto-Tuning ETA</h3>
+                <p>Intelligent feedback loop that learns your hardware speed for precise progress tracking.</p>
+            </div>
+            <div class="feature-item">
+                <h3>Interactive Assembly</h3>
+                <p>Customize metadata, rename chapters, and select sections in a real-time terminal.</p>
+            </div>
+        </div>
+
+        <div class="visual-grid fade-in" style="animation-delay: 0.6s;">
+            <div class="screenshot-container">
+                <img src="../assets/home.png" alt="Dashboard Home">
+                <div class="caption">Live production dashboard with per-chapter progress tracking.</div>
+            </div>
+            <div class="screenshot-container">
+                <img src="../assets/export.png" alt="Interactive Export">
+                <div class="caption">Smart assembly interface for fine-tuning the final M4B output.</div>
+            </div>
+        </div>
+
+        <div class="cta-box fade-in" style="animation-delay: 0.8s;">
+            <h2 style="font-size: 2rem; margin-bottom: 1.5rem;">Ready to build?</h2>
+            <a href="https://github.com/stevendunn/audiobook-factory" class="button">View on GitHub</a>
+        </div>
+
+        <footer>
+            &copy; 2026 Audiobook Factory. Powered by local AI and human imagination.
+        </footer>
+    </div>
+
+</body>
+
+</html>
