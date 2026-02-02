@@ -32,3 +32,4 @@ class Job:
     custom_title: Optional[str] = None
     author_meta: Optional[str] = None
     narrator_meta: Optional[str] = None
+    chapter_list: Optional[List[dict]] = None

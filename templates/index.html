@@ -426,7 +426,8 @@
           <table class="chapter-preview-table">
             <thead>
               <tr>
-                <th>Chapter</th>
+                <th style="width: 40px; text-align: center;">Inc.</th>
+                <th>Chapter Title</th>
                 <th>Start</th>
                 <th>Duration</th>
               </tr>
@@ -975,16 +976,21 @@
           return;
         }
 
-        list.innerHTML = data.chapters.map(c => {
+        list.innerHTML = data.chapters.map((c, idx) => {
           const m = Math.floor(c.duration / 60);
           const s = Math.floor(c.duration % 60);
           const startM = Math.floor(c.start_sec / 60);
           const startS = Math.floor(c.start_sec % 60);
 
-          return `<tr>
-            <td style="font-weight: 500;">${esc(c.title)}</td>
-            <td class="text-muted">${startM}m ${startS}s</td>
-            <td class="text-muted">${m}m ${s}s</td>
+          return `<tr class="assembly-row" data-filename="${esc(c.filename)}">
+            <td style="text-align: center;">
+              <input type="checkbox" checked class="chapter-include-check">
+            </td>
+            <td>
+              <input type="text" class="chapter-title-input" value="${esc(c.title)}" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; color: #fff; padding: 2px 6px;">
+            </td>
+            <td class="text-muted" style="font-size: 0.75rem;">${startM}m ${startS}s</td>
+            <td class="text-muted" style="font-size: 0.75rem;">${m}m ${s}s</td>
           </tr>`;
         }).join('');
 
@@ -1013,6 +1019,22 @@
         return;
       }
 
+      const chapterData = [];
+      document.querySelectorAll('.assembly-row').forEach(row => {
+        const include = row.querySelector('.chapter-include-check').checked;
+        if (include) {
+          chapterData.push({
+            filename: row.dataset.filename,
+            title: row.querySelector('.chapter-title-input').value.trim()
+          });
+        }
+      });
+
+      if (chapterData.length === 0) {
+        alert("Please select at least one chapter.");
+        return;
+      }
+
       const originalText = btn.innerText;
       btn.innerText = "Queueing...";
       btn.disabled = true;
@@ -1022,6 +1044,7 @@
         formData.append('title', title);
         formData.append('author', author);
         formData.append('narrator', narrator);
+        formData.append('chapters', JSON.stringify(chapterData));
 
         const resp = await fetch('/create_audiobook', { method: 'POST', body: formData });
         if (resp.ok) {

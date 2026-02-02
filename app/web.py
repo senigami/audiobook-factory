@@ -280,8 +280,14 @@ def resume_queue():
 def create_audiobook(
     title: str = Form(...),
     author: str = Form(None),
-    narrator: str = Form(None)
+    narrator: str = Form(None),
+    chapters: str = Form("[]") # JSON string of {filename, title}
 ):
+    import json
+    try:
+        chapter_list = json.loads(chapters)
+    except:
+        chapter_list = []
     AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
     jid = uuid.uuid4().hex[:12]
     enqueue(Job(
@@ -298,7 +304,8 @@ def create_audiobook(
         # For a quick fix without model migration, let's put them in the log start
         # or use a dedicated field. I'll add them to the model for cleanliness.
         author_meta=author,
-        narrator_meta=narrator
+        narrator_meta=narrator,
+        chapter_list=chapter_list
     ))
     return RedirectResponse("/", status_code=303)
 

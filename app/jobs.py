@@ -129,9 +129,13 @@ def worker_loop():
                     src_dir = PIPER_OUT_DIR
                 
                 # Collect files and total size
-                audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))]
+                if j.chapter_list:
+                    audio_files = [c['filename'] for c in j.chapter_list]
+                else:
+                    audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))]
+                
                 num_files = len(audio_files)
-                total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files) / (1024 * 1024)
+                total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files if (src_dir / f).exists()) / (1024 * 1024)
                 
                 # Use performance multiplier for auto-tuning
                 perf = get_performance_metrics()
@@ -230,7 +234,8 @@ def worker_loop():
                     src_dir, title, out_file, on_output, cancel_check, 
                     chapter_titles=chapter_titles,
                     author=j.author_meta,
-                    narrator=j.narrator_meta
+                    narrator=j.narrator_meta,
+                    chapters=j.chapter_list
                 )
                 
                 if rc == 0 and out_file.exists():

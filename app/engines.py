@@ -119,25 +119,39 @@ def get_audio_duration(file_path: Path) -> float:
     except Exception:
         return 0.0
 
-def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on_output, cancel_check, chapter_titles: dict[str, str] = None, author: str = None, narrator: str = None) -> int:
-    # 1. Gather and sort files
-    all_files = [f for f in os.listdir(input_folder) if f.endswith(('.wav', '.mp3'))]
-    
-    # Group by stem to avoid duplicates
-    chapters_found = {}
-    def extract_number(filename):
-        # Match digits in the filename to sort numerically
-        match = re.search(r'(\d+)', filename)
-        return int(match.group(1)) if match else 0
+def assemble_audiobook(
+    input_folder: Path, 
+    book_title: str, 
+    output_m4b: Path, 
+    on_output, 
+    cancel_check, 
+    chapter_titles: dict = None,
+    author: str = None,
+    narrator: str = None,
+    chapters: List[dict] = None # List of {filename, title}
+):
+    # 1. Gather files
+    if chapters:
+        # Use provided list from interaction
+        files = [c['filename'] for c in chapters]
+        final_titles = {c['filename']: c['title'] for c in chapters}
+    else:
+        all_files = [f for f in os.listdir(input_folder) if f.endswith(('.wav', '.mp3'))]
+        # Group by stem, prioritizing mp3
+        chapters_found = {}
+        for f in all_files:
+            stem = Path(f).stem
+            ext = Path(f).suffix.lower()
+            if stem not in chapters_found or ext == '.mp3':
+                chapters_found[stem] = f
 
-    for f in all_files:
-        stem = Path(f).stem
-        ext = Path(f).suffix.lower()
-        if stem not in chapters_found or ext == '.mp3': 
-             chapters_found[stem] = f
+        def extract_number(filename):
+            match = re.search(r'(\d+)', filename)
+            return int(match.group(1)) if match else 0
 
-    sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
-    files = [chapters_found[s] for s in sorted_stems]
+        sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
+        files = [chapters_found[s] for s in sorted_stems]
+        final_titles = {} # will use chapter_titles logic below
 
     if not files:
         on_output("No audio files found to combine.\n")
@@ -170,10 +184,12 @@ def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on
                 
                 # Use custom title if provided, else use stem
                 stem = Path(f).stem
-                # Try both stem and stem + .txt to match job chapter_file
-                display_name = stem
-                if chapter_titles:
+                if f in final_titles:
+                    display_name = final_titles[f]
+                elif chapter_titles:
                     display_name = chapter_titles.get(stem + ".txt") or chapter_titles.get(stem) or stem
+                else:
+                    display_name = stem
 
                 metadata += "[CHAPTER]\nTIMEBASE=1/1000\n"
                 metadata += f"START={start_ms}\n"
