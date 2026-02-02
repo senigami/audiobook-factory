@@ -68,7 +68,7 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     if safe_mode:
         text = safe_split_long_sentences(text)
     
-    text = pack_text_to_limit(text)
+    text = pack_text_to_limit(text, pad=True)
 
     cmd = (
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "

@@ -18,13 +18,14 @@ describe('ChapterCard', () => {
     safe_mode: true
   }
 
-  it('shows "WAV ready (Needs MP3)" when MP3 is missing but WAV is available', () => {
+  it('shows "WAV ready (Needs MP3)" even if job state is stale but disk is empty', () => {
+    const staleJob = { ...mockJob, output_mp3: 'Overview.mp3' } // Stale!
     render(
       <ChapterCard 
         filename="test.txt" 
-        job={mockJob} 
+        job={staleJob} 
         statusInfo={{
-          isXttsMp3: false,
+          isXttsMp3: false, // Truth!
           isXttsWav: true,
           isPiperMp3: false,
           isPiperWav: false
@@ -34,6 +35,8 @@ describe('ChapterCard', () => {
     
     expect(screen.getByText(/WAV ready \(Needs MP3\)/i)).toBeInTheDocument()
     expect(screen.queryByRole('audio')).not.toBeInTheDocument()
+    // The audio element should NOT be in the DOM
+    expect(document.querySelector('audio')).not.toBeInTheDocument()
   })
 
   it('renders audio player only when MP3 is present', () => {

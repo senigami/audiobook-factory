@@ -9,6 +9,8 @@ export interface Job {
   created_at: number;
   started_at?: number;
   finished_at?: number;
+  safe_mode: boolean;
+  make_mp3: boolean;
   progress: number;
   eta_seconds?: number;
   log?: string;
@@ -17,8 +19,8 @@ export interface Job {
   custom_title?: string;
   author_meta?: string;
   narrator_meta?: string;
-  output_wav?: string;
-  output_mp3?: string;
+  output_wav?: string | null;
+  output_mp3?: string | null;
 }
 
 export interface Settings {

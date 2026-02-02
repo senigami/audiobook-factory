@@ -176,10 +176,11 @@ def sanitize_for_xtts(text: str) -> str:
         
     return text
 
-def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
+def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = False) -> str:
     """
     Greedily packs sentences into larger chunks as close to the limit as possible.
     This gives XTTS the maximum context and prevents choppiness from short lines.
+    If pad is True, each chunk is padded with spaces up to the limit.
     """
     lines = [l.strip() for l in text.split('\n') if l.strip()]
     if not lines:
@@ -196,10 +197,14 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
                 current_chunk = line
         else:
             if current_chunk:
+                if pad:
+                    current_chunk = current_chunk.ljust(limit)
                 packed.append(current_chunk)
             current_chunk = line
             
     if current_chunk:
+        if pad:
+            current_chunk = current_chunk.ljust(limit)
         packed.append(current_chunk)
         
     return '\n'.join(packed)

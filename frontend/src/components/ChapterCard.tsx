@@ -57,9 +57,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   };
 
   const getAudioSrc = () => {
-    if (statusInfo?.isXttsMp3) return `/out/xtts/${filename.replace('.txt', '.mp3')}`;
-    if (statusInfo?.isPiperMp3) return `/out/piper/${filename.replace('.txt', '.mp3')}`;
-    if (job?.output_mp3) return job.output_mp3;
+    const stem = filename.replace('.txt', '');
+    
+    // 1. Prefer explicit disk check from initialData
+    if (statusInfo?.isXttsMp3) return `/out/xtts/${stem}.mp3`;
+    if (statusInfo?.isPiperMp3) return `/out/piper/${stem}.mp3`;
+    
+    // 2. If statusInfo is present and says NO MP3, believe it over stale job state
+    if (statusInfo && !statusInfo.isXttsMp3 && !statusInfo.isPiperMp3) {
+        return null;
+    }
+
+    // 3. Fallback to job record (needed if statusInfo is missing during partial re-renders)
+    if (job?.output_mp3) {
+      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+      return `${prefix}${job.output_mp3}`;
+    }
     return null;
   };
 
