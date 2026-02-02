@@ -140,11 +140,10 @@ def cleanup_and_reconcile():
                     update_job(jid, status="queued", output_mp3=None, output_wav=None)
                     reset_ids.append(jid)
                 elif not has_mp3.exists() and has_wav.exists():
-                    # WAV exists, MP3 missing. In general 'reconcile' should mark this as needing attention.
-                    # If we mark as 'queued' here, but don't clear output_wav, worker might skip it?
-                    # No, let's keep it 'done' but with output_mp3=None so backfill can find it.
-                    # Actually, the safest state for a job needing conversion is 'done' with missing MP3.
-                    pass 
+                    # WAV exists, MP3 missing. 
+                    # Clear output_mp3 so UI knows it's gone, but keep status=done/wav
+                    # so backfill can catch it.
+                    update_job(jid, output_mp3=None)
             else:
                 if not has_wav.exists():
                     update_job(jid, status="queued", output_mp3=None, output_wav=None)
