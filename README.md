@@ -5,6 +5,10 @@ chapter-marked text files into full audiobook audio using:
 
 -   **XTTS-v2 (voice cloning)**
 -   **Piper (fast ONNX voices)**
+-   **Auto-Tuning ETA (Learns your hardware speed)**
+-   **Interactive Assembly (Rename/Skip chapters)**
+
+![Audiobook Factory Dashboard](file:///Users/stevendunn/tts-dashboard/app/home.png)
 
 It runs entirely locally and supports queued batch processing, live
 progress tracking, WAV + MP3 generation, and browser audio preview.
@@ -20,11 +24,14 @@ No cloud required.
 -   🎙 Voice cloning with XTTS (your narrator voice)
 -   🔊 Piper ONNX voice support
 -   🧠 One-click queued batch processing
--   📊 Live job progress (no page refresh required)
+-   📊 **Live Auto-Tuning ETA**: Progress bars that learn from your hardware performance.
+-   🎧 **Interactive Assembly**: Resize, rename, or skip chapters before building the M4B.
 -   🎧 Built-in audio player
 -   🔁 Backfill MP3 from WAV
 -   🔄 Reconcile job state with existing audio files
 -   🧹 Clear completed jobs
+
+![Interactive Audiobook Assembly](file:///Users/stevendunn/tts-dashboard/app/export.png)
 
 ------------------------------------------------------------------------
 
@@ -77,13 +84,7 @@ pip install -U pip
 Install required packages:
 
 ``` bash
-pip install fastapi uvicorn jinja2 python-multipart
-```
-
-Optional but recommended:
-
-``` bash
-pip install watchdog
+pip install -r requirements.txt
 ```
 
 ------------------------------------------------------------------------
@@ -200,15 +201,18 @@ If jobs appear stuck:
 
 ------------------------------------------------------------------------
 
-# 🧪 Optional: requirements.txt
+# 🧪 Testing
 
-    fastapi
-    uvicorn
-    jinja2
-    python-multipart
-    watchdog
+Audiobook Factory includes a comprehensive suite of automated tests covering text sanitization, API endpoints, and job logic.
+
+``` bash
+source venv/bin/activate
+pytest -v
+```
 
 ------------------------------------------------------------------------
+
+# 📦 requirements.txt
 
 # 🧹 Optional: .gitignore
 

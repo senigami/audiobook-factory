@@ -1,6 +1,6 @@
 import shlex, subprocess, os, re
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List, Optional
 
 from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit

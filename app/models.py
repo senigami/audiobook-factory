@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 
 Engine = Literal["xtts", "piper", "audiobook"]
 Status = Literal["queued", "running", "done", "failed", "cancelled"]
