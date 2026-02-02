@@ -62,11 +62,12 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         on_output(f"[error] narrator wav missing: {NARRATOR_WAV}\n")
         return 1
 
+    # Advanced sanitization and packing
+    text = sanitize_for_xtts(text)
+    
     if safe_mode:
         text = safe_split_long_sentences(text)
     
-    # Advanced sanitization and packing
-    text = sanitize_for_xtts(text)
     text = pack_text_to_limit(text)
 
     cmd = (

@@ -167,8 +167,8 @@ def sanitize_for_xtts(text: str) -> str:
     text = text.replace('...', ', ').replace('…', ', ')
     # Remove any non-standard characters/emojis
     text = re.sub(r'[^\x00-\x7F]+', '', text) 
-    # Collapse multiple spaces and trim
-    text = re.sub(r'\s+', ' ', text).strip()
+    # Collapse multiple spaces (but preserve newlines) and trim
+    text = re.sub(r'[^\S\r\n]+', ' ', text).strip()
     
     # Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
     if text and not text[-1] in ".!?":

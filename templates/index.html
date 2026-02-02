@@ -876,7 +876,7 @@
             area.innerText = "[Empty Output - Possible context packing issue]";
           } else {
             area.innerHTML = lines.map((line, i) =>
-              `<div class="engine-chunk" data-label="Chunk ${i + 1}">${esc(line)}</div>`
+              `<div class="engine-chunk" data-label="Chunk ${i + 1} (${line.length} chars)">${esc(line)}</div>`
             ).join('');
           }
         } else {

@@ -697,15 +697,16 @@ def api_preview(chapter_file: str, processed: bool = False):
     if not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
     
-    text = read_preview(p, max_chars=10000)
+    text = read_preview(p, max_chars=1000000)
     
     if processed:
         # Mimic the engine processing pipeline
+        text = sanitize_for_xtts(text)
+        
         settings = get_settings()
         if settings.get("safe_mode", True):
             text = safe_split_long_sentences(text)
         
-        text = sanitize_for_xtts(text)
         text = pack_text_to_limit(text)
         
     return JSONResponse({"text": text})
