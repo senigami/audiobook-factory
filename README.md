@@ -7,8 +7,12 @@ chapter-marked text files into full audiobook audio using:
 -   **Piper (fast ONNX voices)**
 -   **Auto-Tuning ETA (Learns your hardware speed)**
 -   **Interactive Assembly (Rename/Skip chapters)**
+-   **Audible Project Overview (Synthesized locally)**
 
-![Audiobook Factory Dashboard](file:///Users/stevendunn/tts-dashboard/app/home.png)
+![Audiobook Factory Dashboard](assets/home.png)
+
+> [!TIP]
+> **Listen to the Overview**: You can find an audible summary of the project features in [assets/Overview.mp3](assets/Overview.mp3).
 
 It runs entirely locally and supports queued batch processing, live
 progress tracking, WAV + MP3 generation, and browser audio preview.
@@ -31,7 +35,7 @@ No cloud required.
 -   🔄 Reconcile job state with existing audio files
 -   🧹 Clear completed jobs
 
-![Interactive Audiobook Assembly](file:///Users/stevendunn/tts-dashboard/app/export.png)
+![Interactive Audiobook Assembly](assets/export.png)
 
 ------------------------------------------------------------------------
 
@@ -141,8 +145,8 @@ pip install piper-tts
 
 # 🗂 Recommended Folder Structure
 
-    audiobook-factory/
     ├── app/
+    ├── assets/             <-- README screenshots & audio
     ├── templates/
     ├── chapters_out/
     ├── uploads/

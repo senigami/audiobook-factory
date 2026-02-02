@@ -103,9 +103,12 @@ def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, on_output
     cmd = (
         prefix +
         f"piper --model {shlex.quote(str(model))} --config {shlex.quote(str(cfg))} "
-        f"--input_file {shlex.quote(str(chapter_file))} --output_file {shlex.quote(str(out_wav))}"
+        f"--input_file {shlex.quote(str(tmp_path))} --output_file {shlex.quote(str(out_wav))}"
     )
-    return run_cmd_stream(cmd, on_output, cancel_check)
+    rc = run_cmd_stream(cmd, on_output, cancel_check)
+    if tmp_path.exists():
+        tmp_path.unlink()
+    return rc
 
 def get_audio_duration(file_path: Path) -> float:
     """Uses ffprobe to get the duration of an audio file in seconds."""

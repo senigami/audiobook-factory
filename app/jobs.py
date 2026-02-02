@@ -99,7 +99,8 @@ def worker_loop():
 
             if j.engine != "audiobook":
                 perf = get_performance_metrics()
-                chars = len(chapter_path.read_text(encoding="utf-8", errors="replace"))
+                text = chapter_path.read_text(encoding="utf-8", errors="replace")
+                chars = len(text)
                 
                 # Use learned CPS if available
                 cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
