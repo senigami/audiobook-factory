@@ -137,8 +137,8 @@ def worker_loop():
                 perf = get_performance_metrics()
                 mult = perf.get("audiobook_speed_multiplier", 1.0)
                 
-                # Base conservative formula: 0.1s per file + 1s per 2MB
-                base_eta = (num_files * 0.1) + (total_size_mb / 2)
+                # Base formula calibrated to user hardware: 0.02s per file + 1s per 10MB
+                base_eta = (num_files * 0.02) + (total_size_mb / 10)
                 eta = max(15, int(base_eta * mult))
                 
                 update_job(jid, eta_seconds=eta)
@@ -235,7 +235,7 @@ def worker_loop():
                 
                 if rc == 0 and out_file.exists():
                     # --- Auto-tuning feedback ---
-                    actual_dur = time.time() - started_at
+                    actual_dur = time.time() - start
                     # Calculate multiplier relative to 'base' prediction (0.1s/file + 0.5s/MB)
                     # We use the same base_eta variables defined in the prediction section
                     learned_mult = actual_dur / max(1.0, base_eta)
@@ -270,7 +270,7 @@ def worker_loop():
 
             # --- Auto-tuning feedback (TTS) ---
             if rc == 0 and out_wav.exists() and chars > 0:
-                actual_dur = time.time() - started_at
+                actual_dur = time.time() - start
                 if actual_dur > 0:
                     new_cps = chars / actual_dur
                     field = "xtts_cps" if j.engine == "xtts" else "piper_cps"
