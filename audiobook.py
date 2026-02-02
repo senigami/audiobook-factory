@@ -65,7 +65,8 @@ def create_audiobook(input_folder, book_title):
     cmd = [
         'ffmpeg', '-f', 'concat', '-safe', '0', '-i', list_file_path,
         '-i', 'metadata.txt', '-map_metadata', '1', 
-        '-c:a', 'aac', '-b:a', '128k', output_filename, '-y'
+        '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-movflags', '+faststart',
+        output_filename, '-y'
     ]
     
     subprocess.run(cmd)
