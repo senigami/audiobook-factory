@@ -98,20 +98,27 @@ def startup_event():
     import asyncio
     from .state import add_job_listener
 
+    # Capture the main loop correctly in the startup thread
+    main_loop = None
+    try:
+        main_loop = asyncio.get_event_loop()
+    except Exception:
+        pass
+
     def job_update_bridge(job_id, updates):
         # We need to bridge from the sync world of state.py to async WebSocket
-        # Since state.py updates happen in background threads, we use call_soon_threadsafe
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We broadcast the job_id and updates. 
-                # The frontend can then decide to fetch full details or just update locally.
-                asyncio.run_coroutine_threadsafe(
-                    manager.broadcast({"type": "job_updated", "job_id": job_id, "updates": updates}), 
-                    loop
-                )
-        except Exception as e:
-            print(f"WS Bridge Error: {e}")
+        loop = main_loop
+        if not loop or not loop.is_running():
+            try:
+                loop = asyncio.get_event_loop()
+            except Exception:
+                return
+
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({"type": "job_updated", "job_id": job_id, "updates": updates}),
+                loop
+            )
 
     add_job_listener(job_update_bridge)
 
@@ -152,6 +159,9 @@ def list_audiobooks():
 
 @app.get("/", response_class=HTMLResponse)
 def home(chapter: str = ""):
+    from .jobs import cleanup_and_reconcile
+    cleanup_and_reconcile()
+    
     chapters = [p.name for p in list_chapters()]
     jobs = list(get_jobs().values())
     jobs.sort(key=lambda j: j.created_at, reverse=True)
@@ -208,6 +218,9 @@ def home(chapter: str = ""):
 @app.get("/api/home")
 def api_home():
     """Returns initial data for the React SPA."""
+    from .jobs import cleanup_and_reconcile
+    cleanup_and_reconcile()
+    
     chapters = [p.name for p in list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
     settings = get_settings()
@@ -604,23 +617,68 @@ def analyze_batch():
 
 @app.post("/queue/backfill_mp3")
 def backfill_mp3_queue():
-    """Create MP3s for any WAV files missing them in both xtts and piper dirs."""
+    """Converts missing MP3s from existing WAVs and reconciles missing records."""
+    from .jobs import cleanup_and_reconcile, requeue
+    from .engines import wav_to_mp3
+    from .state import update_job, get_jobs
+    
+    print("DEBUG: Starting backfill_mp3_queue")
+    # 1. Reconcile state
+    reset_ids = cleanup_and_reconcile()
+    print(f"DEBUG: cleanup_and_reconcile reset {len(reset_ids)} jobs: {reset_ids}")
+    
     converted = 0
     failed = 0
     
-    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
-        d.mkdir(parents=True, exist_ok=True)
-        for wav in d.glob("*.wav"):
+    # 2. Identify orphaned WAVs and convert surgically
+    all_jobs = get_jobs()
+    for d_path in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+        d_path.mkdir(parents=True, exist_ok=True)
+        for wav in d_path.glob("*.wav"):
             mp3 = wav.with_suffix(".mp3")
             if mp3.exists():
                 continue
-            rc, out = wav_to_mp3(wav, mp3)
-            if rc == 0 and mp3.exists():
-                converted += 1
+            
+            # Found a WAV without an MP3
+            stem = wav.stem
+            print(f"DEBUG: Found orphaned WAV: {wav} (stem: {stem})")
+            
+            jid = None
+            job_obj = None
+            for _jid, _j in all_jobs.items():
+                if Path(_j.chapter_file).stem == stem:
+                    jid = _jid
+                    job_obj = _j
+                    break
+            
+            if job_obj:
+                print(f"DEBUG: Matching job found: {jid} for {job_obj.chapter_file}. make_mp3={job_obj.make_mp3}")
+                if job_obj.make_mp3:
+                    print(f"DEBUG: Converting {wav} to {mp3}")
+                    rc = wav_to_mp3(wav, mp3)
+                    if rc == 0 and mp3.exists():
+                        print(f"DEBUG: Conversion success: {mp3}")
+                        converted += 1
+                        update_job(jid, status="done", output_mp3=mp3.name, output_wav=wav.name, progress=1.0)
+                        if jid in reset_ids:
+                            print(f"DEBUG: Removing {jid} from reset_ids to prevent requeue")
+                            reset_ids.remove(jid)
+                    else:
+                        print(f"DEBUG: Conversion failed (rc={rc}): {wav}")
+                        failed += 1
             else:
-                failed += 1
-                
-    return JSONResponse({"status": "success", "converted": converted, "failed": failed})
+                print(f"DEBUG: No matching job for stem {stem}")
+
+    print(f"DEBUG: Requeueing remaining {len(reset_ids)} missing jobs: {reset_ids}")
+    for rid in reset_ids:
+        requeue(rid)
+
+    return JSONResponse({
+        "status": "success", 
+        "converted": converted, 
+        "failed": failed,
+        "reconciled_and_requeued": len(reset_ids)
+    })
 
 @app.post("/queue/backfill_mp3_xtts")
 def backfill_mp3_xtts():
@@ -655,25 +713,11 @@ def report(name: str):
 @app.get("/api/jobs")
 def api_jobs():
     """Returns jobs from state, augmented with file-based auto-discovery and pruning."""
-    from .state import get_jobs, delete_jobs
+    from .state import get_jobs
+    from .jobs import cleanup_and_reconcile
+    cleanup_and_reconcile()
+    
     all_jobs = get_jobs()
-    
-    # Pruning: Remove job records for chapters that no longer exist
-    chapters_disk = {p.name for p in list_chapters()}
-    stale_ids = []
-    
-    # We only prune jobs that are tied to a specific chapter file 
-    # (audiobook jobs are tied to a title, so they persist)
-    for jid, j in all_jobs.items():
-        if j.engine != "audiobook" and j.chapter_file not in chapters_disk:
-            stale_ids.append(jid)
-            
-    if stale_ids:
-        delete_jobs(stale_ids)
-        # Refresh local view
-        for jid in stale_ids:
-            del all_jobs[jid]
-
     jobs_dict = {j.chapter_file: asdict(j) for j in all_jobs.values()}
     for j in all_jobs.values():
         if j.custom_title:

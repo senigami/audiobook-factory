@@ -148,7 +148,12 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
           </div>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ready for processing</span>
+             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                {status === 'running' ? 'Processing...' : 
+                 status === 'queued' ? 'Queued...' : 
+                 (statusInfo?.isXttsWav || statusInfo?.isPiperWav) ? 'WAV ready (Needs MP3)' :
+                 'Ready for processing'}
+             </span>
           </div>
         )}
 

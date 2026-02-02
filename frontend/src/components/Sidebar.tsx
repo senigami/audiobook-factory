@@ -187,6 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
             <button 
                 onClick={handleBackfill}
+                className="glass-panel"
                 style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: '1px solid var(--border)', color: '#fff', borderRadius: '8px', cursor: 'pointer' }}
             >
                 <RefreshCw size={14} /> Resolve Missing MP3s

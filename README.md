@@ -55,7 +55,7 @@ No cloud required.
 ## 1️⃣ Clone Repository
 
 ``` bash
-git clone <your-repo-url>
+git clone https://github.com/senigami/audiobook-factory.git
 cd audiobook-factory
 ```
 

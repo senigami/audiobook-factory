@@ -61,13 +61,74 @@ def _estimate_seconds(text_chars: int, cps: float) -> int:
     return max(5, int(text_chars / max(1.0, cps)))
 
 
-def _output_exists(engine: str, chapter_file: str) -> bool:
+def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> bool:
     stem = Path(chapter_file).stem
     if engine == "audiobook":
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
+    
     if engine == "xtts":
-        return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
-    return (PIPER_OUT_DIR / f"{stem}.mp3").exists() or (PIPER_OUT_DIR / f"{stem}.wav").exists()
+        mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
+        wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
+    else:
+        mp3 = (PIPER_OUT_DIR / f"{stem}.mp3").exists()
+        wav = (PIPER_OUT_DIR / f"{stem}.wav").exists()
+
+    if make_mp3:
+        return mp3
+    return wav
+
+
+def reconcile_jobs():
+    """Checks all jobs marked as 'done' to ensure their files still exist on disk."""
+    all_jobs = get_jobs()
+    reset_ids = []
+    for jid, j in all_jobs.items():
+        if j.status == "done":
+            if not _output_exists(j.engine, j.chapter_file, j.make_mp3):
+                # File missing! Revert status
+                update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                reset_ids.append(jid)
+    return reset_ids
+
+
+def cleanup_and_reconcile():
+    """
+    Perform a complete scan. 
+    1. Prune jobs where text file is gone.
+    2. Reset 'done' jobs where audio is gone.
+    3. Prune audiobook jobs where m4b is gone.
+    Returns: List of jids that were reset/affected.
+    """
+    from .state import delete_jobs
+    all_jobs = get_jobs()
+    
+    # 1. Prune missing text files & missing audiobooks
+    chapters_disk = {p.name for p in (CHAPTER_DIR.glob("*.txt"))}
+    stale_ids = []
+    for jid, j in all_jobs.items():
+        if j.engine != "audiobook":
+            if j.chapter_file not in chapters_disk:
+                stale_ids.append(jid)
+        else:
+            # For audiobooks, if the m4b is gone, it's stale
+            if not (AUDIOBOOK_DIR / f"{j.chapter_file}.m4b").exists():
+                stale_ids.append(jid)
+    
+    if stale_ids:
+        delete_jobs(stale_ids)
+        # Refresh local map for the next step
+        all_jobs = {jid: j for jid, j in all_jobs.items() if jid not in stale_ids}
+
+    # 2. Reconcile missing audio
+    reset_ids = []
+    for jid, j in all_jobs.items():
+        if j.status == "done":
+            if not _output_exists(j.engine, j.chapter_file, j.make_mp3):
+                # File missing! Revert status to queued
+                update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                reset_ids.append(jid)
+    
+    return reset_ids
 
 
 def worker_loop():
