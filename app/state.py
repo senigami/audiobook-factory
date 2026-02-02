@@ -13,6 +13,11 @@ STATE_FILE = BASE_DIR / "state.json"
 
 # IMPORTANT: RLock prevents deadlock when a function that holds the lock calls another that also locks.
 _STATE_LOCK = threading.RLock()
+_JOB_LISTENERS = []
+
+def add_job_listener(callback):
+    """Register a callback to be notified of job updates."""
+    _JOB_LISTENERS.append(callback)
 
 
 def _default_state() -> Dict[str, Any]:
@@ -143,6 +148,13 @@ def update_job(job_id: str, **updates) -> None:
         j.update(updates)
         jobs[job_id] = j
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+        
+        # Notify listeners
+        for callback in _JOB_LISTENERS:
+            try:
+                callback(job_id, updates)
+            except Exception as e:
+                print(f"Error in job listener: {e}")
 
 
 def delete_jobs(job_ids: list[str]) -> None:

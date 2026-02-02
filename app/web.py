@@ -1,7 +1,7 @@
 import time, uuid, re, os
 from typing import Optional, List, Tuple
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -38,6 +38,40 @@ app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_pip
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                # Basic error handling for stale connections
+                pass
+
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # We don't expect messages FROM client for now, but need to keep it open
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)
+
 @app.on_event("startup")
 def startup_event():
     # Re-populate in-memory queue from state on restart
@@ -54,6 +88,27 @@ def startup_event():
             count += 1
     if count > 0:
         print(f"recovered {count} jobs from state")
+
+    # Register bridge between state updates and WebSocket broadcast
+    import asyncio
+    from .state import add_job_listener
+
+    def job_update_bridge(job_id, updates):
+        # We need to bridge from the sync world of state.py to async WebSocket
+        # Since state.py updates happen in background threads, we use call_soon_threadsafe
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We broadcast the job_id and updates. 
+                # The frontend can then decide to fetch full details or just update locally.
+                asyncio.run_coroutine_threadsafe(
+                    manager.broadcast({"type": "job_updated", "job_id": job_id, "updates": updates}), 
+                    loop
+                )
+        except Exception as e:
+            print(f"WS Bridge Error: {e}")
+
+    add_job_listener(job_update_bridge)
 
 @app.on_event("shutdown")
 def shutdown_event():

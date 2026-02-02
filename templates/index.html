@@ -943,13 +943,86 @@
       return refreshJobs();
     }
 
-    refreshJobList();
-    // Heavy list update: every 5s
-    setInterval(refreshJobList, 5000);
+    // --- WebSocket Implementation ---
+    let socket = null;
+    let wsReconnectTimer = null;
 
-    // Fast log update: every 1s
+    function connectWS() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      console.log("Connecting to WebSocket...");
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log("WebSocket connected.");
+        if (wsReconnectTimer) {
+          clearTimeout(wsReconnectTimer);
+          wsReconnectTimer = null;
+        }
+        // Sync everything on connect
+        refreshJobList();
+      };
+
+      socket.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'job_updated') {
+            const jid = data.job_id;
+            const updates = data.updates;
+
+            // Find filename for this job ID if we don't have it
+            // Typically our jobs are indexed by filename in jobData
+            let filename = null;
+            for (const f in jobData) {
+              if (jobData[f].id === jid) {
+                filename = f;
+                break;
+              }
+            }
+
+            // If it's a new job or we don't know the filename yet, refresh the whole list
+            // Or if it's an important status change ('done', 'failed', 'running')
+            if (!filename || updates.status || updates.error) {
+              refreshJobList();
+            } else {
+              // incremental update for progress/logs/warnings
+              Object.assign(jobData[filename], updates);
+              updateCardStatus(filename, jobData[filename]);
+
+              // If we are viewing this specific job's logs, update log view
+              if (currentSelectedCard === filename || (updates.status === 'running' && !currentSelectedCard)) {
+                updateLogView();
+              }
+            }
+          }
+        } catch (e) {
+          console.error("WS Message Error:", e);
+        }
+      };
+
+      socket.onclose = () => {
+        console.warn("WebSocket disconnected. Retrying in 5s...");
+        socket = null;
+        if (!wsReconnectTimer) {
+          wsReconnectTimer = setTimeout(connectWS, 5000);
+        }
+      };
+
+      socket.onerror = (err) => {
+        console.error("WebSocket error:", err);
+      };
+    }
+
+    connectWS();
+
+    refreshJobList();
+    // Heavy list update: fallback every 30s (was 5s)
+    setInterval(refreshJobList, 30000);
+
+    // Fast log update: fallback every 5s (was 1s)
     updateLogView();
-    setInterval(updateLogView, 1000);
+    setInterval(updateLogView, 5000);
 
     async function openAssemblyModal() {
       const title = document.getElementById('exportTitleInput').value.trim();
