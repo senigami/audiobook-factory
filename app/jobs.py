@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict
 
 from .models import Job
-from .state import get_jobs, put_job, update_job, get_settings
+from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
 from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR
 from .engines import xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
 
@@ -11,7 +11,7 @@ job_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
-# rough baseline chars/sec; tweak later if you want
+# These are default fallbacks; the system will auto-tune these over time in state.json
 BASELINE_XTTS_CPS = 16.7
 BASELINE_PIPER_CPS = 220.0
 
@@ -98,9 +98,14 @@ def worker_loop():
                 continue
 
             if j.engine != "audiobook":
-                text = chapter_path.read_text(encoding="utf-8", errors="replace")
-                chars = len(text)
-                eta = _estimate_seconds(chars, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                perf = get_performance_metrics()
+                chars = len(chapter_path.read_text(encoding="utf-8", errors="replace"))
+                
+                # Use learned CPS if available
+                cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
+                               BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                
+                eta = _estimate_seconds(chars, cps)
                 update_job(jid, eta_seconds=eta)
                 
                 # Formatted header for logs (explicit newlines)
@@ -128,8 +133,13 @@ def worker_loop():
                 num_files = len(audio_files)
                 total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files) / (1024 * 1024)
                 
-                # 0.1s per file + 1s per 3MB (calibrated to actual 52s performance)
-                eta = max(15, int((num_files * 0.1) + (total_size_mb / 3)))
+                # Use performance multiplier for auto-tuning
+                perf = get_performance_metrics()
+                mult = perf.get("audiobook_speed_multiplier", 1.0)
+                
+                # Base conservative formula: 0.1s per file + 1s per 2MB
+                base_eta = (num_files * 0.1) + (total_size_mb / 2)
+                eta = max(15, int(base_eta * mult))
                 
                 update_job(jid, eta_seconds=eta)
                 start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
@@ -224,6 +234,18 @@ def worker_loop():
                 )
                 
                 if rc == 0 and out_file.exists():
+                    # --- Auto-tuning feedback ---
+                    actual_dur = time.time() - started_at
+                    # Calculate multiplier relative to 'base' prediction (0.1s/file + 0.5s/MB)
+                    # We use the same base_eta variables defined in the prediction section
+                    learned_mult = actual_dur / max(1.0, base_eta)
+                    
+                    old_mult = perf.get("audiobook_speed_multiplier", 1.0)
+                    # Weighted moving average (60% old, 40% new)
+                    updated_mult = (old_mult * 0.6) + (learned_mult * 0.4)
+                    update_performance_metrics(audiobook_speed_multiplier=updated_mult)
+                    
+                    on_output(f"\n[performance] Tuned Audiobook multiplier: {old_mult:.2f} -> {updated_mult:.2f}\n")
                     update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_mp3=out_file.name, log="".join(logs))
                 else:
                     update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Audiobook assembly failed (rc={rc})", log="".join(logs))
@@ -245,6 +267,17 @@ def worker_loop():
             if cancel_ev.is_set():
                 update_job(jid, status="cancelled", finished_at=time.time(), progress=1.0, error="Cancelled.", log="".join(logs))
                 continue
+
+            # --- Auto-tuning feedback (TTS) ---
+            if rc == 0 and out_wav.exists() and chars > 0:
+                actual_dur = time.time() - started_at
+                if actual_dur > 0:
+                    new_cps = chars / actual_dur
+                    field = "xtts_cps" if j.engine == "xtts" else "piper_cps"
+                    old_cps = perf.get(field, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    # Smoothed update (80% old, 20% new to avoid outlier fluctuations)
+                    updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
+                    update_performance_metrics(**{field: updated_cps})
 
             if rc != 0 or not out_wav.exists():
                 update_job(

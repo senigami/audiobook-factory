@@ -23,6 +23,11 @@ def _default_state() -> Dict[str, Any]:
             "make_mp3": True,
             "default_engine": "xtts",
             "default_piper_voice": None
+        },
+        "performance_metrics": {
+            "audiobook_speed_multiplier": 1.0,
+            "xtts_cps": 16.7,
+            "piper_cps": 220.0
         }
     }
 
@@ -83,6 +88,25 @@ def update_settings(**updates) -> None:
         state = _load_state_no_lock()
         state.setdefault("settings", {})
         state["settings"].update(updates)
+        _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+
+
+def get_performance_metrics() -> Dict[str, Any]:
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        # Fallback to defaults if missing in older state files
+        metrics = state.get("performance_metrics", {})
+        defaults = _default_state()["performance_metrics"]
+        for k, v in defaults.items():
+            metrics.setdefault(k, v)
+        return metrics
+
+
+def update_performance_metrics(**updates) -> None:
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        metrics = state.setdefault("performance_metrics", {})
+        metrics.update(updates)
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
 
