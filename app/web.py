@@ -38,6 +38,11 @@ app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_pip
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+# Serve React build if it exists
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -199,6 +204,41 @@ def home(chapter: str = ""):
         piper_wav_only=piper_wav_only,
         audiobooks=list_audiobooks(),
     ))
+
+@app.get("/api/home")
+def api_home():
+    """Returns initial data for the React SPA."""
+    chapters = [p.name for p in list_chapters()]
+    jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
+    settings = get_settings()
+    piper_voices = list_piper_voices()
+    
+    # status sets logic
+    xtts_wav_only = []
+    xtts_mp3 = []
+    piper_wav_only = []
+    piper_mp3 = []
+
+    for c in chapters:
+        stem = Path(c).stem
+        if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): xtts_mp3.append(c)
+        elif (XTTS_OUT_DIR / f"{stem}.wav").exists(): xtts_wav_only.append(c)
+        if (PIPER_OUT_DIR / f"{stem}.mp3").exists(): piper_mp3.append(c)
+        elif (PIPER_OUT_DIR / f"{stem}.wav").exists(): piper_wav_only.append(c)
+
+    return {
+        "chapters": chapters,
+        "jobs": jobs,
+        "settings": settings,
+        "piper_voices": piper_voices,
+        "paused": paused(),
+        "narrator_ok": NARRATOR_WAV.exists(),
+        "xtts_mp3": xtts_mp3,
+        "xtts_wav_only": xtts_wav_only,
+        "piper_mp3": piper_mp3,
+        "piper_wav_only": piper_wav_only,
+        "audiobooks": list_audiobooks(),
+    }
 
 @app.post("/settings")
 def save_settings(
