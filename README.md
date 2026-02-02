@@ -9,7 +9,7 @@ chapter-marked text files into full audiobook audio using:
 -   **Interactive Assembly (Rename/Skip chapters)**
 -   **Audible Project Overview (Synthesized locally)**
 
-![Audiobook Factory Dashboard](assets/home.png)
+![Audiobook Factory Dashboard](docs/assets/home.png)
 
 > [!TIP]
 > **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://senigami.github.io/audiobook-factory/)
@@ -36,7 +36,7 @@ No cloud required.
 -   🔄 Reconcile job state with existing audio files
 -   🧹 Clear completed jobs
 
-![Interactive Audiobook Assembly](assets/export.png)
+![Interactive Audiobook Assembly](docs/assets/export.png)
 
 ------------------------------------------------------------------------
 
