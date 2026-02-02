@@ -191,7 +191,7 @@ def assemble_audiobook(input_folder: Path, book_title: str, output_m4b: Path, on
         cmd = (
             f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
             f"-i {shlex.quote(str(metadata_file))} -map_metadata 1 "
-            f"-c:a aac -b:a 64k -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
+            f"-c:a aac -b:a 32k -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
         )
         
         rc = run_cmd_stream(cmd, on_output, cancel_check)

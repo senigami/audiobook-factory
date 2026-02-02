@@ -1,4 +1,4 @@
-import queue, threading, time, traceback
+import queue, threading, time, traceback, os
 from pathlib import Path
 from typing import Dict
 
@@ -117,13 +117,29 @@ def worker_loop():
             else:
                 text = ""
                 chars = 0
-                eta = 60 # placeholder
+                
+                # Check source folder to estimate ETA based on file count
+                src_dir = XTTS_OUT_DIR
+                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
+                    src_dir = PIPER_OUT_DIR
+                
+                # Collect files and total size
+                audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))]
+                num_files = len(audio_files)
+                total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files) / (1024 * 1024)
+                
+                # 0.1s per file + 1s per 3MB (calibrated to actual 52s performance)
+                eta = max(15, int((num_files * 0.1) + (total_size_mb / 3)))
+                
                 update_job(jid, eta_seconds=eta)
                 start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
                 header = [
                     f"Job Started: Audiobook {j.chapter_file}\n",
                     f"Started At:  {start_dt}\n",
                     f"Engine: AUDIOBOOK ASSEMBLY\n",
+                    f"Chapter Files: {num_files}\n",
+                    f"Total Source Size: {total_size_mb:.1f} MB\n",
+                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
                     "-" * 40 + "\n",
                     "\n"
                 ]
