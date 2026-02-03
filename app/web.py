@@ -347,6 +347,12 @@ def start_xtts_queue():
         if ("xtts", c) in active:
             continue
 
+        # Prune any old records for this chapter to prevent duplicates
+        to_del = [jid for jid, j in existing.items() if j.engine == "xtts" and j.chapter_file == c]
+        if to_del:
+            from .state import delete_jobs
+            delete_jobs(to_del)
+
         jid = uuid.uuid4().hex[:12]
         j = Job(
             id=jid,
@@ -377,6 +383,16 @@ def start_piper_queue(piper_voice: str = Form("")):
         c = p.name
         if output_exists("piper", c):
             continue
+        # Also check active to avoid duplicates if user clicks twice fast
+        active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status in ["queued", "running"]}
+        if ("piper", c) in active_piper:
+            continue
+
+        # Prune any old records for this chapter to prevent duplicates
+        to_del = [jid for jid, j in existing.items() if j.engine == "piper" and j.chapter_file == c]
+        if to_del:
+            from .state import delete_jobs
+            delete_jobs(to_del)
         jid = uuid.uuid4().hex[:12]
         enqueue(Job(
             id=jid,
@@ -731,10 +747,14 @@ def api_jobs():
     cleanup_and_reconcile()
     
     all_jobs = get_jobs()
-    jobs_dict = {j.chapter_file: asdict(j) for j in all_jobs.values()}
-    for j in all_jobs.values():
-        if j.custom_title:
-            jobs_dict[j.chapter_file]['custom_title'] = j.custom_title
+    
+    # Group by chapter_file, prioritizing running/queued over others
+    # Sort by created_at so that for the same status, newer ones win.
+    sorted_jobs = sorted(all_jobs.values(), key=lambda j: (1 if j.status in ["running", "queued"] else 0, j.created_at))
+    
+    jobs_dict = {}
+    for j in sorted_jobs:
+        jobs_dict[j.chapter_file] = asdict(j)
     
     # Dynamic progress update based on time
     now = time.time()
@@ -846,10 +866,11 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
 
 @app.post("/queue/clear")
 def clear_history():
-    """Wipe job history and empty the in-memory queue."""
+    """Wipe job history, empty the in-memory queue, and stop processes."""
+    terminate_all_subprocesses()
     clear_job_queue()
     clear_all_jobs()
-    return JSONResponse({"status": "ok", "message": "History cleared"})
+    return JSONResponse({"status": "ok", "message": "History cleared and processes stopped"})
 
 
 @app.get("/api/preview/{chapter_file}")

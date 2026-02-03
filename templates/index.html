@@ -564,12 +564,17 @@
     }
 
     function updateCardStatus(filename, job) {
-      if (!job) return;
-
       const badgeContainer = document.getElementById(`badge-${filename}`);
       const progContainer = document.getElementById(`progress-container-${filename}`);
       const progBar = document.getElementById(`progress-bar-${filename}`);
       const footer = document.getElementById(`footer-${filename}`);
+
+      if (!job) {
+        if (badgeContainer) badgeContainer.innerHTML = '';
+        if (progContainer) progContainer.style.display = 'none';
+        if (footer) footer.innerHTML = '<p class="text-muted" style="font-size: 0.8rem;">Ready.</p>';
+        return;
+      }
 
       if (badgeContainer) {
         let badgeClass = 'badge-queued';
@@ -580,7 +585,7 @@
         else if (job.status === 'failed') badgeClass = 'badge-failed';
         else if (job.status === 'wav') badgeClass = 'badge-wav';
 
-        badgeContainer.innerHTML = `<span class="badge ${badgeClass}">${badgeText}</span>`;
+        badgeContainer.innerHTML = `<span class="badge ${badgeClass}">${badgeText.toUpperCase()}</span>`;
       }
 
       if (job.custom_title) {
@@ -645,8 +650,16 @@
           // merge existing logs if we have them to avoid losing them on list refresh
           const existingLog = jobData[j.chapter_file]?.log;
           jobData[j.chapter_file] = j;
-          if (existingLog) jobData[j.chapter_file].log = existingLog;
+          if (existingLog && !j.log) jobData[j.chapter_file].log = existingLog;
         });
+
+        // Ensure we clear jobData of entries NOT in the current jobs list
+        const currentFiles = new Set(jobs.map(j => j.chapter_file));
+        for (const fname in jobData) {
+          if (!currentFiles.has(fname)) {
+            delete jobData[fname];
+          }
+        }
 
         document.querySelectorAll('.chapter-card').forEach(card => {
           const filename = card.dataset.filename;
