@@ -894,7 +894,7 @@
         const resp = await fetch('/queue/backfill_mp3', { method: 'POST' });
         const data = await resp.json();
         alert(`Resolved ${data.converted} files. ${data.failed} failures.`);
-        refreshJobList();
+        refreshJobs();
       } catch (err) {
         alert("Failed to run backfill.");
       } finally {
@@ -930,15 +930,10 @@
 
       try {
         await fetch('/queue/clear', { method: 'POST' });
-        setTimeout(refreshJobList, 100);
+        setTimeout(refreshJobs, 100);
       } catch (err) {
         console.error("Failed to clear backend", err);
       }
-    }
-
-    // Rename main loop to refreshJobList
-    async function refreshJobList() {
-      return refreshJobs();
     }
 
     // --- WebSocket Implementation ---
@@ -959,7 +954,7 @@
           wsReconnectTimer = null;
         }
         // Sync everything on connect
-        refreshJobList();
+        refreshJobs();
       };
 
       socket.onmessage = async (event) => {
@@ -1011,7 +1006,7 @@
     }
 
     connectWS();
-    refreshJobList();
+    refreshJobs();
     updateLogView();
 
     // Instead of heavy polling, we estimate progress locally

@@ -348,7 +348,7 @@ def start_xtts_queue():
             continue
 
         jid = uuid.uuid4().hex[:12]
-        enqueue(Job(
+        j = Job(
             id=jid,
             engine="xtts",
             chapter_file=c,
@@ -356,7 +356,9 @@ def start_xtts_queue():
             created_at=time.time(),
             safe_mode=bool(settings.get("safe_mode", True)),
             make_mp3=bool(settings.get("make_mp3", True)),
-        ))
+        )
+        enqueue(j)
+        update_job(jid, status="queued") # trigger bridge
     return JSONResponse({"status": "ok", "message": "XTTS queue started"})
     
 @app.get("/queue/start_xtts")
@@ -412,7 +414,7 @@ def create_audiobook(
         chapter_list = []
     AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
     jid = uuid.uuid4().hex[:12]
-    enqueue(Job(
+    j = Job(
         id=jid,
         engine="audiobook",
         chapter_file=title, # use this field for the title
@@ -420,16 +422,13 @@ def create_audiobook(
         created_at=time.time(),
         safe_mode=False,
         make_mp3=False,
-        # We'll store Author/Narrator in the log or as extra fields if we had them,
-        # but for now let's pass them through the enqueue system.
-        # Actually, let's just use j.author/narrator if we add them to model.
-        # For a quick fix without model migration, let's put them in the log start
-        # or use a dedicated field. I'll add them to the model for cleanliness.
         author_meta=author,
         narrator_meta=narrator,
         chapter_list=chapter_list
-    ))
-    return RedirectResponse("/", status_code=303)
+    )
+    enqueue(j)
+    update_job(jid, status="queued")
+    return JSONResponse({"status": "ok", "message": "Audiobook assembly enqueued"})
 
 @app.get("/api/audiobook/prepare")
 def prepare_audiobook():
@@ -486,7 +485,7 @@ def prepare_audiobook():
 @app.post("/cancel")
 def cancel(job_id: str = Form(...)):
     cancel_job(job_id)
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": f"Job {job_id} cancelled"})
 
 @app.post("/analyze_long")
 def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
@@ -850,7 +849,7 @@ def clear_history():
     """Wipe job history and empty the in-memory queue."""
     clear_job_queue()
     clear_all_jobs()
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": "History cleared"})
 
 
 @app.get("/api/preview/{chapter_file}")

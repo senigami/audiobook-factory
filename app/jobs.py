@@ -167,32 +167,23 @@ def worker_loop():
             cancel_ev = cancel_flags.get(jid) or threading.Event()
             cancel_flags[jid] = cancel_ev
 
-            update_job(jid, status="running", started_at=time.time(), progress=0.05, error=None)
-
-            chapter_path = CHAPTER_DIR / j.chapter_file
-            if j.engine != "audiobook" and not chapter_path.exists():
-                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="Chapter file not found.")
-                continue
-
-            # Skip if output already exists (safety)
-            if _output_exists(j.engine, j.chapter_file):
-                update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
-                continue
-
+            start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+            
+            # Prepare initial identity and ETA for immediate UI sync
+            chars = 0
+            eta = 0
+            header = []
+            
             if j.engine != "audiobook":
-                perf = get_performance_metrics()
-                text = chapter_path.read_text(encoding="utf-8", errors="replace")
-                chars = len(text)
+                chapter_path = CHAPTER_DIR / j.chapter_file
+                if chapter_path.exists():
+                    text = chapter_path.read_text(encoding="utf-8", errors="replace")
+                    chars = len(text)
+                    perf = get_performance_metrics()
+                    cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
+                                   BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    eta = _estimate_seconds(chars, cps)
                 
-                # Use learned CPS if available
-                cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
-                               BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
-                
-                eta = _estimate_seconds(chars, cps)
-                update_job(jid, eta_seconds=eta)
-                
-                # Formatted header for logs (explicit newlines)
-                start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
                 header = [
                     f"Job Started: {j.chapter_file}\n",
                     f"Started At:  {start_dt}\n",
@@ -203,33 +194,24 @@ def worker_loop():
                     "\n"
                 ]
             else:
-                text = ""
-                chars = 0
-                
-                # Check source folder to estimate ETA based on file count
+                # Audiobook identity
                 src_dir = XTTS_OUT_DIR
                 if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
                     src_dir = PIPER_OUT_DIR
                 
-                # Collect files and total size
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
                 else:
-                    audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))]
+                    audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))] if src_dir.exists() else []
                 
                 num_files = len(audio_files)
-                total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files if (src_dir / f).exists()) / (1024 * 1024)
+                total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files if (src_dir / f).exists()) / (1024 * 1024) if src_dir.exists() else 0
                 
-                # Use performance multiplier for auto-tuning
                 perf = get_performance_metrics()
                 mult = perf.get("audiobook_speed_multiplier", 1.0)
-                
-                # Base formula calibrated to user hardware: 0.02s per file + 1s per 10MB
                 base_eta = (num_files * 0.02) + (total_size_mb / 10)
                 eta = max(15, int(base_eta * mult))
                 
-                update_job(jid, eta_seconds=eta)
-                start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
                 header = [
                     f"Job Started: Audiobook {j.chapter_file}\n",
                     f"Started At:  {start_dt}\n",
@@ -240,6 +222,24 @@ def worker_loop():
                     "-" * 40 + "\n",
                     "\n"
                 ]
+
+            # Trigger immediate UI update with status, ETA, and Log Header
+            update_job(jid, 
+                       status="running", 
+                       started_at=time.time(), 
+                       progress=0.05, 
+                       error=None,
+                       eta_seconds=eta,
+                       log="".join(header))
+
+            # --- Safety Checks ---
+            if j.engine != "audiobook" and not chapter_path.exists():
+                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="Chapter file not found.")
+                continue
+
+            if _output_exists(j.engine, j.chapter_file):
+                update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
+                continue
 
             logs = header.copy()
             start = time.time()
