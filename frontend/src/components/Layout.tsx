@@ -35,7 +35,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, sidebar }) => {
         flex: 1,
         marginLeft: 'var(--sidebar-width)',
         minHeight: '100vh',
-        position: 'relative'
+        position: 'relative',
+        minWidth: 0,
+        maxWidth: 'calc(100vw - var(--sidebar-width))'
       }}>
         {children}
       </main>

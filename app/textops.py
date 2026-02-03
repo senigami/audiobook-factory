@@ -190,11 +190,10 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
     current_chunk = ""
     
     for line in lines:
-        if len(current_chunk) + len(line) + 1 < (limit - 5):
-            if current_chunk:
-                current_chunk += " " + line
-            else:
-                current_chunk = line
+        if current_chunk and len(current_chunk) + 1 + len(line) <= limit:
+            current_chunk += " " + line
+        elif not current_chunk and len(line) <= limit:
+            current_chunk = line
         else:
             if current_chunk:
                 if pad:

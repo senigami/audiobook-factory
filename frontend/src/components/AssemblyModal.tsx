@@ -66,7 +66,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, c
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Book Title</label>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Book Title</label>
               <input 
                 required 
                 value={title}
@@ -75,17 +75,18 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, c
                 style={{
                   background: 'var(--surface)',
                   border: '1px solid var(--border)',
-                  color: '#fff',
+                  color: 'var(--text-primary)',
                   padding: '0.75rem 1rem',
                   borderRadius: '8px',
-                  outline: 'none'
+                  outline: 'none',
+                  fontSize: '0.9rem'
                 }}
               />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Author</label>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Author</label>
                 <input 
                   value={author}
                   onChange={e => setAuthor(e.target.value)}
@@ -93,15 +94,16 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, c
                   style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     padding: '0.75rem 1rem',
                     borderRadius: '8px',
-                    outline: 'none'
+                    outline: 'none',
+                    fontSize: '0.9rem'
                   }}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Narrator</label>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Narrator</label>
                 <input 
                   value={narrator}
                   onChange={e => setNarrator(e.target.value)}
@@ -109,10 +111,11 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, c
                   style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     padding: '0.75rem 1rem',
                     borderRadius: '8px',
-                    outline: 'none'
+                    outline: 'none',
+                    fontSize: '0.9rem'
                   }}
                 />
               </div>
@@ -129,29 +132,15 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, c
               <button 
                 type="button" 
                 onClick={onClose}
-                style={{ 
-                  flex: 1, 
-                  background: 'transparent', 
-                  border: '1px solid var(--border)', 
-                  color: '#fff', 
-                  padding: '0.75rem', 
-                  borderRadius: '8px' 
-                }}
+                className="btn-glass"
+                style={{ flex: 1, padding: '0.75rem' }}
               >
                 Cancel
               </button>
               <button 
                 disabled={submitting}
-                style={{ 
-                  flex: 1, 
-                  background: 'var(--accent)', 
-                  border: 'none', 
-                  color: '#fff', 
-                  padding: '0.75rem', 
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  boxShadow: '0 10px 15px -3px var(--accent-glow)'
-                }}
+                className="btn-primary"
+                style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
               >
                 {submitting ? 'Queuing...' : 'Confirm & Assemble'}
               </button>

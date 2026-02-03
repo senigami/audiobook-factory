@@ -45,6 +45,8 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename })
       display: 'flex', 
       flexDirection: 'column', 
       overflow: 'hidden',
+      minWidth: 0,
+      width: '100%',
       marginTop: 'auto'
     }}>
       <div style={{ 
@@ -58,34 +60,36 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename })
         <div style={{ display: 'flex', gap: '1.5rem', height: '100%' }}>
             <button 
                 onClick={() => setActiveTab('logs')}
+                className="btn-ghost"
                 style={{ 
-                    background: 'none', border: 'none', color: activeTab === 'logs' ? 'var(--accent)' : 'var(--text-muted)',
-                    fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', 
+                    color: activeTab === 'logs' ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: '0.8rem', fontWeight: 600, 
                     borderBottom: activeTab === 'logs' ? '2px solid var(--accent)' : '2px solid transparent',
-                    cursor: 'pointer', height: '100%', padding: '0 4px'
+                    borderRadius: 0, height: '100%', padding: '0 4px'
                 }}
             >
                 <Terminal size={14} /> Logs
             </button>
             <button 
                 onClick={() => setActiveTab('preview')}
+                className="btn-ghost"
                 style={{ 
-                    background: 'none', border: 'none', color: activeTab === 'preview' ? 'var(--accent)' : 'var(--text-muted)',
-                    fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px',
+                    color: activeTab === 'preview' ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: '0.8rem', fontWeight: 600,
                     borderBottom: activeTab === 'preview' ? '2px solid var(--accent)' : '2px solid transparent',
-                    cursor: 'pointer', height: '100%', padding: '0 4px'
+                    borderRadius: 0, height: '100%', padding: '0 4px'
                 }}
             >
                 <FileText size={14} /> Preview & Analyze
             </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
-            <h3 style={{ fontSize: '0.8rem', fontWeight: 600 }}>{title}</h3>
+            <h3 style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h3>
             {subtitle && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{subtitle}</span>}
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#0d0d12' }}>
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--bg)' }}>
         {activeTab === 'logs' ? (
             <div 
                 ref={scrollRef}
@@ -96,7 +100,7 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename })
                     fontSize: '0.75rem', 
                     overflowY: 'auto',
                     whiteSpace: 'pre-wrap',
-                    color: '#d1d5db'
+                    color: 'var(--text-secondary)'
                 }}
             >
                 {logs || 'Waiting for activity...'}
@@ -107,15 +111,15 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename })
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
                             onClick={() => setPreviewMode('raw')}
-                            className="glass-panel"
-                            style={{ padding: '4px 10px', fontSize: '0.7rem', border: previewMode === 'raw' ? '1px solid var(--accent)' : '1px solid var(--border)' }}
+                            className={previewMode === 'raw' ? 'btn-primary' : 'btn-glass'}
+                            style={{ padding: '4px 12px', fontSize: '0.7rem', height: '28px' }}
                         >
                             Raw
                         </button>
                         <button 
                             onClick={() => setPreviewMode('engine')}
-                            className="glass-panel"
-                            style={{ padding: '4px 10px', fontSize: '0.7rem', border: previewMode === 'engine' ? '1px solid var(--accent)' : '1px solid var(--border)' }}
+                            className={previewMode === 'engine' ? 'btn-primary' : 'btn-glass'}
+                            style={{ padding: '4px 12px', fontSize: '0.7rem', height: '28px' }}
                         >
                             Engine
                         </button>
@@ -123,19 +127,41 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename })
                     <button 
                         onClick={runAnalysis}
                         disabled={!filename}
-                        className="glass-panel"
-                        style={{ padding: '4px 10px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        className="btn-glass"
+                        style={{ padding: '4px 12px', fontSize: '0.7rem', height: '28px' }}
                     >
                         <Search size={12} /> Run Analysis
                     </button>
                 </div>
-                <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', fontSize: '0.85rem', color: '#94a3b8' }}>
+                <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', overflowX: 'hidden', fontSize: '0.85rem', color: 'var(--text-secondary)', minWidth: 0 }}>
                     {loading ? 'Loading preview...' : (
                         previewData?.error ? <span style={{ color: 'var(--error)' }}>{previewData.error}</span> : (
                             previewMode === 'raw' ? (
-                                <div style={{ whiteSpace: 'pre-wrap' }}>{previewData?.text || 'Select a chapter to see preview.'}</div>
+                                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
+                                    {previewData?.text || 'Select a chapter to see preview.'}
+                                </pre>
                             ) : (
-                                <div dangerouslySetInnerHTML={{ __html: previewData?.text || '' }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minWidth: 0, overflowX: 'hidden' }}>
+                                    {(previewData?.text || '').split('\n').filter(Boolean).map((chunk, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className="engine-chunk" 
+                                            data-index={`Chunk #${idx + 1}`}
+                                        >
+                                            <code>
+                                                {chunk}
+                                                <span style={{ 
+                                                    color: 'var(--accent)', 
+                                                    opacity: 0.8, 
+                                                    userSelect: 'none',
+                                                    marginLeft: '2px',
+                                                    fontWeight: 'bold'
+                                                }}>⎸</span>
+                                            </code>
+                                        </div>
+                                    ))}
+                                    {!previewData?.text && 'Select a chapter to see preview.'}
+                                </div>
                             )
                         )
                     )}

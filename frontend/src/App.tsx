@@ -53,7 +53,9 @@ function App() {
           display: 'flex', 
           flexDirection: 'column', 
           padding: '2rem',
-          gap: '2rem'
+          gap: '2rem',
+          minWidth: 0,
+          overflowX: 'hidden'
         }}>
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -66,27 +68,15 @@ function App() {
             <div className="glass-panel" style={{ display: 'flex', gap: '4px', padding: '4px' }}>
               <button 
                 onClick={() => setViewMode('grid')}
-                style={{ 
-                  padding: '4px 12px', 
-                  fontSize: '0.75rem', 
-                  borderRadius: '6px',
-                  background: viewMode === 'grid' ? 'var(--accent)' : 'transparent',
-                  border: 'none',
-                  color: '#fff'
-                }}
+                className={viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}
+                style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
               >
                 Grid
               </button>
               <button 
                 onClick={() => setViewMode('list')}
-                style={{ 
-                  padding: '4px 12px', 
-                  fontSize: '0.75rem', 
-                  borderRadius: '6px',
-                  background: viewMode === 'list' ? 'var(--accent)' : 'transparent',
-                  border: 'none',
-                  color: '#fff'
-                }}
+                className={viewMode === 'list' ? 'btn-primary' : 'btn-ghost'}
+                style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
               >
                 List
               </button>

@@ -85,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingRight: '0.5rem' }}>
       <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff 0%, #94a3b8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>FACTORY</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff 0%, #cbd5e1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>FACTORY</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
           Audiobook Production
         </p>
@@ -100,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </h3>
           </div>
           <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <input type="file" accept=".txt" onChange={handleUpload} style={{ fontSize: '0.75rem', width: '100%' }} />
+            <input type="file" accept=".txt" onChange={handleUpload} style={{ fontSize: '0.75rem', width: '100%', color: 'var(--text-primary)' }} />
           </div>
         </section>
 
@@ -114,8 +114,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <button 
               onClick={() => handleStartQueue('xtts')}
-              className="glass-panel" 
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px' }}
+              className="btn-glass" 
+              disabled={paused}
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               <Play size={14} /> Start XTTS Queue
             </button>
@@ -124,14 +125,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <select 
                 value={selectedVoice} 
                 onChange={e => setSelectedVoice(e.target.value)}
-                style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: '#fff', fontSize: '0.75rem', padding: '4px' }}
+                style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: '#fff', fontSize: '0.75rem', padding: '6px', borderRadius: '4px' }}
               >
                 <option value="">(Piper Voice)</option>
                 {piperVoices.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
               <button 
                 onClick={() => handleStartQueue('piper')}
-                style={{ padding: '0.25rem 0', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', background: 'transparent', border: 'none', color: '#fff' }}
+                className="btn-ghost"
+                disabled={paused || !selectedVoice}
+                style={{ padding: '0.5rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
               >
                 <Mic size={14} /> Start Piper
               </button>
@@ -139,8 +142,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <button 
               onClick={handlePauseToggle}
-              className="glass-panel" 
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px' }}
+              className="btn-glass" 
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               {paused ? <Play size={14} /> : <Pause size={14} />} {paused ? 'Resume Queue' : 'Pause Queue'}
             </button>
@@ -157,8 +160,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <button 
               onClick={onOpenAssembly}
-              className="glass-panel" 
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--accent)', border: 'none' }}
+              className="btn-primary" 
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               <Package size={14} /> Assemble M4B
             </button>
@@ -180,21 +183,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <button 
               onClick={onToggleHideFinished}
-              className="glass-panel"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', color: hideFinished ? 'var(--accent)' : 'inherit' }}
+              className="btn-glass"
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', color: hideFinished ? 'var(--accent)' : 'inherit' }}
             >
               <CheckCircle size={14} /> {hideFinished ? 'Show Finished' : 'Hide Finished'}
             </button>
             <button 
                 onClick={handleBackfill}
-                className="glass-panel"
-                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: '1px solid var(--border)', color: '#fff', borderRadius: '8px', cursor: 'pointer' }}
+                className="btn-glass"
+                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
                 <RefreshCw size={14} /> Resolve Missing MP3s
             </button>
             <a 
                 href="/analyze_batch"
-                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: '1px solid var(--border)', color: '#fff', borderRadius: '8px', textDecoration: 'none' }}
+                className="btn-glass"
+                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)' }}
             >
                 <Search size={14} /> Run Batch Analysis
             </a>
@@ -210,7 +214,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <button 
               onClick={handleClear}
-              style={{ background: 'none', border: 'none', color: 'var(--error)', fontSize: '0.8rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px', padding: '0.5rem 0', cursor: 'pointer' }}
+              className="btn-ghost"
+              style={{ color: 'var(--error)', fontSize: '0.8rem', textAlign: 'left', padding: '0.5rem 0' }}
             >
               <Trash2 size={14} /> Reset Factory
             </button>
@@ -218,7 +223,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </section>
       </div>
 
-      <footer style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+      <div className="divider" />
+
+      <footer>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: narratorOk ? 'var(--success)' : 'var(--error)', boxShadow: narratorOk ? '0 0 10px var(--success)' : '0 0 10px var(--error)' }}></div>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Narrator Sample: {narratorOk ? 'Found' : 'Missing'}</span>

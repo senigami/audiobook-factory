@@ -850,10 +850,10 @@ def api_preview(chapter_file: str, processed: bool = False):
         # Mimic the engine processing pipeline
         text = sanitize_for_xtts(text)
         
-        settings = get_settings()
-        if settings.get("safe_mode", True):
-            text = safe_split_long_sentences(text)
+        # For the technical preview, we always show the XTTS-style padding and splitting
+        # to demonstrate how the engine handles character limits.
+        text = safe_split_long_sentences(text)
         
-        text = pack_text_to_limit(text)
+        text = pack_text_to_limit(text, pad=True)
         
     return JSONResponse({"text": text})
