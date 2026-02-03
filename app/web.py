@@ -141,6 +141,18 @@ def shutdown_event():
     print("Shutting down: killing subprocesses...")
     terminate_all_subprocesses()
 
+def is_react_dev_active():
+    """Checks if the React dev server is running on 127.0.0.1:5173"""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.1)
+    try:
+        s.connect(("127.0.0.1", 5173))
+        s.close()
+        return True
+    except:
+        return False
+
 def list_chapters():
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
     return sorted(CHAPTER_DIR.glob("*.txt"))
@@ -172,7 +184,17 @@ def list_audiobooks():
     return sorted([p.name for p in AUDIOBOOK_DIR.glob("*.m4b")], reverse=True)
 
 @app.get("/", response_class=HTMLResponse)
-def home(chapter: str = ""):
+def home(chapter: str = "", legacy: bool = False):
+    # If React dev server is running, and user is NOT explicitly asking for legacy,
+    # we can redirect them to 5173.
+    # To allow getting back, we'll respect a ?legacy=1 flag.
+    import fastapi
+    from fastapi.responses import RedirectResponse
+    
+    # Check if we should redirect to React frontend
+    if not legacy and is_react_dev_active():
+        return RedirectResponse("http://127.0.0.1:5173")
+
     from .jobs import cleanup_and_reconcile
     cleanup_and_reconcile()
     
