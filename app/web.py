@@ -302,43 +302,27 @@ def save_settings(
     )
     return RedirectResponse("/", status_code=303)
 
-@app.post("/upload")
-async def upload(file: UploadFile = File(...)):
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = UPLOAD_DIR / file.filename
-    content = await file.read()
-    dest.write_bytes(content)
-    return RedirectResponse(f"/split?file={dest.name}", status_code=303)
-
-@app.get("/split", response_class=HTMLResponse)
-def split_page(file: str):
-    tpl = templates.get_template("split.html")
-    return HTMLResponse(tpl.render(file=file, part_limit=PART_CHAR_LIMIT))
-
-@app.post("/split")
-def do_split(
-    file: str = Form(...),
-    mode: str = Form("parts"),
-    max_chars: Optional[int] = Form(None)
-):
+def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = None) -> List[Path]:
+    """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
     if max_chars is None:
         max_chars = PART_CHAR_LIMIT
-    path = UPLOAD_DIR / file
+    
+    path = UPLOAD_DIR / filename
     if not path.exists():
-        return JSONResponse({"error": "upload not found"}, status_code=404)
+        raise FileNotFoundError(f"Upload not found: {filename}")
 
     full_text = path.read_text(encoding="utf-8", errors="replace")
     
     # Normalize mode for comparison
     mode_clean = str(mode).strip().lower()
-    print(f"DEBUG: do_split mode='{mode}' (clean='{mode_clean}') file='{file}'")
+    print(f"DEBUG: process_and_split_file mode='{mode}' (clean='{mode_clean}') file='{filename}'")
 
     if mode_clean == "chapter":
         print(f"DEBUG: Splitting by chapter markers")
         chapters = split_by_chapter_markers(full_text)
         prefix = "chapter"
         if not chapters:
-            return PlainTextResponse(f"No chapter markers found. Expected: Chapter 1591: Years Later", status_code=400)
+            raise ValueError("No chapter markers found. Expected: Chapter 1: Title")
     else:
         # Default to parts for anything else
         print(f"DEBUG: Defaulting to part splitting (current mode='{mode_clean}')")
@@ -353,8 +337,51 @@ def do_split(
         chapters = split_into_parts(full_text, max_chars, start_index=start_idx)
         prefix = "part"
 
-    written = write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=prefix)
-    return RedirectResponse(f"/?chapter={written[0].name}", status_code=303)
+    return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=prefix)
+
+@app.post("/upload")
+async def upload(
+    file: UploadFile = File(...), 
+    json: bool = False, 
+    mode: str = "parts", 
+    max_chars: Optional[int] = None
+):
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    dest = UPLOAD_DIR / file.filename
+    content = await file.read()
+    dest.write_bytes(content)
+    
+    if json:
+        try:
+            written = process_and_split_file(file.filename, mode=mode, max_chars=max_chars)
+            return JSONResponse({
+                "status": "success", 
+                "filename": file.filename, 
+                "chapters": [p.name for p in written]
+            })
+        except Exception as e:
+            return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+    return RedirectResponse(f"/split?file={dest.name}", status_code=303)
+
+@app.get("/split", response_class=HTMLResponse)
+def split_page(file: str):
+    tpl = templates.get_template("split.html")
+    return HTMLResponse(tpl.render(file=file, part_limit=PART_CHAR_LIMIT))
+
+@app.post("/split")
+def do_split(
+    file: str = Form(...),
+    mode: str = Form("parts"),
+    max_chars: Optional[int] = Form(None)
+):
+    try:
+        written = process_and_split_file(file, mode, max_chars)
+        return RedirectResponse(f"/?chapter={written[0].name}", status_code=303)
+    except ValueError as e:
+        return PlainTextResponse(str(e), status_code=400)
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
 
 @app.post("/queue/start_xtts")
 def start_xtts_queue():

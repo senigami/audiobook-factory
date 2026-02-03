@@ -75,10 +75,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const formData = new FormData();
     formData.append('file', e.target.files[0]);
     try {
-      await fetch('/upload', { method: 'POST', body: formData });
-      onRefresh();
+      const response = await fetch('/upload?json=1', { method: 'POST', body: formData });
+      const result = await response.json();
+      if (result.status === 'success') {
+        alert(`Uploaded and split into ${result.chapters.length} chapters.`);
+        onRefresh();
+      } else {
+        alert(`Upload error: ${result.message}`);
+      }
     } catch (e) {
       console.error('Upload failed', e);
+      alert('Upload failed. See console for details.');
+    } finally {
+      // Clear input so same file can be uploaded again
+      e.target.value = '';
     }
   };
 
