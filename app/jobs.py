@@ -167,7 +167,7 @@ def worker_loop():
             cancel_ev = cancel_flags.get(jid) or threading.Event()
             cancel_flags[jid] = cancel_ev
 
-            update_job(jid, status="running", started_at=time.time(), progress=0.01, error=None)
+            update_job(jid, status="running", started_at=time.time(), progress=0.05, error=None)
 
             chapter_path = CHAPTER_DIR / j.chapter_file
             if j.engine != "audiobook" and not chapter_path.exists():

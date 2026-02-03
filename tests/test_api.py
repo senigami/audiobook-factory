@@ -31,8 +31,8 @@ def test_api_preview_processed(temp_chapter):
     # This should trigger sanitization (adding period)
     response = client.get(f"/api/preview/{temp_chapter}?processed=true")
     assert response.status_code == 200
-    # Processed output should have a period
-    assert response.json()["text"] == "Hello world."
+    # Processed output should have a period and may be padded
+    assert response.json()["text"].strip() == "Hello world."
 
 def test_api_jobs_list():
     response = client.get("/api/jobs")

@@ -138,11 +138,17 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
       {status === 'running' && (
         <div style={{ marginTop: '0.25rem' }}>
-          <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${(job?.progress || 0) * 100}%` }}
-              style={{ height: '100%', background: 'var(--accent)' }}
+          <div 
+            data-testid="progress-bar"
+            style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}
+          >
+            <div 
+              style={{ 
+                height: '100%', 
+                background: 'var(--accent)',
+                width: `${Math.max((job?.progress || 0), 0.05) * 100}%`,
+                transition: 'width 0.5s ease'
+              }}
             />
           </div>
         </div>

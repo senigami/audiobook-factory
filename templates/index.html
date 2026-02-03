@@ -190,13 +190,13 @@
     <section>
       <h3>Queue Controls</h3>
       <div style="display: flex; flex-direction: column; gap: 12px;">
-        <form method="post" action="/queue/start_xtts">
+        <form id="startXttsForm">
           <button type="submit" class="btn btn-outline" style="width: 100%;">
             Start XTTS Queue
           </button>
         </form>
 
-        <form method="post" action="/queue/start_piper">
+        <form id="startPiperForm">
           <div class="form-group" style="margin-bottom: 8px;">
             <select name="piper_voice" style="width: 100%;">
               <option value="">(Select Piper Voice)</option>
@@ -208,7 +208,7 @@
           </button>
         </form>
 
-        <form method="post" action="/queue/pause">
+        <form id="pauseQueueForm">
           <button type="submit" class="btn btn-outline" style="width: 100%;">
             {{ "️▶️ Resume" if paused else "⏸ Pause" }} Queue
           </button>
@@ -499,28 +499,25 @@
 
       if (currentSelectedCard) {
         // User overrides auto-view
-        // We need to fetch full details including log
-        const j = await fetchJobDetails(currentSelectedCard);
-        // If job exists, use it. If not, use local jobData (stat-only)
-        jobToCheck = j || jobData[currentSelectedCard];
+        // We only fetch if we don't have logs or if it's the first time
+        if (!jobData[currentSelectedCard]?.log) {
+          const j = await fetchJobDetails(currentSelectedCard);
+          if (j) jobData[currentSelectedCard] = j;
+        }
+        jobToCheck = jobData[currentSelectedCard];
         title = `Logs: ${currentSelectedCard}`;
         if (jobToCheck?.engine) title += ` (${jobToCheck.engine})`;
         subtitle = `Viewing: ${currentSelectedCard}`;
       } else {
-        // Auto-view active job
-        const r = await fetch('/api/active_job', { cache: "no-store" });
-        if (r.ok) {
-          const active = await r.json();
-          if (active) {
-            jobToCheck = active;
-            title = `Logs: ${active.chapter_file} (${active.engine})`;
-            // Update local cache for list view consistency
-            jobData[active.chapter_file] = active;
-          } else {
-            // No active job
-            title = "System Console";
-            subtitle = "No active jobs.";
-          }
+        // Auto-view the currently running job from our local data
+        const active = Object.values(jobData).find(j => j.status === 'running');
+        if (active) {
+          jobToCheck = active;
+          title = `Logs: ${active.chapter_file} (${active.engine})`;
+          subtitle = `Viewing: ${active.chapter_file}`;
+        } else {
+          title = "System Console";
+          subtitle = "No active jobs.";
         }
       }
 
@@ -611,7 +608,8 @@
       if (progContainer && progBar) {
         if (job.status === 'running') {
           progContainer.style.display = 'block';
-          const p = Math.round((job.progress || 0) * 100);
+          // Ensure a minimum visible width (5%) if progress is very low
+          const p = Math.max(Math.round((job.progress || 0) * 100), 5);
           progBar.style.width = `${p}%`;
         } else {
           progContainer.style.display = 'none';
@@ -691,8 +689,8 @@
           backfillBtn.disabled = (wavs === 0);
         }
 
-        // Poll for log updates separately (now handled by own interval)
-        // updateLogView(); 
+        // Update log view if something changed
+        updateLogView();
       } catch (e) {
         console.error("Refresh failed", e);
       }
@@ -971,8 +969,6 @@
             const jid = data.job_id;
             const updates = data.updates;
 
-            // Find filename for this job ID if we don't have it
-            // Typically our jobs are indexed by filename in jobData
             let filename = null;
             for (const f in jobData) {
               if (jobData[f].id === jid) {
@@ -984,14 +980,14 @@
             // If it's a new job or we don't know the filename yet, refresh the whole list
             // Or if it's an important status change ('done', 'failed', 'running')
             if (!filename || updates.status || updates.error) {
-              refreshJobList();
+              refreshJobs();
             } else {
               // incremental update for progress/logs/warnings
               Object.assign(jobData[filename], updates);
               updateCardStatus(filename, jobData[filename]);
 
               // If we are viewing this specific job's logs, update log view
-              if (currentSelectedCard === filename || (updates.status === 'running' && !currentSelectedCard)) {
+              if (currentSelectedCard === filename || (!currentSelectedCard && jobData[filename] && jobData[filename].status === 'running')) {
                 updateLogView();
               }
             }
@@ -1015,14 +1011,51 @@
     }
 
     connectWS();
-
     refreshJobList();
-    // Heavy list update: fallback every 30s (was 5s)
-    setInterval(refreshJobList, 30000);
-
-    // Fast log update: fallback every 5s (was 1s)
     updateLogView();
-    setInterval(updateLogView, 5000);
+
+    // Instead of heavy polling, we estimate progress locally
+    setInterval(estimateProgress, 500);
+
+    function estimateProgress() {
+      const active = Object.values(jobData).find(j => j.status === 'running');
+      if (!active || !active.started_at || !active.eta_seconds) return;
+
+      const elapsed = (Date.now() / 1000) - active.started_at;
+      const total = active.eta_seconds;
+
+      // Progress estimate (capped at 99% until real done)
+      const progress = Math.min(elapsed / total, 0.99);
+      active.progress = Math.max(progress, active.progress || 0.05);
+
+      // Update both the card and the panel if visible
+      updateCardStatus(active.chapter_file, active);
+      if (!currentSelectedCard || currentSelectedCard === active.chapter_file) {
+        updateLogViewLabels(active);
+      }
+    }
+
+    function updateLogViewLabels(job) {
+      const subEl = document.getElementById('logSubtitle');
+      if (!subEl) return;
+
+      const elapsed = Math.floor(Date.now() / 1000 - job.started_at);
+      const remaining = Math.round(job.eta_seconds - elapsed);
+
+      if (remaining > 0) {
+        const rm = Math.floor(remaining / 60);
+        const rs = Math.floor(remaining % 60);
+        subEl.innerText = `ETA: ${rm}m ${rs}s`;
+      } else {
+        subEl.innerText = `ETA: Almost done...`;
+      }
+
+      subEl.style.color = 'var(--accent)';
+      subEl.style.fontSize = '1.2rem';
+      subEl.style.fontWeight = 'bold';
+      subEl.style.display = 'block';
+      subEl.style.marginTop = '4px';
+    }
 
     async function openAssemblyModal() {
       const title = document.getElementById('exportTitleInput').value.trim();
@@ -1122,7 +1155,7 @@
         const resp = await fetch('/create_audiobook', { method: 'POST', body: formData });
         if (resp.ok) {
           closeAssemblyModal();
-          refreshJobList();
+          refreshJobs();
           // Clear input
           document.getElementById('exportTitleInput').value = '';
         } else {
@@ -1136,6 +1169,37 @@
         btn.disabled = false;
       }
     }
+
+    // --- Queue Control AJAX ---
+    document.getElementById('startXttsForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetch('/queue/start_xtts', { method: 'POST' });
+        refreshJobs();
+      } catch (err) { console.error("Failed to start XTTS", err); }
+    });
+
+    document.getElementById('startPiperForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      try {
+        await fetch('/queue/start_piper', { method: 'POST', body: formData });
+        refreshJobs();
+      } catch (err) { console.error("Failed to start Piper", err); }
+    });
+
+    document.getElementById('pauseQueueForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const isPaused = e.target.innerText.includes("Resume");
+      const url = isPaused ? '/queue/resume' : '/queue/pause';
+      try {
+        await fetch(url, { method: 'POST' });
+        // Update button text immediately or wait for refresh
+        const btn = e.target.querySelector('button');
+        if (btn) btn.innerText = isPaused ? "⏸ Pause Queue" : "▶️ Resume Queue";
+        refreshJobs();
+      } catch (err) { console.error("Failed to toggle pause", err); }
+    });
 
     // Handle selected chapter on load
     window.addEventListener('scroll', () => { }, { passive: true }); // dummy to allow scroll check

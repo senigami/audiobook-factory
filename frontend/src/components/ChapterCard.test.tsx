@@ -59,4 +59,20 @@ describe('ChapterCard', () => {
     const audio = document.querySelector('audio')
     expect(audio).toBeInTheDocument()
   })
+
+  it('renders progress bar when status is "running"', () => {
+    const runningJob = { ...mockJob, status: 'running' as const, progress: 0.45 };
+    render(
+      <ChapterCard 
+        filename="test.txt" 
+        job={runningJob} 
+      />
+    )
+    
+    const progressBar = screen.getByTestId('progress-bar');
+    expect(progressBar).toBeInTheDocument();
+    // Check if the inner motion.div has the correct width
+    const indicator = progressBar.firstChild as HTMLElement;
+    expect(indicator.style.width).toBe('45%');
+  });
 })

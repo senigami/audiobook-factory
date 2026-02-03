@@ -50,18 +50,22 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        # print(f"DEBUG: WebSocket client connected. Active: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+            # print(f"DEBUG: WebSocket client disconnected. Active: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections:
+        # We use a copy to avoid modification during iteration
+        for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
-            except Exception:
-                # Basic error handling for stale connections
-                pass
+            except Exception as e:
+                # print(f"DEBUG: Broadcast failed for a connection: {e}")
+                if connection in self.active_connections:
+                    self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
@@ -99,27 +103,36 @@ def startup_event():
     import asyncio
     from .state import add_job_listener
 
-    # Capture the main loop correctly in the startup thread
-    main_loop = None
-    try:
-        main_loop = asyncio.get_event_loop()
-    except Exception:
-        pass
-
+    # We'll use a globally accessible loop variable for the bridge
+    _main_loop = [None]
+    
     def job_update_bridge(job_id, updates):
         # We need to bridge from the sync world of state.py to async WebSocket
-        loop = main_loop
+        loop = _main_loop[0]
+        
         if not loop or not loop.is_running():
             try:
-                loop = asyncio.get_event_loop()
-            except Exception:
+                # If we're called from the main thread but loop not set, capture it
+                loop = asyncio.get_running_loop()
+                _main_loop[0] = loop
+            except RuntimeError:
+                # Still no running loop in this thread context
                 return
 
         if loop and loop.is_running():
+            print(f"DEBUG: Broadcasting update for {job_id} on loop {id(loop)}")
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast({"type": "job_updated", "job_id": job_id, "updates": updates}),
                 loop
             )
+
+    try:
+        # Try to capture the running loop at startup
+        _main_loop[0] = asyncio.get_running_loop()
+        # print(f"INFO: WebSocket bridge registered loop {id(_main_loop[0])}")
+    except RuntimeError:
+        # Loop not running yet, will be captured on first bridge call or connection
+        pass
 
     add_job_listener(job_update_bridge)
 
@@ -344,7 +357,7 @@ def start_xtts_queue():
             safe_mode=bool(settings.get("safe_mode", True)),
             make_mp3=bool(settings.get("make_mp3", True)),
         ))
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": "XTTS queue started"})
     
 @app.get("/queue/start_xtts")
 def start_xtts_queue_get():
@@ -373,17 +386,17 @@ def start_piper_queue(piper_voice: str = Form("")):
             make_mp3=bool(settings.get("make_mp3", True)),
             piper_voice=voice
         ))
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": "Piper queue started"})
 
 @app.post("/queue/pause")
 def pause_queue():
     set_paused(True)
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": "Queue paused"})
 
 @app.post("/queue/resume")
 def resume_queue():
     set_paused(False)
-    return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": "ok", "message": "Queue resumed"})
 
 @app.post("/create_audiobook")
 def create_audiobook(
@@ -772,8 +785,10 @@ def api_jobs():
     jobs = list(jobs_dict.values())
     jobs.sort(key=lambda j: j.get('created_at', 0))
     
-    # Optimization: Remove full logs from list view to save bandwidth
+    # Optimization: Remove full logs from list view to save bandwidth, EXCEPT for running jobs
     for j in jobs:
+        if j.get('status') == 'running':
+            continue
         if 'log' in j:
             del j['log']
             
