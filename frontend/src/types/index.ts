@@ -30,6 +30,17 @@ export interface Settings {
   default_piper_voice?: string;
 }
 
+export interface AssemblyChapter {
+  filename: string;
+  title: string;
+  duration: number;
+}
+
+export interface AssemblyPrep {
+  chapters: AssemblyChapter[];
+  total_duration: number;
+}
+
 export interface GlobalState {
   jobs: Record<string, Job>;
   settings: Settings;

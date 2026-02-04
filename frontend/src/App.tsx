@@ -112,14 +112,18 @@ function App() {
         <AssemblyModal 
           isOpen={isAssemblyOpen}
           onClose={() => setIsAssemblyOpen(false)}
-          chapters={initialData?.chapters || []}
           onConfirm={async (data) => {
             const formData = new FormData();
             formData.append('title', data.title);
             formData.append('author', data.author);
             formData.append('narrator', data.narrator);
-            // We'll use the same logic as the old app for now
-            await fetch('/create_audiobook', { method: 'POST', body: formData });
+            formData.append('chapters', JSON.stringify(data.chapters));
+            
+            await fetch('/create_audiobook', { 
+              method: 'POST', 
+              body: formData 
+            });
+            refetchHome();
           }}
         />
       </div>
