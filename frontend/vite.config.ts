@@ -26,6 +26,26 @@ export default defineConfig({
       '/upload': {
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
+      },
+      '/settings': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/split': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/create_audiobook': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/cancel': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/analyze_long': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
       }
     }
   }

@@ -119,11 +119,17 @@ function App() {
             formData.append('narrator', data.narrator);
             formData.append('chapters', JSON.stringify(data.chapters));
             
-            await fetch('/create_audiobook', { 
+            const resp = await fetch('/create_audiobook', { 
               method: 'POST', 
               body: formData 
             });
-            refetchHome();
+
+            if (resp.ok) {
+              await Promise.all([refetchHome(), refreshJobs()]);
+            } else {
+              const err = await resp.json();
+              alert(`Failed to start assembly: ${err.message || resp.statusText}`);
+            }
           }}
         />
       </div>

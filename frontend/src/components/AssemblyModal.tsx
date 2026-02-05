@@ -14,6 +14,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
   const [author, setAuthor] = useState('');
   const [narrator, setNarrator] = useState('');
   const [chapters, setChapters] = useState<AssemblyChapter[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,6 +25,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
         .then(res => res.json())
         .then((data: AssemblyPrep) => {
           setChapters(data.chapters);
+          setSelectedFiles(new Set(data.chapters.map(c => c.filename)));
         })
         .catch(err => console.error('Failed to prepare assembly', err))
         .finally(() => setLoading(false));
@@ -32,15 +34,35 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
 
   if (!isOpen) return null;
 
+  const handleToggleFile = (filename: string) => {
+    const next = new Set(selectedFiles);
+    if (next.has(filename)) next.delete(filename);
+    else next.add(filename);
+    setSelectedFiles(next);
+  };
+
+  const handleTitleChange = (filename: string, newTitle: string) => {
+    setChapters(prev => prev.map(c => c.filename === filename ? { ...c, title: newTitle } : c));
+  };
+
+  const handleToggleAll = () => {
+    if (selectedFiles.size > 0) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(chapters.map(c => c.filename)));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (chapters.length === 0) {
-      alert("No chapters found to assemble.");
+    const selectedChapters = chapters.filter(c => selectedFiles.has(c.filename));
+    if (selectedChapters.length === 0) {
+      alert("No chapters selected to assemble.");
       return;
     }
     setSubmitting(true);
     try {
-      await onConfirm({ title, author, narrator, chapters });
+      await onConfirm({ title, author, narrator, chapters: selectedChapters });
       onClose();
     } catch (e) {
       console.error(e);
@@ -49,7 +71,8 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
     }
   };
 
-  const totalDurationSeconds = chapters.reduce((acc, c) => acc + (c.duration || 0), 0);
+  const selectedData = chapters.filter(c => selectedFiles.has(c.filename));
+  const totalDurationSeconds = selectedData.reduce((acc, c) => acc + (c.duration || 0), 0);
   const totalM = Math.floor(totalDurationSeconds / 60);
   const totalS = Math.round(totalDurationSeconds % 60);
 
@@ -72,7 +95,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
           className="glass-panel"
           style={{
-            maxWidth: '500px',
+            maxWidth: '600px',
             width: '100%',
             padding: '2rem',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
@@ -152,15 +175,48 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Chapter / File</span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Length</span>
+              <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '4px' }}>
+                    <input 
+                        type="checkbox" 
+                        checked={selectedFiles.size === chapters.length && chapters.length > 0} 
+                        onChange={handleToggleAll}
+                        style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Chapter Title / Filename</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', textAlign: 'right' }}>Length</span>
                 </div>
                 {chapters.map((c, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                        <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>{c.filename}</span>
-                        <span style={{ color: 'var(--accent)', flexShrink: 0 }}>{Math.floor(c.duration/60)}m {Math.round(c.duration%60)}s</span>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 80px', alignItems: 'center', gap: '8px', padding: '4px 0', opacity: selectedFiles.has(c.filename) ? 1 : 0.5 }}>
+                        <input 
+                            type="checkbox" 
+                            checked={selectedFiles.has(c.filename)} 
+                            onChange={() => handleToggleFile(c.filename)}
+                            style={{ cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <input
+                                value={c.title}
+                                onChange={(e) => handleTitleChange(c.filename, e.target.value)}
+                                disabled={!selectedFiles.has(c.filename)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid var(--border)',
+                                    color: 'var(--text-primary)',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    width: '100%',
+                                    outline: 'none'
+                                }}
+                            />
+                            <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {c.filename}
+                            </span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {Math.floor(c.duration/60)}m {Math.round(c.duration%60)}s
+                        </span>
                     </div>
                 ))}
               </div>
@@ -169,7 +225,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                 <Info size={18} color="var(--accent)" />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Combining {chapters.length} chapters into a single M4B.
+                    Combining {selectedFiles.size} chapters into a single M4B.
                     </p>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         Total Duration: {totalM}m {totalS}s
@@ -187,7 +243,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                   Cancel
                 </button>
                 <button 
-                  disabled={submitting || chapters.length === 0}
+                  disabled={submitting || selectedFiles.size === 0}
                   className="btn-primary"
                   style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
                 >
