@@ -45,7 +45,7 @@ No cloud required.
 ## System Requirements
 
 -   macOS, Linux, or Windows
--   Python 3.11+ (recommended)
+-   Python 3.11+ (Required for XTTS)
 -   `ffmpeg` (required for MP3 generation)
 
 ------------------------------------------------------------------------
@@ -69,6 +69,9 @@ cd audiobook-factory
 brew install python@3.11 ffmpeg
 ```
 
+> [!TIP]
+> **Python Version**: Ensure you use `python3.11` when creating the virtual environment if multiple python versions are installed.
+
 ### Ubuntu / Debian
 
 ``` bash
@@ -81,7 +84,7 @@ sudo apt install -y python3 python3-venv ffmpeg
 ## 3️⃣ Create Dashboard Virtual Environment
 
 ``` bash
-python3 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 pip install -U pip
 ```
@@ -96,19 +99,23 @@ pip install -r requirements.txt
 
 # 🎙 XTTS Setup (Voice Cloning Engine)
 
-Create a separate environment for XTTS:
+Create a separate environment for XTTS (Python 3.11 is required):
 
 ``` bash
-python3 -m venv ~/xtts-env
+python3.11 -m venv ~/xtts-env
 source ~/xtts-env/bin/activate
 pip install -U pip
-pip install TTS
+pip install -r requirements-xtts.txt
 ```
 
 Test XTTS:
 
 ``` bash
-tts --model_name tts_models/multilingual/multi-dataset/xtts_v2   --text "Testing Audiobook Factory."   --out_path test.wav
+tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 \
+    --text "Testing Audiobook Factory." \
+    --speaker_wav narrator_clean.wav \
+    --language_idx en \
+    --out_path test.wav
 ```
 
 ------------------------------------------------------------------------
@@ -166,7 +173,7 @@ pip install piper-tts
 ``` bash
 cd audiobook-factory
 source venv/bin/activate
-python3 -m uvicorn run:app --port 8123
+uvicorn run:app --port 8123
 ```
 
 Open:
@@ -177,7 +184,25 @@ Open:
 
 ------------------------------------------------------------------------
 
-# 📖 Usage
+# � React Frontend Setup (Development)
+
+If you wish to run the React frontend in development mode (with Hot Module Replacement):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at:
+
+    http://127.0.0.1:5173
+
+It is configured to proxy API requests to the Python backend at `http://127.0.0.1:8123`.
+
+------------------------------------------------------------------------
+
+# �📖 Usage
 
 1.  Upload `.txt` manuscript.
 

@@ -1,0 +1,7 @@
+# XTTS-specific requirements
+# Required for Python 3.11 compatibility and to fix known ImportError/TypeError issues
+TTS
+transformers==4.40.2
+torch==2.5.1
+torchvision
+torchaudio
