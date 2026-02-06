@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X } from 'lucide-react';
 import type { Job, Status } from '../types';
@@ -18,6 +18,12 @@ interface ChapterCardProps {
   }
 }
 
+const formatTime = (seconds: number) => {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusInfo']) => {
   const config = {
     queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
@@ -29,8 +35,8 @@ const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusIn
   };
 
   if (status === 'queued' && statusInfo) {
-      if (statusInfo.isXttsMp3 || statusInfo.isPiperMp3) return config.done;
-      if (statusInfo.isXttsWav || statusInfo.isPiperWav) return config.wav;
+    if (statusInfo.isXttsMp3 || statusInfo.isPiperMp3) return config.done;
+    if (statusInfo.isXttsWav || statusInfo.isPiperWav) return config.wav;
   }
 
   return config[status] || config.queued;
@@ -39,10 +45,19 @@ const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusIn
 export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, statusInfo }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
+  const [now, setNow] = useState(Date.now());
 
   const status = job?.status || 'queued';
   const config = getStatusConfig(status, statusInfo);
   const Icon = config.icon;
+
+  useEffect(() => {
+    if (status !== 'running') return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [status]);
 
   const handleSaveTitle = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -58,14 +73,14 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-    
+
     // 1. Prefer explicit disk check from initialData
     if (statusInfo?.isXttsMp3) return `/out/xtts/${stem}.mp3`;
     if (statusInfo?.isPiperMp3) return `/out/piper/${stem}.mp3`;
-    
+
     // 2. If statusInfo is present and says NO MP3, believe it over stale job state
     if (statusInfo && !statusInfo.isXttsMp3 && !statusInfo.isPiperMp3) {
-        return null;
+      return null;
     }
 
     // 3. Fallback to job record (needed if statusInfo is missing during partial re-renders)
@@ -75,6 +90,10 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     }
     return null;
   };
+
+  const remainingSeconds = job?.started_at && job?.eta_seconds
+    ? Math.max(0, Math.floor((job.started_at + job.eta_seconds) - now / 1000))
+    : null;
 
   return (
     <motion.div
@@ -99,7 +118,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         <div style={{ flex: 1, minWidth: 0 }}>
           {isEditing ? (
             <form onSubmit={handleSaveTitle} style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
-              <input 
+              <input
                 autoFocus
                 value={editedTitle}
                 onChange={e => setEditedTitle(e.target.value)}
@@ -110,16 +129,16 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
             </form>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <h4 style={{ 
-                fontSize: '0.9rem', 
-                whiteSpace: 'nowrap', 
-                overflow: 'hidden', 
+              <h4 style={{
+                fontSize: '0.9rem',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 color: job?.custom_title ? 'var(--accent)' : 'inherit'
               }}>
                 {job?.custom_title || filename}
               </h4>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
               >
@@ -138,13 +157,28 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
       {status === 'running' && (
         <div style={{ marginTop: '0.25rem' }}>
-          <div 
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Progress</span>
+            {remainingSeconds !== null && remainingSeconds > 0 && (
+              <span style={{
+                fontSize: '0.65rem',
+                color: 'var(--accent)',
+                fontWeight: 600,
+                display: 'inline-block',
+                width: '60px',
+                textAlign: 'right'
+              }}>
+                ETA: {formatTime(remainingSeconds)}
+              </span>
+            )}
+          </div>
+          <div
             data-testid="progress-bar"
             style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}
           >
-            <div 
-              style={{ 
-                height: '100%', 
+            <div
+              style={{
+                height: '100%',
                 background: 'var(--accent)',
                 width: `${Math.max((job?.progress || 0), 0.05) * 100}%`,
                 transition: 'width 0.5s ease'
@@ -157,22 +191,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
       <footer style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {getAudioSrc() ? (
           <div onClick={e => e.stopPropagation()}>
-             <audio 
-              controls 
-              style={{ width: '100%', height: '30px' }} 
-              src={getAudioSrc()!} 
+            <audio
+              controls
+              style={{ width: '100%', height: '30px' }}
+              src={getAudioSrc()!}
               preload="none"
               onError={(e) => (e.currentTarget.style.display = 'none')}
-             />
+            />
           </div>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                {status === 'running' ? 'Processing...' : 
-                 status === 'queued' ? 'Queued...' : 
-                 (statusInfo?.isXttsWav || statusInfo?.isPiperWav) ? 'WAV ready (Needs MP3)' :
-                 'Ready for processing'}
-             </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              {status === 'running' ? 'Processing...' :
+                status === 'queued' ? 'Queued...' :
+                  (statusInfo?.isXttsWav || statusInfo?.isPiperWav) ? 'WAV ready (Needs MP3)' :
+                    'Ready for processing'}
+            </span>
           </div>
         )}
 
@@ -185,3 +219,4 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     </motion.div>
   );
 };
+
