@@ -6,7 +6,14 @@ from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
 CHAPTER_RE = re.compile(r"^(Chapter\s+(\d+)\s*:\s*.+)$", re.MULTILINE)
 SENT_SPLIT_RE = re.compile(r'(.+?[.!?]["\'”’]*)(\s+|$)', re.DOTALL)
 
+def preprocess_text(text: str) -> str:
+    """Foundational cleaning to remove unspoken characters before splitting or analysis."""
+    if not text:
+        return ""
+    return text.replace("[", "").replace("]", "").replace("{", "").replace("}", "")
+
 def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
+    full_text = preprocess_text(full_text)
     matches = list(CHAPTER_RE.finditer(full_text))
     if not matches:
         return []
@@ -21,6 +28,7 @@ def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
     return spans
 
 def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) -> List[Tuple[int, str, str]]:
+    text = preprocess_text(text)
     if not text:
         return []
 
@@ -130,6 +138,7 @@ def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str
     return "\n".join(pieces)
 
 def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
+    text = preprocess_text(text)
     hits = []
     idx = 0
     for s, start, end in split_sentences(text):
@@ -140,6 +149,9 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
+    # Remove unspoken formatting characters at the absolute start
+    text = preprocess_text(text)
+    
     # Handle smart quotes
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
@@ -154,63 +166,57 @@ def clean_text_for_tts(text: str) -> str:
     # Collapse multiple spaces
     text = re.sub(r' +', ' ', text)
     
+    # Consolidate single-word sentences (like "Wait!" or "Move!") with neighbors
+    text = consolidate_single_word_sentences(text.strip())
+    
     return text.strip()
 
 def consolidate_single_word_sentences(text: str) -> str:
     """
-    XTTS v2 often produces gibberish for single-word sentences (e.g., "Wait.").
-    This merges them with neighbors using commas.
+    TTS engines (especially XTTS) often fail on single-word sentences.
+    This merges them with neighbors using commas for a natural flow.
     """
-    sentences = []
-    for s, _, _ in split_sentences(text):
-        sentences.append(s)
+    sentences = [s.strip() for s, _, _ in split_sentences(text) if s.strip()]
     
     if len(sentences) <= 1:
         return text
 
     new_sentences = []
     i = 0
-    skip_next = False
-    
     while i < len(sentences):
         curr = sentences[i]
-        words = curr.split()
-        # Clean words of punctuation to count actual words
-        word_count = len([w for w in words if re.search(r'\w', w)])
+        # Count actual words (containing at least one alphanumeric)
+        word_count = len([w for w in curr.split() if re.search(r'\w', w)])
         
         if word_count == 1:
             if i < len(sentences) - 1:
                 # Merge with NEXT
-                combined = curr.rstrip(".!?") + ", " + sentences[i+1]
-                new_sentences.append(combined)
-                i += 2 # Skip the one we merged with
+                merged = curr.rstrip(".!?") + ", " + sentences[i+1]
+                new_sentences.append(merged)
+                i += 2
                 continue
-            elif len(new_sentences) > 0:
+            elif new_sentences:
                 # Merge with PREVIOUS (tailing single word)
                 prev = new_sentences.pop()
-                combined = prev.rstrip(".!?") + ", " + curr
-                new_sentences.append(combined)
-            else:
-                new_sentences.append(curr)
-        else:
-            new_sentences.append(curr)
+                merged = prev.rstrip(".!?") + ", " + curr
+                new_sentences.append(merged)
+                i += 1
+                continue
+        
+        new_sentences.append(curr)
         i += 1
         
     return " ".join(new_sentences)
 
 def sanitize_for_xtts(text: str) -> str:
     """
-    Advanced sanitization to prevent XTTS hallucinations (e.g., 'nahnday').
-    Based on Gemini feedback: handles smart quotes, ellipses, and non-ASCII chars.
+    Advanced sanitization specifically tuned for Coqui XTTS v2.
+    It builds on the base cleaning plus specific hallucination prevention.
     """
-    # 0. Consolidate dangerous single-word sentences first
-    text = consolidate_single_word_sentences(text)
+    # 1. Perform base TTS cleaning (includes bracket stripping and consolidation)
+    text = clean_text_for_tts(text)
 
-    # 1. Convert smart quotes to straight quotes
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    # Replace ellipses with a comma for better natural pauses without breaking the thought
-    text = text.replace('...', ', ').replace('…', ', ')
-    # Remove any non-standard characters/emojis
+    # 2. Remove any remaining non-ASCII characters that might cause hallucinations
     text = re.sub(r'[^\x00-\x7F]+', '', text) 
     # Collapse multiple spaces (but preserve newlines) and trim
     text = re.sub(r'[^\S\r\n]+', ' ', text).strip()
