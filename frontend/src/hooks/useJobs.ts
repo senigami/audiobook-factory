@@ -3,7 +3,7 @@ import type { Job } from '../types';
 import { api } from '../api';
 import { useWebSocket } from './useWebSocket';
 
-export const useJobs = () => {
+export const useJobs = (onJobComplete?: () => void) => {
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
 
@@ -34,11 +34,18 @@ export const useJobs = () => {
           return prev;
         }
 
-        const newJob = { ...prev[filename], ...updates };
+        const oldJob = prev[filename];
+        const newJob = { ...oldJob, ...updates };
+
+        // If it just finished, trigger global refresh
+        if (oldJob.status !== 'done' && newJob.status === 'done') {
+          onJobComplete?.();
+        }
+
         return { ...prev, [filename]: newJob };
       });
     }
-  }, [refreshJobs]);
+  }, [refreshJobs, onJobComplete]);
 
   const { connected } = useWebSocket('/ws', handleUpdate);
 

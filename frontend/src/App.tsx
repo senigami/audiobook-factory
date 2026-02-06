@@ -9,7 +9,7 @@ import { useInitialData } from './hooks/useInitialData';
 
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
-  const { jobs, refreshJobs } = useJobs();
+  const { jobs, refreshJobs } = useJobs(refetchHome);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
@@ -24,10 +24,10 @@ function App() {
 
   const chaptersToShow = (initialData?.chapters || []).filter(c => {
     if (!hideFinished) return true;
-    const isFinished = (initialData?.xtts_mp3 || []).includes(c) || 
-                       (initialData?.piper_mp3 || []).includes(c) || 
-                       (initialData?.xtts_wav_only || []).includes(c) || 
-                       (initialData?.piper_wav_only || []).includes(c);
+    const isFinished = (initialData?.xtts_mp3 || []).includes(c) ||
+      (initialData?.piper_mp3 || []).includes(c) ||
+      (initialData?.xtts_wav_only || []).includes(c) ||
+      (initialData?.piper_wav_only || []).includes(c);
     return !isFinished;
   });
 
@@ -36,7 +36,7 @@ function App() {
   return (
     <div className="app-container">
       <Layout sidebar={
-        <Sidebar 
+        <Sidebar
           onOpenAssembly={() => setIsAssemblyOpen(true)}
           settings={initialData?.settings}
           piperVoices={initialData?.piper_voices || []}
@@ -48,10 +48,10 @@ function App() {
           onRefresh={handleRefresh}
         />
       }>
-        <div style={{ 
-          height: '100vh', 
-          display: 'flex', 
-          flexDirection: 'column', 
+        <div style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
           padding: '2rem',
           gap: '2rem',
           minWidth: 0,
@@ -64,16 +64,16 @@ function App() {
                 {initialData?.chapters.length || 0} files ready for processing
               </p>
             </div>
-            
+
             <div className="glass-panel" style={{ display: 'flex', gap: '4px', padding: '4px' }}>
-              <button 
+              <button
                 onClick={() => setViewMode('grid')}
                 className={viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}
                 style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
               >
                 Grid
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('list')}
                 className={viewMode === 'list' ? 'btn-primary' : 'btn-ghost'}
                 style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
@@ -84,7 +84,7 @@ function App() {
           </header>
 
           <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
-            <ChapterGrid 
+            <ChapterGrid
               chapters={chaptersToShow}
               jobs={jobs}
               selectedFilename={selectedFile}
@@ -100,40 +100,40 @@ function App() {
             />
           </div>
 
-            <Panel 
-              title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
-              subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
-              logs={viewingJob?.log}
-              filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
-            />
-          </div>
-        </Layout>
+          <Panel
+            title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
+            subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
+            logs={viewingJob?.log}
+            filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
+          />
+        </div>
+      </Layout>
 
-        <AssemblyModal 
-          isOpen={isAssemblyOpen}
-          onClose={() => setIsAssemblyOpen(false)}
-          onConfirm={async (data) => {
-            const formData = new FormData();
-            formData.append('title', data.title);
-            formData.append('author', data.author);
-            formData.append('narrator', data.narrator);
-            formData.append('chapters', JSON.stringify(data.chapters));
-            
-            const resp = await fetch('/create_audiobook', { 
-              method: 'POST', 
-              body: formData 
-            });
+      <AssemblyModal
+        isOpen={isAssemblyOpen}
+        onClose={() => setIsAssemblyOpen(false)}
+        onConfirm={async (data) => {
+          const formData = new FormData();
+          formData.append('title', data.title);
+          formData.append('author', data.author);
+          formData.append('narrator', data.narrator);
+          formData.append('chapters', JSON.stringify(data.chapters));
 
-            if (resp.ok) {
-              await Promise.all([refetchHome(), refreshJobs()]);
-            } else {
-              const err = await resp.json();
-              alert(`Failed to start assembly: ${err.message || resp.statusText}`);
-            }
-          }}
-        />
-      </div>
-    );
-  }
+          const resp = await fetch('/create_audiobook', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (resp.ok) {
+            await Promise.all([refetchHome(), refreshJobs()]);
+          } else {
+            const err = await resp.json();
+            alert(`Failed to start assembly: ${err.message || resp.statusText}`);
+          }
+        }}
+      />
+    </div>
+  );
+}
 
 export default App;

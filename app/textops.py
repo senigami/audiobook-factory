@@ -73,14 +73,22 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
     return parts
 
 def safe_filename(s: str, max_len: int = 80) -> str:
+    """Removes illegal filename characters but preserves spaces for readability."""
     s = re.sub(r"[^\w\s\-:]", "", s).strip()
-    return s.replace(" ", "_")[:max_len]
+    return s[:max_len]
 
-def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter") -> List[Path]:
+def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter", include_heading: bool = True) -> List[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for chap_num, heading, body in chapters:
-        fname = out_dir / f"{prefix}_{chap_num:04}_{safe_filename(heading)}.txt"
+        if include_heading:
+            # Traditional chapter naming: [prefix]_[num]_[heading].txt
+            fname = out_dir / f"{prefix}_{chap_num:04}_{safe_filename(heading)}.txt"
+        else:
+            # Clean part naming: [OriginalFilename]_[num].txt
+            # Using 3 digits as requested (001)
+            fname = out_dir / f"{prefix}_{chap_num:03}.txt"
+            
         fname.write_text(body + "\n", encoding="utf-8")
         written.append(fname)
     return written

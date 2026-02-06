@@ -320,24 +320,16 @@ def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = 
     if mode_clean == "chapter":
         print(f"DEBUG: Splitting by chapter markers")
         chapters = split_by_chapter_markers(full_text)
-        prefix = "chapter"
         if not chapters:
             raise ValueError("No chapter markers found. Expected: Chapter 1: Title")
+        return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix="chapter", include_heading=True)
     else:
         # Default to parts for anything else
-        print(f"DEBUG: Defaulting to part splitting (current mode='{mode_clean}')")
-        existing_files = list(CHAPTER_DIR.glob("part_*.txt"))
-        max_idx = 0
-        for f in existing_files:
-            m = re.search(r"part_(\d+)", f.name)
-            if m:
-                max_idx = max(max_idx, int(m.group(1)))
+        stem = Path(filename).stem
+        print(f"DEBUG: Defaulting to part splitting (current mode='{mode_clean}') for '{stem}'")
         
-        start_idx = max_idx + 1
-        chapters = split_into_parts(full_text, max_chars, start_index=start_idx)
-        prefix = "part"
-
-    return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=prefix)
+        chapters = split_into_parts(full_text, max_chars, start_index=1)
+        return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=stem, include_heading=False)
 
 @app.post("/upload")
 async def upload(

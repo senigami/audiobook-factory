@@ -74,20 +74,23 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
 
-    // 1. Prefer explicit disk check from initialData
-    if (statusInfo?.isXttsMp3) return `/out/xtts/${stem}.mp3`;
-    if (statusInfo?.isPiperMp3) return `/out/piper/${stem}.mp3`;
-
-    // 2. If statusInfo is present and says NO MP3, believe it over stale job state
-    if (statusInfo && !statusInfo.isXttsMp3 && !statusInfo.isPiperMp3) {
-      return null;
-    }
-
-    // 3. Fallback to job record (needed if statusInfo is missing during partial re-renders)
-    if (job?.output_mp3) {
+    // 1. Trust the direct job record if it just finished (handles immediate WS updates)
+    if (job?.status === 'done' && job?.output_mp3) {
       const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
       return `${prefix}${job.output_mp3}`;
     }
+
+    // 2. Fallback to explicit disk check from initialState (good for initial page load)
+    if (statusInfo?.isXttsMp3) return `/out/xtts/${stem}.mp3`;
+    if (statusInfo?.isPiperMp3) return `/out/piper/${stem}.mp3`;
+
+    // 3. Status check for WAV (though we usually want the player for MP3)
+    // If it's a WAV-only job that is done, we could show it too, but UI usually waits for MP3
+    if (job?.status === 'done' && job?.output_wav && !job.make_mp3) {
+      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+      return `${prefix}${job.output_wav}`;
+    }
+
     return null;
   };
 
