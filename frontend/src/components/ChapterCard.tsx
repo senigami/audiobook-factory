@@ -59,6 +59,10 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     return () => clearInterval(interval);
   }, [status]);
 
+  useEffect(() => {
+    setEditedTitle(job?.custom_title || filename);
+  }, [job?.custom_title, filename]);
+
   const handleSaveTitle = async (e?: React.FormEvent) => {
     e?.preventDefault();
     e?.stopPropagation();

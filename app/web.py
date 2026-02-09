@@ -389,7 +389,16 @@ def start_xtts_queue():
             continue
 
         # Prune any old records for this chapter to prevent duplicates
-        to_del = [jid for jid, j in existing.items() if j.engine == "xtts" and j.chapter_file == c]
+        # But PRESERVE the custom title if it exists
+        existing_title = None
+        to_del = []
+        for jid, j in existing.items():
+            if j.chapter_file == c:
+                if j.custom_title:
+                    existing_title = j.custom_title
+                if j.engine == "xtts":
+                    to_del.append(jid)
+        
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
@@ -403,6 +412,7 @@ def start_xtts_queue():
             created_at=time.time(),
             safe_mode=bool(settings.get("safe_mode", True)),
             make_mp3=bool(settings.get("make_mp3", True)),
+            custom_title=existing_title
         )
         enqueue(j)
         update_job(jid, status="queued") # trigger bridge
@@ -416,21 +426,31 @@ def start_xtts_queue_get():
 @app.post("/queue/start_piper")
 def start_piper_queue(piper_voice: str = Form("")):
     settings = get_settings()
+    existing = get_jobs()
     voice = piper_voice or settings.get("default_piper_voice")
     if not voice:
         return PlainTextResponse("Select a Piper voice (or set default).", status_code=400)
 
+    active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status in ["queued", "running"]}
     for p in list_chapters():
         c = p.name
         if output_exists("piper", c):
             continue
         # Also check active to avoid duplicates if user clicks twice fast
-        active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status in ["queued", "running"]}
         if ("piper", c) in active_piper:
             continue
 
         # Prune any old records for this chapter to prevent duplicates
-        to_del = [jid for jid, j in existing.items() if j.engine == "piper" and j.chapter_file == c]
+        # But PRESERVE the custom title if it exists
+        existing_title = None
+        to_del = []
+        for jid, j in existing.items():
+            if j.chapter_file == c:
+                if j.custom_title:
+                    existing_title = j.custom_title
+                if j.engine == "piper":
+                    to_del.append(jid)
+
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
@@ -443,7 +463,8 @@ def start_piper_queue(piper_voice: str = Form("")):
             created_at=time.time(),
             safe_mode=False,
             make_mp3=bool(settings.get("make_mp3", True)),
-            piper_voice=voice
+            piper_voice=voice,
+            custom_title=existing_title
         ))
     return JSONResponse({"status": "ok", "message": "Piper queue started"})
 
@@ -811,7 +832,7 @@ def api_jobs():
         # If we already have a job record, don't override it unless it's not 'done'
         # and we find a finished file.
         existing = jobs_dict.get(c)
-        if existing and existing['status'] == 'done':
+        if existing and existing['status'] == 'done' and (existing.get('output_mp3') or existing.get('output_wav')):
             continue
             
         stem = Path(c).stem
@@ -889,20 +910,41 @@ def api_get_job(chapter_file: str):
 
 @app.post("/api/job/update_title")
 def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
-    """Updates the custom title for a specific job."""
-    from .state import get_jobs, update_job
-    jobs = get_jobs().values()
-    found = [j for j in jobs if j.chapter_file == chapter_file]
-    if not found:
-        # If no job exists yet, we should probably create one or just return error
-        # For now, if it's a known chapter file, find its discovered ID
+    """Updates the custom title for a specific job or all jobs for a chapter."""
+    from .state import get_jobs, update_job, put_job
+    import time, uuid
+    all_jobs = get_jobs()
+    
+    # 1. Update EVERY existing job for this chapter file
+    found_any = False
+    for jid, j in all_jobs.items():
+        if j.chapter_file == chapter_file:
+            update_job(jid, custom_title=new_title)
+            found_any = True
+            
+    # 2. If no jobs exist yet, create a placeholder job record so the name is saved
+    if not found_any:
+        # Check if the chapter file actually exists on disk
         if (CHAPTER_DIR / chapter_file).exists():
-            # In a real app we might want to put_job here, 
-            # but usually the user is editing an existing job record.
-            return JSONResponse({"error": "Job record not found. Please start processing first."}, status_code=404)
+            jid = uuid.uuid4().hex[:12]
+            # Create a stub job. We'll mark it as 'done' but with no output files,
+            # or just leave it 'queued' without actually enqueuing it.
+            # api_jobs will pick this up and show the custom_title.
+            j = Job(
+                id=jid,
+                engine="xtts", # Default engine for the record
+                chapter_file=chapter_file,
+                status="done", 
+                created_at=time.time(),
+                custom_title=new_title,
+                log="Job record created to store custom title."
+            )
+            put_job(j)
+            found_any = True
+
+    if not found_any:
         return JSONResponse({"error": "Chapter not found."}, status_code=404)
     
-    update_job(found[0].id, custom_title=new_title)
     return JSONResponse({"status": "success", "custom_title": new_title})
 
 @app.post("/queue/clear")

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Job } from '../types';
 import { api } from '../api';
 import { useWebSocket } from './useWebSocket';
@@ -6,6 +6,7 @@ import { useWebSocket } from './useWebSocket';
 export const useJobs = (onJobComplete?: () => void) => {
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
+  const prevJobsRef = useRef<Record<string, Job>>({});
 
   const refreshJobs = useCallback(async () => {
     try {
@@ -14,6 +15,7 @@ export const useJobs = (onJobComplete?: () => void) => {
         acc[job.chapter_file] = job;
         return acc;
       }, {} as Record<string, Job>);
+
       setJobs(jobMap);
     } catch (e) {
       console.error('Failed to refresh jobs', e);
@@ -37,17 +39,26 @@ export const useJobs = (onJobComplete?: () => void) => {
         const oldJob = prev[filename];
         const newJob = { ...oldJob, ...updates };
 
-        // If it just finished, trigger global refresh
-        if (oldJob.status !== 'done' && newJob.status === 'done') {
-          onJobComplete?.();
-        }
-
         return { ...prev, [filename]: newJob };
       });
     }
-  }, [refreshJobs, onJobComplete]);
+  }, [refreshJobs]);
 
   const { connected } = useWebSocket('/ws', handleUpdate);
+
+  // Monitor jobs for completions to trigger global data refresh
+  useEffect(() => {
+    const hasNewCompletion = Object.values(jobs).some(j => {
+      // Find this job in a ref of previous jobs to see if it just finished
+      const wasDone = prevJobsRef.current[j.chapter_file]?.status === 'done';
+      return !wasDone && j.status === 'done';
+    });
+
+    if (hasNewCompletion) {
+      onJobComplete?.();
+    }
+    prevJobsRef.current = jobs;
+  }, [jobs, onJobComplete]);
 
   useEffect(() => {
     refreshJobs();
