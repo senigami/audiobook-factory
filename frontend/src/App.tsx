@@ -19,7 +19,11 @@ function App() {
     await Promise.all([refetchHome(), refreshJobs()]);
   };
 
-  const activeJob = Object.values(jobs).find(j => j.status === 'running');
+  // Prioritize audiobook engine for the "active" job to ensure it shows in the Panel
+  const runningJobs = Object.values(jobs).filter(j => j.status === 'running' || j.status === 'queued');
+  const activeJob = runningJobs.find(j => j.engine === 'audiobook') || runningJobs[0];
+
+  const audiobookJob = Object.values(jobs).find(j => j.engine === 'audiobook' && (j.status === 'running' || j.status === 'queued'));
   const viewingJob = selectedFile ? jobs[selectedFile] : activeJob;
 
   const chaptersToShow = (initialData?.chapters || []).filter(c => {
@@ -46,6 +50,7 @@ function App() {
           hideFinished={hideFinished}
           onToggleHideFinished={() => setHideFinished(!hideFinished)}
           onRefresh={handleRefresh}
+          audiobookJob={audiobookJob}
         />
       }>
         <div style={{
@@ -105,6 +110,10 @@ function App() {
             subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
             logs={viewingJob?.log}
             filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
+            progress={viewingJob?.progress}
+            status={viewingJob?.status}
+            startedAt={viewingJob?.started_at}
+            etaSeconds={viewingJob?.eta_seconds}
           />
         </div>
       </Layout>

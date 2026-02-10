@@ -110,8 +110,9 @@ def cleanup_and_reconcile():
             if j.chapter_file not in chapters_disk:
                 stale_ids.append(jid)
         else:
-            # For audiobooks, if the m4b is gone, it's stale
-            if not (AUDIOBOOK_DIR / f"{j.chapter_file}.m4b").exists():
+            # For audiobooks, if the m4b is gone AND it's marked done, it's stale.
+            # Do NOT prune queued or running jobs just because the file isn't there yet!
+            if j.status == "done" and not (AUDIOBOOK_DIR / f"{j.chapter_file}.m4b").exists():
                 stale_ids.append(jid)
     
     if stale_ids:
@@ -123,6 +124,9 @@ def cleanup_and_reconcile():
     reset_ids = []
     for jid, j in all_jobs.items():
         if j.status == "done":
+            if j.engine == "audiobook":
+                continue # Audiobook pruning is handled in Part 1
+            
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
             # However, if the WAV exists but MP3 is missing, we don't necessarily want to 

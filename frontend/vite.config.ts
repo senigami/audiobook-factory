@@ -12,8 +12,9 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ws': {
-        target: 'http://127.0.0.1:8123',
+        target: 'ws://127.0.0.1:8123',
         ws: true,
+        changeOrigin: true,
       },
       '/out': {
         target: 'http://127.0.0.1:8123',

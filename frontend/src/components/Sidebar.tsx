@@ -1,6 +1,6 @@
 import React from 'react';
-import { Play, Mic, Terminal, Settings, Package, Upload, Pause, Trash2, FileAudio, CheckCircle, RefreshCw, Search } from 'lucide-react';
-import type { Settings as GlobalSettings } from '../types';
+import { Play, Mic, Terminal, Settings, Package, Upload, Pause, Trash2, FileAudio, CheckCircle, RefreshCw, Search, Loader2 } from 'lucide-react';
+import type { Settings as GlobalSettings, Job } from '../types';
 
 interface SidebarProps {
   onOpenAssembly: () => void;
@@ -12,29 +12,56 @@ interface SidebarProps {
   hideFinished: boolean;
   onToggleHideFinished: () => void;
   onRefresh: () => void;
+  audiobookJob?: Job;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  onOpenAssembly, 
-  settings, 
-  piperVoices, 
-  audiobooks, 
-  paused, 
+export const Sidebar: React.FC<SidebarProps> = ({
+  onOpenAssembly,
+  settings,
+  piperVoices,
+  audiobooks,
+  paused,
   narratorOk,
   hideFinished,
   onToggleHideFinished,
-  onRefresh
+  onRefresh,
+  audiobookJob
 }) => {
   const [selectedVoice, setSelectedVoice] = React.useState('');
+  const [now, setNow] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getRemainingAndProgress = (job: Job) => {
+    if (job.status !== 'running' || !job.started_at || !job.eta_seconds) {
+      return { remaining: null, progress: job.progress || 0 };
+    }
+    const elapsed = (now / 1000) - job.started_at;
+    const remaining = Math.max(0, Math.floor(job.eta_seconds - elapsed));
+    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
+    return {
+      remaining,
+      progress: Math.max(job.progress || 0, timeProgress)
+    };
+  };
+
+  const formatSeconds = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
 
   const handleStartQueue = async (engine: 'xtts' | 'piper') => {
     const endpoint = engine === 'xtts' ? '/queue/start_xtts' : '/queue/start_piper';
     const body = engine === 'piper' ? new URLSearchParams({ piper_voice: selectedVoice }) : undefined;
     try {
-      await fetch(endpoint, { 
-        method: 'POST', 
+      await fetch(endpoint, {
+        method: 'POST',
         headers: engine === 'piper' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {},
-        body 
+        body
       });
       onRefresh();
     } catch (e) {
@@ -63,10 +90,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleBackfill = async () => {
     try {
-        await fetch('/queue/backfill_mp3', { method: 'POST' });
-        onRefresh();
+      await fetch('/queue/backfill_mp3', { method: 'POST' });
+      onRefresh();
     } catch (e) {
-        console.error('Backfill failed', e);
+      console.error('Backfill failed', e);
     }
   };
 
@@ -122,25 +149,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </h3>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button 
+            <button
               onClick={() => handleStartQueue('xtts')}
-              className="btn-glass" 
+              className="btn-glass"
               disabled={paused}
               style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               <Play size={14} /> Start XTTS Queue
             </button>
-            
+
             <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <select 
-                value={selectedVoice} 
+              <select
+                value={selectedVoice}
                 onChange={e => setSelectedVoice(e.target.value)}
                 style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: '#fff', fontSize: '0.75rem', padding: '6px', borderRadius: '4px' }}
               >
                 <option value="">(Piper Voice)</option>
                 {piperVoices.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
-              <button 
+              <button
                 onClick={() => handleStartQueue('piper')}
                 className="btn-ghost"
                 disabled={paused || !selectedVoice}
@@ -150,9 +177,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            <button 
+            <button
               onClick={handlePauseToggle}
-              className="btn-glass" 
+              className="btn-glass"
               style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               {paused ? <Play size={14} /> : <Pause size={14} />} {paused ? 'Resume Queue' : 'Pause Queue'}
@@ -168,17 +195,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </h3>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button 
+            <button
               onClick={onOpenAssembly}
-              className="btn-primary" 
+              className="btn-primary"
               style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               <Package size={14} /> Assemble M4B
             </button>
+
+            {audiobookJob && (audiobookJob.status === 'running' || audiobookJob.status === 'queued') && (() => {
+              const { remaining, progress } = getRemainingAndProgress(audiobookJob);
+              return (
+                <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Loader2 size={12} className={audiobookJob.status === 'running' ? 'animate-spin' : ''} />
+                      {audiobookJob.status === 'running' ? 'Assembling...' : 'Queued...'}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      {audiobookJob.status === 'running'
+                        ? (remaining !== null ? `ETA: ${formatSeconds(remaining)}` : `ETA: ${audiobookJob.eta_seconds}s`)
+                        : 'Waiting...'}
+                    </span>
+                  </div>
+                  <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div
+                      className="progress-bar-animated"
+                      style={{
+                        height: '100%',
+                        width: `${Math.max(progress, 0.05) * 100}%`,
+                        backgroundColor: 'var(--accent)',
+                        transition: 'width 1s linear'
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {audiobookJob.chapter_file}
+                  </span>
+                </div>
+              );
+            })()}
+
             {audiobooks.map(b => (
-                <a key={b} href={`/out/audiobook/${b}`} download className="glass-panel" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <FileAudio size={12} /> {b}
-                </a>
+              <a key={b} href={`/out/audiobook/${b}`} download className="glass-panel" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileAudio size={12} /> {b}
+              </a>
             ))}
           </div>
         </section>
@@ -191,38 +252,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </h3>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button 
+            <button
               onClick={onToggleHideFinished}
               className="btn-glass"
               style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', color: hideFinished ? 'var(--accent)' : 'inherit' }}
             >
               <CheckCircle size={14} /> {hideFinished ? 'Show Finished' : 'Hide Finished'}
             </button>
-            <button 
-                onClick={handleBackfill}
-                className="btn-glass"
-                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
+            <button
+              onClick={handleBackfill}
+              className="btn-glass"
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
-                <RefreshCw size={14} /> Resolve Missing MP3s
+              <RefreshCw size={14} /> Resolve Missing MP3s
             </button>
-            <a 
-                href="/analyze_batch"
-                className="btn-glass"
-                style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)' }}
+            <a
+              href="/analyze_batch"
+              className="btn-glass"
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)' }}
             >
-                <Search size={14} /> Run Batch Analysis
+              <Search size={14} /> Run Batch Analysis
             </a>
-            
+
             <div style={{ padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                  <input type="checkbox" readOnly checked={!!settings?.safe_mode} /> Safe Mode
-                </label>
-                <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                  <input type="checkbox" readOnly checked={!!settings?.make_mp3} /> Make MP3
-                </label>
+              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <input type="checkbox" readOnly checked={!!settings?.safe_mode} /> Safe Mode
+              </label>
+              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <input type="checkbox" readOnly checked={!!settings?.make_mp3} /> Make MP3
+              </label>
             </div>
 
-            <button 
+            <button
               onClick={handleClear}
               className="btn-ghost"
               style={{ color: 'var(--error)', fontSize: '0.8rem', textAlign: 'left', padding: '0.5rem 0' }}
