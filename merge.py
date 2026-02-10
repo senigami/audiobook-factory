@@ -3,11 +3,25 @@ import re
 
 def merge_files(input_folder):
     # 1. Get all .txt files
-    files = [f for f in os.listdir(input_folder) if f.endswith('.txt')]
+    # Ensure they are files (not directories) and match the extension
+    files = [f for f in os.listdir(input_folder) 
+             if f.endswith('.txt') and os.path.isfile(os.path.join(input_folder, f))]
     
     if not files:
-        print(f"No .txt files found in '{input_folder}'.")
-        return
+        # If no .txt files, check for subfolders
+        subfolders = [d for d in os.listdir(input_folder) 
+                      if os.path.isdir(os.path.join(input_folder, d))]
+        
+        if subfolders:
+            print(f"No .txt files found in '{input_folder}'. Found {len(subfolders)} subfolders. Processing each...")
+            for sub in sorted(subfolders):
+                sub_path = os.path.join(input_folder, sub)
+                print(f"\n>>> Processing subfolder: {sub}")
+                merge_files(sub_path)
+            return
+        else:
+            print(f"No .txt files or subfolders found in '{input_folder}'.")
+            return
 
     # 2. Precision Extraction for chapter_XXXX.txt
     def extract_number(filename):
