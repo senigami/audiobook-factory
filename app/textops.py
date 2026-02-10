@@ -119,10 +119,11 @@ def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str
                     if not buf:
                         buf = chunk
                     elif len(buf) + 1 + len(chunk) <= target:
-                        buf = (buf + " " + chunk).strip()
+                        connector = "" if chunk[0] in ",;:" else " "
+                        buf = (buf + connector + chunk).strip()
                     else:
                         out.append(buf.rstrip(" .") + ".")
-                        buf = chunk
+                        buf = chunk.lstrip(",; ")
                 if buf:
                     out.append(buf.rstrip(" .") + ".")
                 if max(len(x) for x in out) < len(s):
@@ -173,6 +174,10 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
     # Collapse multiple spaces
     text = re.sub(r' +', ' ', text)
+    # Remove spaces before punctuation
+    text = re.sub(r' +([,;:])', r'\1', text)
+    # Fix artifacts like ".," or ".;" created by sentence splitting
+    text = text.replace(".,", ",").replace(".;", ";").replace(". :", ":")
     
     # Consolidate single-word sentences (like "Wait!" or "Move!") with neighbors
     text = consolidate_single_word_sentences(text.strip())
@@ -250,7 +255,8 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
     
     for line in lines:
         if current_chunk and len(current_chunk) + 1 + len(line) <= limit:
-            current_chunk += " " + line
+            connector = "" if line[0] in ",;:" else " "
+            current_chunk += connector + line
         elif not current_chunk and len(line) <= limit:
             current_chunk = line
         else:
