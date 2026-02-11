@@ -2,11 +2,11 @@
 TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
 -----------------------------------------------
 1. INGESTION (split_by_chapter_markers / split_into_parts)
-   - [preprocess_text] Strips square brackets [] and braces {} early to avoid meta-text speech.
+   - [preprocess_text] Strips brackets [], braces {}, and parentheses () early.
 
 2. SANITIZATION (sanitize_for_xtts)
    - Step A: [clean_text_for_tts]
-     - Smart Quote Normalization (“”‘’ -> " ')
+     - Smart Quote Normalization (“”‘’ -> " ') and stripping of standard quotes.
      - Pacing/Punctuation: Dashes and Ellipses (— – ... … -> . )
      - Artifact Cleanup: Fixes redundant patterns like ".' ." or "'. "
      - Spacing: Ensures space after .!?, and removes space before ,;:
@@ -40,7 +40,10 @@ def preprocess_text(text: str) -> str:
     """Foundational cleaning to remove unspoken characters before splitting or analysis."""
     if not text:
         return ""
-    return text.replace("[", "").replace("]", "").replace("{", "").replace("}", "")
+    # Strip brackets, braces, and parentheses
+    for char in "[]{}()":
+        text = text.replace(char, "")
+    return text
 
 def split_by_chapter_markers(full_text: str) -> List[Tuple[int, str, str]]:
     full_text = preprocess_text(full_text)
@@ -200,8 +203,9 @@ def clean_text_for_tts(text: str) -> str:
     # Remove unspoken formatting characters at the absolute start
     text = preprocess_text(text)
     
-    # Handle smart quotes
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
+    # Handle smart quotes and then strip all quotes (standard and normalized)
+    text = text.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
+    text = text.replace('"', '')
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
     text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
     
@@ -240,12 +244,14 @@ def consolidate_single_word_sentences(text: str) -> str:
         
         if word_count == 1:
             if i < len(sentences) - 1:
-                # Convert terminal punctuation to comma to merge with next
+                # Merge with NEXT (favored)
+                # Convert terminal punctuation to comma to merge with next in rejoining phase
                 new_sentences.append(curr.rstrip(".!?") + ",")
             elif new_sentences:
-                # Tailing single word: merge with previous
+                # Last resort: merge with PREVIOUS
                 prev = new_sentences.pop()
-                # Ensure we don't end up with double commas if prev was also a single word
+                # Clean up prev if it already ends in a comma from a forward merge
+                # then merge with a comma
                 new_sentences.append(prev.rstrip(".!?,") + ", " + curr)
             else:
                 new_sentences.append(curr)
@@ -267,8 +273,9 @@ def sanitize_for_xtts(text: str) -> str:
     # Collapse multiple spaces (but preserve newlines) and trim
     text = re.sub(r'[^\S\r\n]+', ' ', text).strip()
     
-    # Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
-    if text and not text[-1] in ".!?":
+    # 3. Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
+    # Use regex to check for end-of-sentence punctuation even if followed by quotes/parens
+    if text and not re.search(r'[.!?]["\')\]\s]*$', text):
         text += "."
         
     return text
