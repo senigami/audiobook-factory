@@ -285,8 +285,8 @@ def worker_loop():
                     last_p = getattr(j, '_last_broadcast_p', 0.0)
                     
                     # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
-                    if (prog - last_p >= 0.01) or (now - last_b >= 10.0):
-                        prog = round(prog, 4)
+                    if (prog - last_p >= 0.01) or (now - last_b >= 30.0):
+                        prog = round(prog, 2)
                         j.progress = prog
                         j._last_broadcast_time = now
                         j._last_broadcast_p = prog
@@ -314,7 +314,7 @@ def worker_loop():
                 is_progress_line = progress_match and "|" in s
                 if is_progress_line:
                     try:
-                        p_val = round(int(progress_match.group(1)) / 100.0, 4)
+                        p_val = round(int(progress_match.group(1)) / 100.0, 2)
                         current_p = getattr(j, 'progress', 0.0)
                         if p_val > current_p:
                             # Note: we don't update j.progress here, we let the consolidated broadcast handle it
@@ -351,7 +351,7 @@ def worker_loop():
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
                     new_val = min(0.98, max(current_p, elapsed / max(1, eta)))
-                    new_progress = round(new_val, 4)
+                    new_progress = round(new_val, 2)
                 
                 # Check threshold against last broadcast
                 include_progress = (abs(new_progress - broadcast_p) >= 0.01) or (broadcast_p == 0 and new_progress > 0)
