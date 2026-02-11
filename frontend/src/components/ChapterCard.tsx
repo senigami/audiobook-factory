@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 
@@ -46,8 +46,16 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [now, setNow] = useState(Date.now());
+  const [showMenu, setShowMenu] = useState(false);
 
   const status = job?.status || 'queued';
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const close = () => setShowMenu(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [showMenu]);
 
   // Custom label logic for "Finishing" state
   const getDisplayConfig = () => {
@@ -213,11 +221,82 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-          <Icon size={14} color={config.color} />
-          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: config.color, textTransform: 'uppercase' }}>
-            {config.label}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Icon size={14} color={config.color} />
+            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: config.color, textTransform: 'uppercase' }}>
+              {config.label}
+            </span>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              className="btn-ghost"
+              style={{ padding: '2px', color: 'var(--text-muted)' }}
+              title="More options"
+            >
+              <MoreVertical size={14} />
+            </button>
+
+            {showMenu && (
+              <div
+                className="glass-panel"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  zIndex: 100,
+                  minWidth: '150px',
+                  padding: '4px',
+                  marginTop: '4px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)'
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  onClick={async () => {
+                    setShowMenu(false);
+                    if (confirm(`Reset audio for ${filename}? This will delete generated WAV/MP3 files and reset status, but keep the text file.`)) {
+                      try {
+                        await api.resetChapter(filename);
+                        onRefresh?.();
+                      } catch (err) {
+                        console.error('Reset failed', err);
+                      }
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start' }}
+                  title="Delete generated audio files and reset chapter status"
+                >
+                  <Music size={12} /> Reset Audio
+                </button>
+                <button
+                  onClick={async () => {
+                    setShowMenu(false);
+                    if (confirm(`DELETE CHAPTER ${filename} permanently? This deletes the text file AND all audio files.`)) {
+                      try {
+                        await api.deleteChapter(filename);
+                        onRefresh?.();
+                      } catch (err) {
+                        console.error('Delete failed', err);
+                      }
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', justifyContent: 'flex-start' }}
+                  title="Permanently delete the chapter text file and all generated audio"
+                >
+                  <Trash2 size={12} /> Delete Chapter
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

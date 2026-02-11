@@ -606,6 +606,79 @@ def cancel(job_id: str = Form(...)):
     cancel_job(job_id)
     return JSONResponse({"status": "ok", "message": f"Job {job_id} cancelled"})
 
+@app.delete("/api/audiobook/{filename}")
+def delete_audiobook(filename: str):
+    path = AUDIOBOOK_DIR / filename
+    if path.exists():
+        path.unlink()
+        return JSONResponse({"status": "ok", "message": f"Deleted {filename}"})
+    return JSONResponse({"status": "error", "message": "File not found"}, status_code=404)
+
+@app.post("/api/chapter/reset")
+def reset_chapter(chapter_file: str = Form(...)):
+    existing = get_jobs()
+    stem = Path(chapter_file).stem
+    
+    # 1. Stop any running jobs and delete files
+    for jid, j in existing.items():
+        if j.chapter_file == chapter_file:
+            cancel_job(jid)
+            
+    # 2. Delete files on disk
+    count = 0
+    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+        for ext in [".wav", ".mp3"]:
+            f = d / f"{stem}{ext}"
+            if f.exists():
+                f.unlink()
+                count += 1
+                
+    # 3. Update job records to 'cancelled' so they don't auto-start
+    # but preserve custom titles etc.
+    for jid, j in existing.items():
+        if j.chapter_file == chapter_file:
+            update_job(jid, 
+                       status="cancelled", 
+                       progress=0.0, 
+                       output_wav=None, 
+                       output_mp3=None,
+                       log="Audio reset by user.",
+                       error=None,
+                       warning_count=0)
+                       
+    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
+
+@app.delete("/api/chapter/{filename}")
+def delete_chapter(filename: str):
+    path = CHAPTER_DIR / filename
+    stem = path.stem
+    
+    # 1. Delete audio files
+    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+        for ext in [".wav", ".mp3"]:
+            f = d / f"{stem}{ext}"
+            if f.exists():
+                f.unlink()
+                
+    # 2. Delete job records
+    existing = get_jobs()
+    to_del = []
+    for jid, j in existing.items():
+        if j.chapter_file == filename:
+            cancel_job(jid)
+            to_del.append(jid)
+    
+    if to_del:
+        from .state import delete_jobs
+        delete_jobs(to_del)
+        
+    # 3. Delete text file
+    if path.exists():
+        path.unlink()
+        return JSONResponse({"status": "ok", "message": f"Deleted chapter {filename}"})
+        
+    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
 @app.post("/analyze_long")
 def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     if not chapter_file:

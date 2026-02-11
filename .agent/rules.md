@@ -12,3 +12,13 @@ These rules apply to all development activities in this repository.
 - Run `pytest` after any backend or logic changes.
 - Run frontend build/tests (if applicable) after any UI changes.
 - Document verification results in the task walkthrough.
+
+## 3. Progress & State Consistency
+- **Rounding Rule**: All progress values sent via WebSocket must be rounded to exactly 2 decimal places (whole percentages).
+- **Milestone Thresholds**: Only broadcast progress updates when the value advances by at least 1% (0.01) to minimize network noise.
+- **Clean Slate Protocol**: When a job is re-queued, reset, or recovered on startup, all metadata (logs, progress, timestamps, warning counts) MUST be wiped to prevent "98% stalls" or stale UI.
+- **Disk as Source of Truth**: The UI (`ChapterCard`) must prioritize actual disk checks (is the file really there?) over potentially stale job status records.
+
+## 4. Technical Environment
+- **Virtual Environments**: Always execute backend tools (like `pytest`) using the local `./venv`.
+- **Worker Synchronization**: When updating `j` objects in worker threads, immediately follow up with `update_job` to ensure the WebSocket bridge transmits the change to the frontend.

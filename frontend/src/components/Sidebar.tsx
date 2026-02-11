@@ -247,9 +247,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })()}
 
             {audiobooks.map(b => (
-              <a key={b} href={`/out/audiobook/${b}`} download className="glass-panel" style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <FileAudio size={12} /> {b}
-              </a>
+              <div key={b} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <a href={`/out/audiobook/${b}`} download className="glass-panel" style={{ flex: 1, padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileAudio size={12} /> {b}
+                </a>
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (confirm(`Delete ${b}?`)) {
+                      await fetch(`/api/audiobook/${encodeURIComponent(b)}`, { method: 'DELETE' });
+                      onRefresh();
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{ padding: '0.4rem', color: 'var(--text-muted)' }}
+                  title="Delete Audiobook"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
             ))}
           </div>
         </section>
