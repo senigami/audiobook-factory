@@ -3,6 +3,8 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
 -----------------------------------------------
 1. INGESTION (split_by_chapter_markers / split_into_parts)
    - [preprocess_text] Strips brackets [], braces {}, and parentheses () early.
+   - [clean_text_for_tts] (Part of Sanitization, but happens before split)
+     - Normalizes acronyms/initials (A.B.C. -> A B C).
 
 2. SANITIZATION (sanitize_for_xtts)
    - Step A: [clean_text_for_tts]
@@ -191,12 +193,13 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 
 # --- ORDER OF OPERATIONS FOR CREATING SAFE TEXT ---
 # 1. Preprocess: Remove unspoken formatting/bracket characters [ ] { }.
-# 2. Normalize Quotes: Convert smart quotes (“ ” ‘ ’) to standard ASCII quotes.
-# 3. Pacing: Convert dashes (— –) and ellipses (…) to commas/dashes for better TTS flow.
-# 4. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
-# 5. Spacing: Fix spacing around punctuation (ensure space after .!?, remove space before ,;:).
-# 6. Sentence Integrity: Repair artifacts like ".," or ".;" potentially introduced by splitting.
-# 7. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
+# 2. Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
+# 3. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+# 4. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
+# 5. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+# 6. Spacing: Ensures space after .!?, and removes space before ,;:.
+# 7. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
+# 8. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
 
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
@@ -206,6 +209,10 @@ def clean_text_for_tts(text: str) -> str:
     # Handle smart quotes and then strip all quotes (standard and normalized)
     text = text.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
     text = text.replace('"', '')
+    
+    # Normalize acronyms/initials: A.B.C. -> A B C
+    # This ensures "A.B.C." isn't split into 4 sentences and is read correctly.
+    text = re.sub(r'\b([A-Za-z])\.', r'\1 ', text)
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
     text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
     
