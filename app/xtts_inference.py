@@ -33,36 +33,52 @@ def main():
     original_stderr = sys.stderr
     try:
         from TTS.api import TTS
-        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to(device)
     finally:
         sys.stderr = original_stderr
 
     # Note: inference_stream is more stable for long text as it forces chunk-based processing
     # even if we are saving to a single file.
     
-    print(f"Synthesizing to {args.out_path} using streaming mode...")
+    print(f"Synthesizing to {args.out_path}...", file=sys.stderr)
     
-    # We use tts_to_file but with optimized parameters 
-    # Actually, if we want TRUE streaming logic as per Gemini feedback, 
-    # we might want to feed text by sentence or use the internal inference_stream.
-    # However, tts_to_file with split_sentences=True (default) is very similar 
-    # to what most users mean by 'streaming' (sentence-by-sentence).
-    
-    # Let's use the most stable approach: tts_to_file with specific kwargs
-    print(f"Debug: text='{args.text}'", file=sys.stderr)
-    print(f"Debug: speaker_wav='{args.speaker_wav}'", file=sys.stderr)
-    print(f"Debug: out_path='{args.out_path}'", file=sys.stderr)
-
     try:
-        tts.tts_to_file(
-            text=args.text,
-            speaker_wav=args.speaker_wav,
-            language=args.language,
-            file_path=args.out_path,
-            split_sentences=True,
-            repetition_penalty=args.repetition_penalty,
-            temperature=args.temperature,
-        )
+        from tqdm import tqdm
+        
+        # Split text into sentences for granular progress
+        if hasattr(tts, 'synthesizer') and hasattr(tts.synthesizer, 'split_into_sentences'):
+            sentences = tts.synthesizer.split_into_sentences(args.text)
+        elif hasattr(tts, 'tts_tokenizer'):
+            sentences = tts.tts_tokenizer.split_sentences(args.text)
+        else:
+            # Fallback if tokenizer not exposed as expected
+            sentences = [args.text]
+            
+        print(f"Total sentences to process: {len(sentences)}", file=sys.stderr)
+        
+        all_wav_chunks = []
+        
+        # tqdm progress bar that jobs.py can parse (it looks for "XX%|")
+        with tqdm(total=len(sentences), unit="sent", desc="Synthesizing", file=sys.stderr) as pbar:
+            for i, sentence in enumerate(sentences):
+                # We use tts() which returns a list of floats
+                wav_chunk = tts.tts(
+                    text=sentence,
+                    speaker_wav=args.speaker_wav,
+                    language=args.language,
+                    repetition_penalty=args.repetition_penalty,
+                    temperature=args.temperature,
+                )
+                all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                pbar.update(1)
+        
+        if all_wav_chunks:
+            # Concatenate all chunks
+            final_wav = torch.cat(all_wav_chunks, dim=0)
+            # XTTS v2 uses 24kHz sample rate
+            torchaudio.save(args.out_path, final_wav.unsqueeze(0), 24000)
+            print(f"Effectively synthesized {len(sentences)} sentences.", file=sys.stderr)
+        
     except Exception as e:
         print(f"\n[CRITICAL ERROR] XTTS failed: {str(e)}", file=sys.stderr)
         import traceback

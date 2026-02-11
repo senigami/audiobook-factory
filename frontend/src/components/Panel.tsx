@@ -54,11 +54,21 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename, p
             return { remaining: null, localProgress: progress || 0 };
         }
         const elapsed = (now / 1000) - startedAt;
-        const remaining = Math.max(0, Math.floor(etaSeconds - elapsed));
         const timeProgress = Math.min(0.99, elapsed / etaSeconds);
+        const currentProgress = Math.max(progress || 0, timeProgress);
+
+        // Weighted ETA Blend:
+        // We transition from the static prediction to the real-time projection
+        // as progress moves from 0% to 25%. This smooths out the 'model loading' lag.
+        const blend = Math.min(1.0, currentProgress / 0.25);
+        const estimatedRemaining = Math.max(0, etaSeconds - elapsed);
+        const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
+
+        const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
+
         return {
-            remaining,
-            localProgress: Math.max(progress || 0, timeProgress)
+            remaining: Math.max(0, Math.floor(refinedRemaining)),
+            localProgress: currentProgress
         };
     };
 

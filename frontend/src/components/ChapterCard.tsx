@@ -103,11 +103,21 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
       return { remaining: null, localProgress: job?.progress || 0 };
     }
     const elapsed = (now / 1000) - job.started_at;
-    const remaining = Math.max(0, Math.floor(job.eta_seconds - elapsed));
     const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
+    const currentProgress = Math.max(job.progress || 0, timeProgress);
+
+    // Weighted ETA Blend:
+    // We transition from the static prediction to the real-time projection
+    // as progress moves from 0% to 25%. This smooths out the 'model loading' lag.
+    const blend = Math.min(1.0, currentProgress / 0.25);
+    const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
+    const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
+
+    const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
+
     return {
-      remaining,
-      localProgress: Math.max(job.progress || 0, timeProgress)
+      remaining: Math.max(0, Math.floor(refinedRemaining)),
+      localProgress: currentProgress
     };
   };
 

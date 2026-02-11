@@ -21,8 +21,22 @@ def terminate_all_subprocesses():
     _active_processes.clear()
 
 def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    import time, selectors
+    proc = subprocess.Popen(
+        cmd, shell=True, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT, 
+        text=True,
+        bufsize=0 # Unbuffered
+    )
     _active_processes.add(proc)
+    
+    sel = selectors.DefaultSelector()
+    sel.register(proc.stdout, selectors.EVENT_READ)
+    
+    buffer = ""
+    last_heartbeat = time.time()
+    
     try:
         while True:
             if cancel_check():
@@ -33,16 +47,41 @@ def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
                     proc.kill()
                 return 1
 
-            line = proc.stdout.readline() if proc.stdout else ""
-            if line:
-                on_output(line)
-
-            if proc.poll() is not None:
-                rest = proc.stdout.read() if proc.stdout else ""
-                if rest:
-                    on_output(rest)
-                return proc.returncode or 0
+            # Check for output with a timeout to allow heartbeats
+            events = sel.select(timeout=0.1)
+            if events:
+                char = proc.stdout.read(1)
+                if char:
+                    buffer += char
+                    if char in ('\n', '\r'):
+                        on_output(buffer)
+                        buffer = ""
+                        last_heartbeat = time.time() # Activity is a heartbeat
+                else:
+                    # EOF
+                    if proc.poll() is not None:
+                        break
+            else:
+                # No data: period check for heartbeat or process exit
+                if time.time() - last_heartbeat >= 1.0:
+                    on_output("") # Send empty tick to run_cmd_stream caller
+                    last_heartbeat = time.time()
+                
+                if proc.poll() is not None:
+                    break
+        
+        # Final flush
+        if buffer:
+            on_output(buffer)
+        
+        # Consume any remaining output
+        rest = proc.stdout.read()
+        if rest:
+            on_output(rest)
+            
+        return proc.returncode or 0
     finally:
+        sel.close()
         if proc in _active_processes:
             _active_processes.remove(proc)
 

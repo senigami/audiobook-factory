@@ -1,4 +1,4 @@
-import queue, threading, time, traceback, os
+import queue, threading, time, traceback, os, re
 from pathlib import Path
 from typing import Dict
 
@@ -249,49 +249,89 @@ def worker_loop():
             start = time.time()
 
             def on_output(line: str):
-                # Filter out noisy lines provided by XTTS/Piper
                 s = line.strip()
-                if not s: return
+                now = time.time()
+                elapsed = now - start
                 
-                # Filter out synthesis progress/text logs
-                # Coqui XTTS typically prefixes synthesis text with ' > ' or wraps lists in []
+                # We'll use these to track if we need to broadcast an update
+                new_progress = None
+                new_log = None
+                
+                if not s:
+                    # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
+                    current_p = getattr(j, 'progress', 0.0)
+                    prog = min(0.98, max(current_p, elapsed / max(1, eta)))
+                    
+                    last_b = getattr(j, '_last_broadcast_time', 0)
+                    if (prog - current_p >= 0.01) or (now - last_b >= 5.0):
+                        j.progress = prog
+                        j._last_broadcast_time = now
+                        update_job(jid, progress=prog)
+                    return
+                
+                # 1. Filter out noisy lines provided by XTTS/Piper
                 if s.startswith("> Text"): return
                 if s.startswith("> Processing sentence:"): return
-                
-                # Raw Python list output (often occurs if the command output is verbose)
                 if s.startswith("['") or s.startswith('["'): return
                 if s.endswith("']") or s.endswith('"]'): return
                 if s.startswith("'") and s.endswith("',"): return # Middle of a list
                 if s.startswith('"') and s.endswith('",'): return # Middle of a list
-                
-                # Filter out noisy metadata/warnings we don't need
                 if "pkg_resources is deprecated" in s: return
                 if "Using model:" in s: return
                 if "already downloaded" in s: return
                 if "futurewarning" in s.lower(): return
                 if "loading model" in s.lower(): return
                 if "tensorboard" in s.lower(): return
+                if "processing time" in s.lower(): return
+                if "real-time factor" in s.lower(): return
                 
-                # Track long sentence warnings as job alerts
-                if "exceeds the character limit of 250" in s:
-                    # Update warning count in state
-                    current_warnings = getattr(j, 'warning_count', 0) + 1
-                    j.warning_count = current_warnings
-                    update_job(jid, warning_count=current_warnings)
+                # 2. Extract Progress from tqdm if present
+                progress_match = re.search(r'(\d+)%', s)
+                is_progress_line = progress_match and "|" in s
+                if is_progress_line:
+                    try:
+                        p_val = int(progress_match.group(1)) / 100.0
+                        current_p = getattr(j, 'progress', 0.0)
+                        if p_val > current_p:
+                            j.progress = p_val
+                            new_progress = p_val
+                    except:
+                        pass
+                
+                # 3. Handle logs (only if not strictly progress, or if desired in logs)
+                # If it's a progress line, we skip adding it to terminal logs to keep them clean
+                # unless it contains other useful info (rare for tqdm).
+                if not is_progress_line:
+                    # Track long sentence warnings as job alerts
+                    if "exceeds the character limit of 250" in s:
+                        current_warnings = getattr(j, 'warning_count', 0) + 1
+                        j.warning_count = current_warnings
+                        update_job(jid, warning_count=current_warnings)
 
-                # If the line is raw text from the chapter (heuristic)
-                # Usually these lines don't have brackets or the specific log prefixes we want.
-                # Important warnings start with [!] or [v]
-                if not s.startswith("[") and not s.startswith(">"):
-                    # If it's more than a few words, it's likely chapter text leaking from output
-                    if len(s) > 20:
-                        return
+                    # Heuristic: only log meaningful lines
+                    if not s.startswith("[") and not s.startswith(">"):
+                        if len(s) > 20:
+                            pass # likely chapter text leaking, skip
+                        else:
+                            logs.append(line)
+                            new_log = "".join(logs)[-20000:]
+                    else:
+                        logs.append(line)
+                        new_log = "".join(logs)[-20000:]
 
-                logs.append(line)
-                elapsed = time.time() - start
-                prog = min(0.98, elapsed / max(1, eta))
-                # Keep last 20k chars so the JSON doesn't balloon
-                update_job(jid, progress=prog, log="".join(logs)[-20000:])
+                # 4. Consolidated Broadcast
+                # Ensure we always update progress even on log lines (prediction floor)
+                if new_progress is None:
+                    current_p = getattr(j, 'progress', 0.0)
+                    new_progress = min(0.98, max(current_p, elapsed / max(1, eta)))
+                    j.progress = new_progress
+
+                if new_log is not None or new_progress is not None:
+                    j._last_broadcast_time = now
+                    args = {}
+                    if new_progress is not None: args['progress'] = new_progress
+                    if new_log is not None: args['log'] = new_log
+                    update_job(jid, **args)
 
             def cancel_check():
                 return cancel_ev.is_set()
