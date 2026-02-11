@@ -98,9 +98,20 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     return null;
   };
 
-  const remainingSeconds = job?.started_at && job?.eta_seconds
-    ? Math.max(0, Math.floor((job.started_at + job.eta_seconds) - now / 1000))
-    : null;
+  const getProgressInfo = () => {
+    if (status !== 'running' || !job?.started_at || !job?.eta_seconds) {
+      return { remaining: null, localProgress: job?.progress || 0 };
+    }
+    const elapsed = (now / 1000) - job.started_at;
+    const remaining = Math.max(0, Math.floor(job.eta_seconds - elapsed));
+    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
+    return {
+      remaining,
+      localProgress: Math.max(job.progress || 0, timeProgress)
+    };
+  };
+
+  const { remaining: remainingSeconds, localProgress } = getProgressInfo();
 
   return (
     <motion.div
@@ -187,8 +198,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
               style={{
                 height: '100%',
                 background: 'var(--accent)',
-                width: `${Math.max((job?.progress || 0), 0.05) * 100}%`,
-                transition: 'width 0.5s ease'
+                width: `${Math.max(localProgress, 0.05) * 100}%`,
+                transition: 'width 1s linear'
               }}
             />
           </div>
