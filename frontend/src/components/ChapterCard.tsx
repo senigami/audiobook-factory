@@ -48,11 +48,27 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const [now, setNow] = useState(Date.now());
 
   const status = job?.status || 'queued';
-  const config = getStatusConfig(status, statusInfo);
+
+  // Custom label logic for "Finishing" state
+  const getDisplayConfig = () => {
+    const base = getStatusConfig(status, statusInfo);
+    if (status === 'running' && job?.progress && job.progress >= 0.99) {
+      return { ...base, label: 'Finishing...' };
+    }
+    return base;
+  };
+
+  const config = getDisplayConfig();
   const Icon = config.icon;
 
+  // Stable ETA Cadence Logic
+  const [displayedRemaining, setDisplayedRemaining] = useState<number | null>(null);
+
   useEffect(() => {
-    if (status !== 'running') return;
+    if (status !== 'running') {
+      setDisplayedRemaining(null);
+      return;
+    }
     const interval = setInterval(() => {
       setNow(Date.now());
     }, 1000);
@@ -121,7 +137,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     };
   };
 
-  const { remaining: remainingSeconds, localProgress } = getProgressInfo();
+  const { remaining: calculatedRemaining, localProgress } = getProgressInfo();
+
+  // Sync displayed ETA to calculated ETA on a steady 1s rhythm (via the 'now' trigger)
+  useEffect(() => {
+    if (calculatedRemaining === null) {
+      setDisplayedRemaining(null);
+    } else {
+      // If we don't have a displayed value, or if it's counting down naturally, or if there's a huge jump
+      if (displayedRemaining === null || Math.abs(displayedRemaining - calculatedRemaining) > 1) {
+        setDisplayedRemaining(calculatedRemaining);
+      } else if (displayedRemaining > 0) {
+        // Natural countdown
+        setDisplayedRemaining(displayedRemaining - 1);
+      }
+    }
+  }, [now, calculatedRemaining === null]); // We use 'now' as the tick trigger
 
   return (
     <motion.div
@@ -187,7 +218,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         <div style={{ marginTop: '0.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
             <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Progress</span>
-            {remainingSeconds !== null && remainingSeconds > 0 && (
+            {displayedRemaining !== null && displayedRemaining > 0 && (
               <span style={{
                 fontSize: '0.65rem',
                 color: 'var(--accent)',
@@ -196,7 +227,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 width: '60px',
                 textAlign: 'right'
               }}>
-                ETA: {formatTime(remainingSeconds)}
+                ETA: {formatTime(displayedRemaining)}
               </span>
             )}
           </div>
@@ -205,6 +236,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
             style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}
           >
             <div
+              className={localProgress >= 0.99 ? 'progress-bar-animated' : ''}
               style={{
                 height: '100%',
                 background: 'var(--accent)',
