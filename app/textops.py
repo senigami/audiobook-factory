@@ -6,16 +6,19 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
    - [clean_text_for_tts] (Part of Sanitization, but happens before split)
      - Strips leading ellipses/punctuation to prevent speech hallucinations.
      - Normalizes acronyms/initials (A.B.C. -> A B C, but A. stays A.).
+     - Normalizes fractions (444/7000 -> 444 out of 7000).
 
 2. SANITIZATION (sanitize_for_xtts)
    - Step A: [clean_text_for_tts]
      - Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
      - Stripping: Removes double quotes (") while preserving single quotes (').
-     - Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+     - Leading Punc: Strips early dots/ellipses to prevent speech hallucinations.
+     - Acronyms: Convert 2+ letters + period (A.B. -> A B) for better TTS prosody.
+     - Fractions: Convert numbers like 444/7000 to "444 out of 7000".
      - Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
      - Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
      - Spacing: Ensures space after .!?, and removes space before ,;:.
-     - Sentence Integrity: Fixes split artifacts like ".," or ",." introduced by splitting.
+     - Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
    - Step B: [consolidate_single_word_sentences]
      - Strips leading punctuation from each sentence to prevent hallucinations.
      - Filters out symbol-only lines (e.g. "!!!") that contain no alphanumeric text.
@@ -203,11 +206,12 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 # 3. Stripping: Removes double quotes (") while preserving single quotes (').
 # 4. Leading Punc: Strips leading ellipses/dots to prevent speech hallucinations.
 # 5. Acronyms: Convert 2+ letters + period (A.B. -> A B) for better TTS prosody.
-# 6. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
-# 7. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
-# 8. Spacing: Ensures space after .!?, and removes space before ,;:.
-# 9. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
-# 10. Consolidation: Split, strip leading punc (e.g. ". Or") and filter symbol-only lines (e.g. "!!!").
+# 6. Fractions: Convert numbers like 444/7000 to "444 out of 7000".
+# 7. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
+# 8. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+# 9. Spacing: Ensures space after .!?, and removes space before ,;:.
+# 10. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
+# 11. Consolidation: Split, strip leading punc (e.g. ". Or") and filter symbol-only lines (e.g. "!!!").
 #     Merge single-word sentences into neighbors using forward-favored commas.
 
 def clean_text_for_tts(text: str) -> str:
@@ -223,6 +227,9 @@ def clean_text_for_tts(text: str) -> str:
     # This ensures "A.B.C." isn't split into 4 sentences but "It is I." is handled.
     pattern = r'\b(?:[A-Za-z]\.){2,}'
     text = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), text)
+    
+    # Normalize fractions (444/7000 -> 444 out of 7000)
+    text = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', text)
     
     # Strip leading dots/ellipses/punctuation that often cause hallucinations at the start of blocks
     text = text.lstrip(" .…!?,")

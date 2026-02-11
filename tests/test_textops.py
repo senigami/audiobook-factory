@@ -26,6 +26,11 @@ def test_sanitize_xtts_pacing():
 def test_sanitize_acronyms():
     assert sanitize_for_xtts("A.B.C.") == "A B C."
 
+def test_sanitize_fractions():
+    # 444/7000 to 444 out of 7000
+    assert sanitize_for_xtts("444/7000") == "444 out of 7000."
+    assert sanitize_for_xtts("score 1/2") == "score 1 out of 2."
+
 def test_sanitize_standalone_initials():
     # Standalone letter should NOT be treated as acronym (preserves the dot)
     # But single-word sentences are still consolidated with commas for pacing.
