@@ -8,21 +8,24 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
 
 2. SANITIZATION (sanitize_for_xtts)
    - Step A: [clean_text_for_tts]
-     - Smart Quote Normalization (“”‘’ -> " ') and stripping of standard quotes.
-     - Pacing/Punctuation: Dashes and Ellipses (— – ... … -> . )
-     - Artifact Cleanup: Fixes redundant patterns like ".' ." or "'. "
-     - Spacing: Ensures space after .!?, and removes space before ,;:
-     - Sentence Integrity: Fixes split artifacts like ".," (-> ",") and ",." (-> ".")
+     - Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
+     - Stripping: Removes double quotes (") while preserving single quotes (').
+     - Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+     - Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
+     - Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+     - Spacing: Ensures space after .!?, and removes space before ,;:.
+     - Sentence Integrity: Fixes split artifacts like ".," or ",." introduced by splitting.
    - Step B: [consolidate_single_word_sentences]
      - Finds single-word sentences (e.g. "Wait!") and merges them into neighbors 
        using commas to prevent XTTS v2 from failing or hallucinating on short strings.
+       Favors forward-merging over backward-merging.
    - Step C: [ASCII Filter]
      - Strict removal of all non-ASCII characters to prevent speech engine crashes.
    - Step D: [Whitespace Collapse]
      - Trims and collapses multiple spaces into single spaces.
    - Step E: [Terminal Punctuation]
      - Ensures every voice line ends in a terminal punctuation mark (. ! or ?) 
-       as short strings without them cause XTTS v2 stability issues.
+       while correctly ignoring trailing quotes or parentheses.
 
 3. FINAL SEGMENTATION (pack_text_to_limit)
    - Greedily packs the cleaned sentences into blocks <= 250 characters (SENT_CHAR_LIMIT).
@@ -192,14 +195,15 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
     return hits
 
 # --- ORDER OF OPERATIONS FOR CREATING SAFE TEXT ---
-# 1. Preprocess: Remove unspoken formatting/bracket characters [ ] { }.
+# 1. Preprocess: Remove unspoken formatting/bracket characters [ ] { } ( ).
 # 2. Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
-# 3. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
-# 4. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
-# 5. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
-# 6. Spacing: Ensures space after .!?, and removes space before ,;:.
-# 7. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
-# 8. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
+# 3. Stripping: Removes double quotes (") while preserving single quotes (').
+# 4. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+# 5. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
+# 6. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+# 7. Spacing: Ensures space after .!?, and removes space before ,;:.
+# 8. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
+# 9. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
 
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
