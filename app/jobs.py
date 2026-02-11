@@ -285,7 +285,7 @@ def worker_loop():
                     last_p = getattr(j, '_last_broadcast_p', 0.0)
                     
                     # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
-                    if (prog - last_p >= 0.01) or (now - last_b >= 5.0):
+                    if (prog - last_p >= 0.01) or (now - last_b >= 10.0):
                         prog = round(prog, 4)
                         j.progress = prog
                         j._last_broadcast_time = now
