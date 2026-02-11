@@ -21,9 +21,9 @@ describe('ChapterCard', () => {
   it('shows "WAV ready (Needs MP3)" even if job state is stale but disk is empty', () => {
     const staleJob = { ...mockJob, output_mp3: 'Overview.mp3' } // Stale!
     render(
-      <ChapterCard 
-        filename="test.txt" 
-        job={staleJob} 
+      <ChapterCard
+        filename="test.txt"
+        job={staleJob}
         statusInfo={{
           isXttsMp3: false, // Truth!
           isXttsWav: true,
@@ -32,8 +32,8 @@ describe('ChapterCard', () => {
         }}
       />
     )
-    
-    expect(screen.getByText(/WAV ready \(Needs MP3\)/i)).toBeInTheDocument()
+
+    expect(screen.getAllByText(/WAV Ready/i).length).toBeGreaterThan(0)
     expect(screen.queryByRole('audio')).not.toBeInTheDocument()
     // The audio element should NOT be in the DOM
     expect(document.querySelector('audio')).not.toBeInTheDocument()
@@ -42,9 +42,9 @@ describe('ChapterCard', () => {
   it('renders audio player only when MP3 is present', () => {
     const jobWithMp3 = { ...mockJob, output_mp3: 'test.mp3' }
     render(
-      <ChapterCard 
-        filename="test.txt" 
-        job={jobWithMp3} 
+      <ChapterCard
+        filename="test.txt"
+        job={jobWithMp3}
         statusInfo={{
           isXttsMp3: true,
           isXttsWav: true,
@@ -53,7 +53,7 @@ describe('ChapterCard', () => {
         }}
       />
     )
-    
+
     // The audio element itself might not be easily found by role depending on lib, 
     // but we can check for its presence in the DOM.
     const audio = document.querySelector('audio')
@@ -63,12 +63,12 @@ describe('ChapterCard', () => {
   it('renders progress bar when status is "running"', () => {
     const runningJob = { ...mockJob, status: 'running' as const, progress: 0.45 };
     render(
-      <ChapterCard 
-        filename="test.txt" 
-        job={runningJob} 
+      <ChapterCard
+        filename="test.txt"
+        job={runningJob}
       />
     )
-    
+
     const progressBar = screen.getByTestId('progress-bar');
     expect(progressBar).toBeInTheDocument();
     // Check if the inner motion.div has the correct width

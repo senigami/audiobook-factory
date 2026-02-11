@@ -387,7 +387,7 @@ def do_split(
 def start_xtts_queue():
     settings = get_settings()
     existing = get_jobs()
-    active = {(j.engine, j.chapter_file) for j in existing.values() if j.status in ["queued", "running"]}
+    active = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
 
     for p in list_chapters():
         c = p.name
@@ -397,26 +397,23 @@ def start_xtts_queue():
             continue
 
         # Prune any old records for this chapter to prevent duplicates
-        # But PRESERVE the custom title if it exists
+        # But PRESERVE the custom title and check for existing queued job
         existing_title = None
+        existing_queued_id = None
         to_del = []
         for jid, j in existing.items():
             if j.chapter_file == c:
                 if j.custom_title:
                     existing_title = j.custom_title
                 if j.engine == "xtts":
-                    to_del.append(jid)
+                    if j.status == "queued":
+                        existing_queued_id = jid
+                    else:
+                        to_del.append(jid)
         
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
-        
-        # Check if we have an EXISTING queued job we can just re-use/kick
-        existing_queued_id = None
-        for jid, j in existing.items():
-            if j.chapter_file == c and j.engine == "xtts" and j.status == "queued":
-                existing_queued_id = jid
-                break
         
         if existing_queued_id:
             update_job(existing_queued_id, 
@@ -458,7 +455,7 @@ def start_piper_queue(piper_voice: str = Form("")):
     if not voice:
         return PlainTextResponse("Select a Piper voice (or set default).", status_code=400)
 
-    active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status in ["queued", "running"]}
+    active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
     for p in list_chapters():
         c = p.name
         if output_exists("piper", c):
@@ -468,27 +465,24 @@ def start_piper_queue(piper_voice: str = Form("")):
             continue
 
         # Prune any old records for this chapter to prevent duplicates
-        # But PRESERVE the custom title if it exists
+        # But PRESERVE the custom title and check for existing queued job
         existing_title = None
+        existing_queued_id = None
         to_del = []
         for jid, j in existing.items():
             if j.chapter_file == c:
                 if j.custom_title:
                     existing_title = j.custom_title
                 if j.engine == "piper":
-                    to_del.append(jid)
-
+                    if j.status == "queued":
+                        existing_queued_id = jid
+                    else:
+                        to_del.append(jid)
+        
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
-            
-        # Check if we have an EXISTING queued job we can just re-use/kick
-        existing_queued_id = None
-        for jid, j in existing.items():
-            if j.chapter_file == c and j.engine == "piper" and j.status == "queued":
-                existing_queued_id = jid
-                break
-        
+
         if existing_queued_id:
             update_job(existing_queued_id, 
                        progress=0.0, 

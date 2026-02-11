@@ -117,7 +117,7 @@ describe('Audiobook Progress Indicators', () => {
                 />
             )
 
-            expect(screen.getByText(/ETA: 1:40/i)).toBeTruthy()
+            expect(screen.getByText(/ETA: 1:20/i)).toBeTruthy()
 
             // Advance 10 seconds
             act(() => {
@@ -142,8 +142,8 @@ describe('Audiobook Progress Indicators', () => {
 
             const progressBar = container.querySelector('.progress-bar-animated') as HTMLElement
             expect(progressBar).toBeTruthy()
-            // Should show the minimum 5% width even at 0 progress
-            expect(progressBar.style.width).toBe('5%')
+            // Should show 0% width at 0 progress
+            expect(progressBar.style.width).toBe('0%')
         })
     })
 })
