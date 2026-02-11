@@ -239,7 +239,7 @@ def worker_loop():
                        status="running", 
                        started_at=time.time(), 
                        finished_at=None,
-                       progress=0.05, 
+                       progress=0.0, 
                        error=None,
                        eta_seconds=eta,
                        log="".join(header))
@@ -247,13 +247,13 @@ def worker_loop():
             # CRITICAL: Synchronize the local 'j' object properties so the on_output 
             # closure uses the fresh start state instead of stale data from a previous session.
             j.status = "running"
-            j.progress = 0.05
+            j.progress = 0.0
             j.finished_at = None
             j.log = "".join(header)
             j.error = None
             j.eta_seconds = eta
             j.started_at = time.time()
-            j._last_broadcast_p = 0.05 # Track what we just sent in update_job above
+            j._last_broadcast_p = 0.0 # Track what we just sent in update_job above
 
             # --- Safety Checks ---
             if j.engine != "audiobook" and not chapter_path.exists():
@@ -286,6 +286,7 @@ def worker_loop():
                     
                     # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
                     if (prog - last_p >= 0.01) or (now - last_b >= 5.0):
+                        prog = round(prog, 4)
                         j.progress = prog
                         j._last_broadcast_time = now
                         j._last_broadcast_p = prog
@@ -313,10 +314,10 @@ def worker_loop():
                 is_progress_line = progress_match and "|" in s
                 if is_progress_line:
                     try:
-                        p_val = int(progress_match.group(1)) / 100.0
+                        p_val = round(int(progress_match.group(1)) / 100.0, 4)
                         current_p = getattr(j, 'progress', 0.0)
                         if p_val > current_p:
-                            j.progress = p_val
+                            # Note: we don't update j.progress here, we let the consolidated broadcast handle it
                             new_progress = p_val
                     except:
                         pass
@@ -346,21 +347,23 @@ def worker_loop():
                 # Decide if we SHOULD include progress in this update
                 broadcast_p = getattr(j, '_last_broadcast_p', 0.0)
                 
-                # Update local progress if not already set by tqdm
+                # Update calculation for prediction (prediction floor)
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
-                    new_progress = min(0.98, max(current_p, elapsed / max(1, eta)))
-                    j.progress = new_progress
+                    new_val = min(0.98, max(current_p, elapsed / max(1, eta)))
+                    new_progress = round(new_val, 4)
                 
-                # Only include progress in the broadcast if it has changed meaningfully
-                include_progress = (abs(new_progress - broadcast_p) >= 0.001)
+                # Check threshold against last broadcast
+                include_progress = (abs(new_progress - broadcast_p) >= 0.01) or (broadcast_p == 0 and new_progress > 0)
 
                 if new_log is not None or include_progress:
                     j._last_broadcast_time = now
                     args = {}
                     if include_progress:
-                        args['progress'] = new_progress
+                        # Ensure internal state matches broadcasted value exactly
+                        j.progress = new_progress 
                         j._last_broadcast_p = new_progress
+                        args['progress'] = new_progress
                     if new_log is not None: 
                         args['log'] = new_log
                     update_job(jid, **args)

@@ -240,7 +240,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
               style={{
                 height: '100%',
                 background: 'var(--accent)',
-                width: `${Math.max(localProgress, 0.05) * 100}%`,
+                width: `${localProgress * 100}%`,
                 transition: 'width 1s linear'
               }}
             />

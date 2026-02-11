@@ -146,7 +146,7 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename, p
                         className="progress-bar-animated"
                         style={{
                             height: '100%',
-                            width: `${Math.max(localProgress, 0.05) * 100}%`,
+                            width: `${localProgress * 100}%`,
                             backgroundColor: 'var(--accent)',
                             transition: 'width 1s linear'
                         }}
