@@ -1,0 +1,15 @@
+{
+  "settings": {
+    "safe_mode": true,
+    "make_mp3": true,
+    "default_engine": "xtts",
+    "default_piper_voice": null
+  },
+  "performance_metrics": {
+    "audiobook_speed_multiplier": 5.114709940404062,
+    "xtts_cps": 8.171724845576788,
+    "piper_cps": 220.0
+  },
+  "jobs": {}
+}
+}

@@ -29,7 +29,7 @@ def merge_files(input_folder):
         match = re.search(r'(\d+)', filename)
         return int(match.group(1)) if match else 0
 
-    # Sort files numerically so 1894 comes before 1895
+    # Sort files numerically so 9 comes before 10
     files.sort(key=extract_number)
 
     # 3. Handle naming

@@ -1,3 +1,33 @@
+"""
+TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
+-----------------------------------------------
+1. INGESTION (split_by_chapter_markers / split_into_parts)
+   - [preprocess_text] Strips square brackets [] and braces {} early to avoid meta-text speech.
+
+2. SANITIZATION (sanitize_for_xtts)
+   - Step A: [clean_text_for_tts]
+     - Smart Quote Normalization (“”‘’ -> " ')
+     - Pacing/Punctuation: Dashes and Ellipses (— – ... … -> . )
+     - Artifact Cleanup: Fixes redundant patterns like ".' ." or "'. "
+     - Spacing: Ensures space after .!?, and removes space before ,;:
+     - Sentence Integrity: Fixes split artifacts like ".," (-> ",") and ",." (-> ".")
+   - Step B: [consolidate_single_word_sentences]
+     - Finds single-word sentences (e.g. "Wait!") and merges them into neighbors 
+       using commas to prevent XTTS v2 from failing or hallucinating on short strings.
+   - Step C: [ASCII Filter]
+     - Strict removal of all non-ASCII characters to prevent speech engine crashes.
+   - Step D: [Whitespace Collapse]
+     - Trims and collapses multiple spaces into single spaces.
+   - Step E: [Terminal Punctuation]
+     - Ensures every voice line ends in a terminal punctuation mark (. ! or ?) 
+       as short strings without them cause XTTS v2 stability issues.
+
+3. FINAL SEGMENTATION (pack_text_to_limit)
+   - Greedily packs the cleaned sentences into blocks <= 250 characters (SENT_CHAR_LIMIT).
+   - This ensures the speech engine receives enough context for natural prosody
+     while staying strictly within the reliability threshold of the model.
+"""
+
 import re
 from pathlib import Path
 from typing import List, Tuple
@@ -156,6 +186,15 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
             hits.append((idx, len(s), start, end, s))
     return hits
 
+# --- ORDER OF OPERATIONS FOR CREATING SAFE TEXT ---
+# 1. Preprocess: Remove unspoken formatting/bracket characters [ ] { }.
+# 2. Normalize Quotes: Convert smart quotes (“ ” ‘ ’) to standard ASCII quotes.
+# 3. Pacing: Convert dashes (— –) and ellipses (…) to commas/dashes for better TTS flow.
+# 4. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+# 5. Spacing: Fix spacing around punctuation (ensure space after .!?, remove space before ,;:).
+# 6. Sentence Integrity: Repair artifacts like ".," or ".;" potentially introduced by splitting.
+# 7. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
+
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
     # Remove unspoken formatting characters at the absolute start
@@ -164,7 +203,7 @@ def clean_text_for_tts(text: str) -> str:
     # Handle smart quotes
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
-    text = text.replace("—", " - ").replace("–", " - ").replace("…", ", ").replace("...", ", ")
+    text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
     
     # Common redundant punctuation artifacts
     text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
@@ -177,7 +216,7 @@ def clean_text_for_tts(text: str) -> str:
     # Remove spaces before punctuation
     text = re.sub(r' +([,;:])', r'\1', text)
     # Fix artifacts like ".," or ".;" created by sentence splitting
-    text = text.replace(".,", ",").replace(".;", ";").replace(". :", ":")
+    text = text.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
     
     # Consolidate single-word sentences (like "Wait!" or "Move!") with neighbors
     text = consolidate_single_word_sentences(text.strip())
@@ -195,29 +234,23 @@ def consolidate_single_word_sentences(text: str) -> str:
         return text
 
     new_sentences = []
-    i = 0
-    while i < len(sentences):
-        curr = sentences[i]
+    for i, curr in enumerate(sentences):
         # Count actual words (containing at least one alphanumeric)
         word_count = len([w for w in curr.split() if re.search(r'\w', w)])
         
         if word_count == 1:
             if i < len(sentences) - 1:
-                # Merge with NEXT
-                merged = curr.rstrip(".!?") + ", " + sentences[i+1]
-                new_sentences.append(merged)
-                i += 2
-                continue
+                # Convert terminal punctuation to comma to merge with next
+                new_sentences.append(curr.rstrip(".!?") + ",")
             elif new_sentences:
-                # Merge with PREVIOUS (tailing single word)
+                # Tailing single word: merge with previous
                 prev = new_sentences.pop()
-                merged = prev.rstrip(".!?") + ", " + curr
-                new_sentences.append(merged)
-                i += 1
-                continue
-        
-        new_sentences.append(curr)
-        i += 1
+                # Ensure we don't end up with double commas if prev was also a single word
+                new_sentences.append(prev.rstrip(".!?,") + ", " + curr)
+            else:
+                new_sentences.append(curr)
+        else:
+            new_sentences.append(curr)
         
     return " ".join(new_sentences)
 
