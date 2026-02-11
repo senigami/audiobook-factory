@@ -4,6 +4,7 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
 1. INGESTION (split_by_chapter_markers / split_into_parts)
    - [preprocess_text] Strips brackets [], braces {}, and parentheses () early.
    - [clean_text_for_tts] (Part of Sanitization, but happens before split)
+     - Strips leading ellipses/punctuation to prevent speech hallucinations.
      - Normalizes acronyms/initials (A.B.C. -> A B C).
 
 2. SANITIZATION (sanitize_for_xtts)
@@ -16,6 +17,8 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
      - Spacing: Ensures space after .!?, and removes space before ,;:.
      - Sentence Integrity: Fixes split artifacts like ".," or ",." introduced by splitting.
    - Step B: [consolidate_single_word_sentences]
+     - Strips leading punctuation from each sentence to prevent hallucinations.
+     - Filters out symbol-only lines (e.g. "!!!") that contain no alphanumeric text.
      - Finds single-word sentences (e.g. "Wait!") and merges them into neighbors 
        using commas to prevent XTTS v2 from failing or hallucinating on short strings.
        Favors forward-merging over backward-merging.
@@ -198,12 +201,14 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 # 1. Preprocess: Remove unspoken formatting/bracket characters [ ] { } ( ).
 # 2. Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
 # 3. Stripping: Removes double quotes (") while preserving single quotes (').
-# 4. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
-# 5. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
-# 6. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
-# 7. Spacing: Ensures space after .!?, and removes space before ,;:.
-# 8. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
-# 9. Consolidation: Split into sentence array to merge single-word sentences into neighbors.
+# 4. Leading Punc: Strips leading ellipses/dots to prevent speech hallucinations.
+# 5. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+# 6. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
+# 7. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
+# 8. Spacing: Ensures space after .!?, and removes space before ,;:.
+# 9. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
+# 10. Consolidation: Split, strip leading punc (e.g. ". Or") and filter symbol-only lines (e.g. "!!!").
+#     Merge single-word sentences into neighbors using forward-favored commas.
 
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
@@ -217,6 +222,9 @@ def clean_text_for_tts(text: str) -> str:
     # Normalize acronyms/initials: A.B.C. -> A B C
     # This ensures "A.B.C." isn't split into 4 sentences and is read correctly.
     text = re.sub(r'\b([A-Za-z])\.', r'\1 ', text)
+    
+    # Strip leading dots/ellipses/punctuation that often cause hallucinations at the start of blocks
+    text = text.lstrip(" .…!?,")
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
     text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
     
@@ -243,7 +251,14 @@ def consolidate_single_word_sentences(text: str) -> str:
     TTS engines (especially XTTS) often fail on single-word sentences.
     This merges them with neighbors using commas for a natural flow.
     """
-    sentences = [s.strip() for s, _, _ in split_sentences(text) if s.strip()]
+    # Filter to only keep sentences that actually contain a word/number.
+    # We also strip leading dots/ellipses from sentences here to prevent " . Or was it" issues.
+    sentences_raw = [s.strip() for s, _, _ in split_sentences(text)]
+    sentences = []
+    for s in sentences_raw:
+        cleaned = s.lstrip(" .…!?,")
+        if re.search(r'\w', cleaned):
+            sentences.append(cleaned)
     
     if len(sentences) <= 1:
         return text
