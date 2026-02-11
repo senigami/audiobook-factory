@@ -18,19 +18,10 @@ def test_single_word_merge_prev():
 
 def test_multiple_single_words():
     text = "Wait. No. Stop. Go."
-    # ["Wait.", "No.", "Stop.", "Go."]
-    # i=0: "Wait" -> merges with "No" -> "Wait, No." (new_sentences)
-    # i=2: "Stop" -> merges with "Go" -> "Stop, Go." (new_sentences)
-    expected = "Wait, No., Stop, Go." # Wait, it becomes "split_sentences" might keep punctuation 
-    # Let's see what split_sentences does.
-    # It yields "Wait.", "No.", etc.
-    # Actually my logic adds curr.rstrip(".!?") + ", " + sentences[i+1]
-    # So "Wait, No."
-    # Then it continues at i=2: "Stop, Go."
-    # Combined with space: "Wait, No. Stop, Go."
+    # With the new integrated logic, it should merge them all:
+    # "Wait, No, Stop, Go."
     result = consolidate_single_word_sentences(text)
-    assert "Wait, No." in result
-    assert "Stop, Go." in result
+    assert result == "Wait, No, Stop, Go."
 
 def test_tailing_single_word():
     text = "The end is near. Goodbye."
