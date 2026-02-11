@@ -93,7 +93,15 @@ def startup_event():
             count += 1
         elif j.status == "running":
             # Reset interrupted running jobs to queued
-            update_job(jid, status="queued", error="Restarted")
+            update_job(jid, 
+                       status="queued", 
+                       progress=0.0,
+                       log="",
+                       started_at=None,
+                       finished_at=None,
+                       eta_seconds=None,
+                       error="Restarted",
+                       warning_count=0)
             requeue(jid)
             count += 1
     if count > 0:
@@ -120,7 +128,7 @@ def startup_event():
                 return
 
         if loop and loop.is_running():
-            print(f"DEBUG: Broadcasting update for {job_id} on loop {id(loop)}")
+            # print(f"DEBUG: Broadcasting update for {job_id} on loop {id(loop)}")
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast({"type": "job_updated", "job_id": job_id, "updates": updates}),
                 loop
@@ -402,6 +410,25 @@ def start_xtts_queue():
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
+        
+        # Check if we have an EXISTING queued job we can just re-use/kick
+        existing_queued_id = None
+        for jid, j in existing.items():
+            if j.chapter_file == c and j.engine == "xtts" and j.status == "queued":
+                existing_queued_id = jid
+                break
+        
+        if existing_queued_id:
+            update_job(existing_queued_id, 
+                       progress=0.0, 
+                       started_at=None,
+                       finished_at=None,
+                       eta_seconds=None,
+                       log="",
+                       error=None,
+                       warning_count=0)
+            requeue(existing_queued_id)
+            continue
 
         jid = uuid.uuid4().hex[:12]
         j = Job(
@@ -454,6 +481,26 @@ def start_piper_queue(piper_voice: str = Form("")):
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
+            
+        # Check if we have an EXISTING queued job we can just re-use/kick
+        existing_queued_id = None
+        for jid, j in existing.items():
+            if j.chapter_file == c and j.engine == "piper" and j.status == "queued":
+                existing_queued_id = jid
+                break
+        
+        if existing_queued_id:
+            update_job(existing_queued_id, 
+                       progress=0.0, 
+                       started_at=None,
+                       finished_at=None,
+                       eta_seconds=None,
+                       log="",
+                       error=None,
+                       warning_count=0)
+            requeue(existing_queued_id)
+            continue
+            
         jid = uuid.uuid4().hex[:12]
         enqueue(Job(
             id=jid,

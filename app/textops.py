@@ -5,7 +5,7 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
    - [preprocess_text] Strips brackets [], braces {}, and parentheses () early.
    - [clean_text_for_tts] (Part of Sanitization, but happens before split)
      - Strips leading ellipses/punctuation to prevent speech hallucinations.
-     - Normalizes acronyms/initials (A.B.C. -> A B C).
+     - Normalizes acronyms/initials (A.B.C. -> A B C, but A. stays A.).
 
 2. SANITIZATION (sanitize_for_xtts)
    - Step A: [clean_text_for_tts]
@@ -202,7 +202,7 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 # 2. Normalize Quotes: Convert smart quotes (“ ”) to empty and normalize (‘ ’) to (').
 # 3. Stripping: Removes double quotes (") while preserving single quotes (').
 # 4. Leading Punc: Strips leading ellipses/dots to prevent speech hallucinations.
-# 5. Acronyms: Convert single letters + period (A.B.C.) to (A B C) for better TTS prosody.
+# 5. Acronyms: Convert 2+ letters + period (A.B. -> A B) for better TTS prosody.
 # 6. Pacing: Convert dashes (—) to commas and ellipses (…) to periods.
 # 7. Artifact Cleanup: Fix redundant punctuation patterns like ".' ." or "'. ".
 # 8. Spacing: Ensures space after .!?, and removes space before ,;:.
@@ -219,9 +219,10 @@ def clean_text_for_tts(text: str) -> str:
     text = text.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
     text = text.replace('"', '')
     
-    # Normalize acronyms/initials: A.B.C. -> A B C
-    # This ensures "A.B.C." isn't split into 4 sentences and is read correctly.
-    text = re.sub(r'\b([A-Za-z])\.', r'\1 ', text)
+    # Normalize acronyms/initials: A.B. if 2 or more. A. alone is a period.
+    # This ensures "A.B.C." isn't split into 4 sentences but "It is I." is handled.
+    pattern = r'\b(?:[A-Za-z]\.){2,}'
+    text = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), text)
     
     # Strip leading dots/ellipses/punctuation that often cause hallucinations at the start of blocks
     text = text.lstrip(" .…!?,")

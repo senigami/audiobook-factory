@@ -26,6 +26,14 @@ def test_sanitize_xtts_pacing():
 def test_sanitize_acronyms():
     assert sanitize_for_xtts("A.B.C.") == "A B C."
 
+def test_sanitize_standalone_initials():
+    # Standalone letter should NOT be treated as acronym (preserves the dot)
+    # But single-word sentences are still consolidated with commas for pacing.
+    assert sanitize_for_xtts("It is I. I am here.") == "It is I. I am here."
+    assert sanitize_for_xtts("Plan A.") == "Plan A."
+    # Mr., A., and Smith are each single-word sentences, so they merge with commas.
+    assert sanitize_for_xtts("Mr. A. Smith") == "Mr, A, Smith."
+
 def test_safe_split_robust_for_short_text():
     # The bug we fixed: short text without punctuation was erased
     assert safe_split_long_sentences("Test 2") == "Test 2"

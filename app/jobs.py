@@ -78,17 +78,6 @@ def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> boo
     return wav
 
 
-def reconcile_jobs():
-    """Checks all jobs marked as 'done' to ensure their files still exist on disk."""
-    all_jobs = get_jobs()
-    reset_ids = []
-    for jid, j in all_jobs.items():
-        if j.status == "done":
-            if not _output_exists(j.engine, j.chapter_file, j.make_mp3):
-                # File missing! Revert status
-                update_job(jid, status="queued", output_mp3=None, output_wav=None)
-                reset_ids.append(jid)
-    return reset_ids
 
 
 def cleanup_and_reconcile():
@@ -129,19 +118,23 @@ def cleanup_and_reconcile():
             
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
-            # However, if the WAV exists but MP3 is missing, we don't necessarily want to 
-            # reset it to 'queued' YET if we are about to run backfill_mp3_queue.
-            # But the 'reconcile' function is general purpose. 
-            
-            # Change: Only reset if BOTH are missing OR engine specific requirements aren't met.
-            # Let's use a more granular check.
             has_mp3 = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.mp3"
             has_wav = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.wav"
             
             if j.make_mp3:
                 if not has_mp3.exists() and not has_wav.exists():
                     # Both gone! Must re-run.
-                    update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                    update_job(jid, 
+                               status="queued", 
+                               output_mp3=None, 
+                               output_wav=None,
+                               progress=0.0,
+                               started_at=None,
+                               finished_at=None,
+                               eta_seconds=None,
+                               log="",
+                               error=None,
+                               warning_count=0)
                     reset_ids.append(jid)
                 elif not has_mp3.exists() and has_wav.exists():
                     # WAV exists, MP3 missing. 
@@ -150,8 +143,22 @@ def cleanup_and_reconcile():
                     update_job(jid, output_mp3=None)
             else:
                 if not has_wav.exists():
-                    update_job(jid, status="queued", output_mp3=None, output_wav=None)
+                    update_job(jid, 
+                               status="queued", 
+                               output_mp3=None, 
+                               output_wav=None,
+                               progress=0.0,
+                               started_at=None,
+                               finished_at=None,
+                               eta_seconds=None,
+                               log="",
+                               error=None,
+                               warning_count=0)
                     reset_ids.append(jid)
+    
+    # 3. Requeue the reset jobs so the worker picks them up
+    for rid in reset_ids:
+        requeue(rid)
     
     return reset_ids
 
@@ -231,10 +238,22 @@ def worker_loop():
             update_job(jid, 
                        status="running", 
                        started_at=time.time(), 
+                       finished_at=None,
                        progress=0.05, 
                        error=None,
                        eta_seconds=eta,
                        log="".join(header))
+            
+            # CRITICAL: Synchronize the local 'j' object properties so the on_output 
+            # closure uses the fresh start state instead of stale data from a previous session.
+            j.status = "running"
+            j.progress = 0.05
+            j.finished_at = None
+            j.log = "".join(header)
+            j.error = None
+            j.eta_seconds = eta
+            j.started_at = time.time()
+            j._last_broadcast_p = 0.05 # Track what we just sent in update_job above
 
             # --- Safety Checks ---
             if j.engine != "audiobook" and not chapter_path.exists():
@@ -263,9 +282,13 @@ def worker_loop():
                     prog = min(0.98, max(current_p, elapsed / max(1, eta)))
                     
                     last_b = getattr(j, '_last_broadcast_time', 0)
-                    if (prog - current_p >= 0.01) or (now - last_b >= 5.0):
+                    last_p = getattr(j, '_last_broadcast_p', 0.0)
+                    
+                    # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
+                    if (prog - last_p >= 0.01) or (now - last_b >= 5.0):
                         j.progress = prog
                         j._last_broadcast_time = now
+                        j._last_broadcast_p = prog
                         update_job(jid, progress=prog)
                     return
                 
@@ -320,17 +343,26 @@ def worker_loop():
                         new_log = "".join(logs)[-20000:]
 
                 # 4. Consolidated Broadcast
-                # Ensure we always update progress even on log lines (prediction floor)
+                # Decide if we SHOULD include progress in this update
+                broadcast_p = getattr(j, '_last_broadcast_p', 0.0)
+                
+                # Update local progress if not already set by tqdm
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
                     new_progress = min(0.98, max(current_p, elapsed / max(1, eta)))
                     j.progress = new_progress
+                
+                # Only include progress in the broadcast if it has changed meaningfully
+                include_progress = (abs(new_progress - broadcast_p) >= 0.001)
 
-                if new_log is not None or new_progress is not None:
+                if new_log is not None or include_progress:
                     j._last_broadcast_time = now
                     args = {}
-                    if new_progress is not None: args['progress'] = new_progress
-                    if new_log is not None: args['log'] = new_log
+                    if include_progress:
+                        args['progress'] = new_progress
+                        j._last_broadcast_p = new_progress
+                    if new_log is not None: 
+                        args['log'] = new_log
                     update_job(jid, **args)
 
             def cancel_check():
