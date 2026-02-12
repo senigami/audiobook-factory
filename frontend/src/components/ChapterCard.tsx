@@ -124,7 +124,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getDisplayConfig = () => {
     const base = getStatusConfig(status, statusInfo);
-    if (status === 'running' && localProgress >= 0.99) {
+    if (status === 'running' && (displayedRemaining === 0)) {
       return { ...base, label: 'Finishing...' };
     }
     return base;
