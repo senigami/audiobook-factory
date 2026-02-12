@@ -1,4 +1,4 @@
-import type { Job } from '../types';
+import type { Job, Engine } from '../types';
 
 export const api = {
   fetchJobs: async (): Promise<Job[]> => {
@@ -38,7 +38,7 @@ export const api = {
     const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },
-  enqueueSingle: async (filename: string, engine: 'xtts' | 'piper', voice?: string): Promise<any> => {
+  enqueueSingle: async (filename: string, engine: Engine, voice?: string): Promise<any> => {
     const formData = new FormData();
     formData.append('chapter_file', filename);
     formData.append('engine', engine);

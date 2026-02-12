@@ -25,7 +25,7 @@ from .textops import (
 app = FastAPI()
 
 # Ensure directories exist before mounting
-for d in [XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR, BASE_DIR / "static"]:
+for d in [XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR, BASE_DIR / "static", BASE_DIR / "bark_audio", BASE_DIR / "tortoise_audio"]:
     d.mkdir(parents=True, exist_ok=True)
 
 templates = Environment(
@@ -34,6 +34,8 @@ templates = Environment(
 )
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
+app.mount("/out/bark", StaticFiles(directory=str(BASE_DIR / "bark_audio")), name="out_bark")
+app.mount("/out/tortoise", StaticFiles(directory=str(BASE_DIR / "tortoise_audio")), name="out_tortoise")
 app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -169,6 +171,10 @@ def output_exists(engine: str, chapter_file: str) -> bool:
     stem = Path(chapter_file).stem
     if engine == "xtts":
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
+    if engine == "bark":
+        return ((BASE_DIR / "bark_audio") / f"{stem}.mp3").exists() or ((BASE_DIR / "bark_audio") / f"{stem}.wav").exists()
+    if engine == "tortoise":
+        return ((BASE_DIR / "tortoise_audio") / f"{stem}.mp3").exists() or ((BASE_DIR / "tortoise_audio") / f"{stem}.wav").exists()
     return (PIPER_OUT_DIR / f"{stem}.mp3").exists() or (PIPER_OUT_DIR / f"{stem}.wav").exists()
 
 def xtts_outputs_for(chapter_file: str):
@@ -269,6 +275,10 @@ def api_home():
     # status sets logic
     xtts_wav_only = []
     xtts_mp3 = []
+    bark_wav_only = []
+    bark_mp3 = []
+    tortoise_wav_only = []
+    tortoise_mp3 = []
     piper_wav_only = []
     piper_mp3 = []
 
@@ -276,6 +286,13 @@ def api_home():
         stem = Path(c).stem
         if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): xtts_mp3.append(c)
         elif (XTTS_OUT_DIR / f"{stem}.wav").exists(): xtts_wav_only.append(c)
+        
+        if ((BASE_DIR / "bark_audio") / f"{stem}.mp3").exists(): bark_mp3.append(c)
+        elif ((BASE_DIR / "bark_audio") / f"{stem}.wav").exists(): bark_wav_only.append(c)
+        
+        if ((BASE_DIR / "tortoise_audio") / f"{stem}.mp3").exists(): tortoise_mp3.append(c)
+        elif ((BASE_DIR / "tortoise_audio") / f"{stem}.wav").exists(): tortoise_wav_only.append(c)
+        
         if (PIPER_OUT_DIR / f"{stem}.mp3").exists(): piper_mp3.append(c)
         elif (PIPER_OUT_DIR / f"{stem}.wav").exists(): piper_wav_only.append(c)
 
@@ -288,6 +305,10 @@ def api_home():
         "narrator_ok": NARRATOR_WAV.exists(),
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
+        "bark_mp3": bark_mp3,
+        "bark_wav_only": bark_wav_only,
+        "tortoise_mp3": tortoise_mp3,
+        "tortoise_wav_only": tortoise_wav_only,
         "piper_mp3": piper_mp3,
         "piper_wav_only": piper_wav_only,
         "audiobooks": list_audiobooks(),

@@ -90,14 +90,19 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     if (statusInfo) {
       if (statusInfo.isXttsMp3) return `/out/xtts/${stem}.mp3`;
       if (statusInfo.isPiperMp3) return `/out/piper/${stem}.mp3`;
-      return null;
     }
     if (job?.status === 'done' && job?.output_mp3) {
-      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+      let prefix = '/out/xtts/';
+      if (job.engine === 'piper') prefix = '/out/piper/';
+      else if (job.engine === 'bark') prefix = '/out/bark/';
+      else if (job.engine === 'tortoise') prefix = '/out/tortoise/';
       return `${prefix}${job.output_mp3}`;
     }
     if (job?.status === 'done' && job?.output_wav && !job.make_mp3) {
-      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+      let prefix = '/out/xtts/';
+      if (job.engine === 'piper') prefix = '/out/piper/';
+      else if (job.engine === 'bark') prefix = '/out/bark/';
+      else if (job.engine === 'tortoise') prefix = '/out/tortoise/';
       return `${prefix}${job.output_wav}`;
     }
     return null;
@@ -236,7 +241,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 onClick={e => e.stopPropagation()}
               >
                 <button
-                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)}
+                  disabled={status === 'running'}
                   onClick={async () => {
                     setShowMenu(false);
                     try {
@@ -256,15 +261,62 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                     alignItems: 'center',
                     gap: '8px',
                     justifyContent: 'flex-start',
-                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 0.5 : 1,
-                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 'not-allowed' : 'pointer'
                   }}
-                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Run XTTS on just this one chapter"}
                 >
                   <Play size={12} /> Process with XTTS
                 </button>
                 <button
-                  disabled={!!(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav)}
+                  disabled={status === 'running'}
+                  onClick={async () => {
+                    setShowMenu(false);
+                    try {
+                      await api.enqueueSingle(filename, 'bark');
+                      onRefresh?.();
+                    } catch (err) {
+                      console.error('Bark single enqueue failed', err);
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    justifyContent: 'flex-start',
+                  }}
+                >
+                  <Music size={12} /> Process with Bark
+                </button>
+                <button
+                  disabled={status === 'running'}
+                  onClick={async () => {
+                    setShowMenu(false);
+                    try {
+                      await api.enqueueSingle(filename, 'tortoise');
+                      onRefresh?.();
+                    } catch (err) {
+                      console.error('Tortoise single enqueue failed', err);
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    justifyContent: 'flex-start',
+                  }}
+                >
+                  <Mic size={12} /> Process with Tortoise
+                </button>
+                <button
+                  disabled={status === 'running'}
                   onClick={async () => {
                     setShowMenu(false);
                     try {
@@ -284,10 +336,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                     alignItems: 'center',
                     gap: '8px',
                     justifyContent: 'flex-start',
-                    opacity: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 0.5 : 1,
-                    cursor: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 'not-allowed' : 'pointer'
                   }}
-                  title={(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? "Audio already generated. Reset to re-process." : "Run Piper on just this one chapter"}
                 >
                   <Mic size={12} /> Process with Piper
                 </button>

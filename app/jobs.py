@@ -4,8 +4,11 @@ from typing import Dict
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR
-from .engines import xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
+from .config import (
+    CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR,
+    BARK_MODEL, TORTOISE_MODEL, XTTS_V2_MODEL, BASE_DIR
+)
+from .engines import coqui_generate, xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
@@ -67,11 +70,16 @@ def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> boo
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
     
     if engine == "xtts":
-        mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
+        out_dir = XTTS_OUT_DIR
+    elif engine == "bark":
+        out_dir = BASE_DIR / "bark_audio"
+    elif engine == "tortoise":
+        out_dir = BASE_DIR / "tortoise_audio"
     else:
-        mp3 = (PIPER_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (PIPER_OUT_DIR / f"{stem}.wav").exists()
+        out_dir = PIPER_OUT_DIR
+
+    mp3 = (out_dir / f"{stem}.mp3").exists()
+    wav = (out_dir / f"{stem}.wav").exists()
 
     if make_mp3:
         return mp3
@@ -118,8 +126,13 @@ def cleanup_and_reconcile():
             
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
-            has_mp3 = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.mp3"
-            has_wav = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.wav"
+            out_dir = XTTS_OUT_DIR
+            if j.engine == "bark": out_dir = BASE_DIR / "bark_audio"
+            elif j.engine == "tortoise": out_dir = BASE_DIR / "tortoise_audio"
+            elif j.engine == "piper": out_dir = PIPER_OUT_DIR
+
+            has_mp3 = out_dir / f"{Path(j.chapter_file).stem}.mp3"
+            has_wav = out_dir / f"{Path(j.chapter_file).stem}.wav"
             
             if j.make_mp3:
                 if not has_mp3.exists() and not has_wav.exists():
@@ -191,8 +204,19 @@ def worker_loop():
                     text = chapter_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
                     perf = get_performance_metrics()
-                    cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
-                                   BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    cps_field = "xtts_cps"
+                    if j.engine == "bark": cps_field = "bark_cps"
+                    elif j.engine == "tortoise": cps_field = "tortoise_cps"
+                    elif j.engine == "piper": cps_field = "piper_cps"
+
+                    # Tortoise and Bark are slower, use lower baseline CPS
+                    defaults = {
+                        "xtts_cps": BASELINE_XTTS_CPS,
+                        "piper_cps": BASELINE_PIPER_CPS,
+                        "bark_cps": 5.0,
+                        "tortoise_cps": 1.0
+                    }
+                    cps = perf.get(cps_field, defaults.get(cps_field, 10.0))
                     eta = _estimate_seconds(chars, cps)
                 
                 header = [
@@ -422,6 +446,18 @@ def worker_loop():
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
                 rc = xtts_generate(text=text, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+            elif j.engine == "bark":
+                out_dir = BASE_DIR / "bark_audio"
+                out_dir.mkdir(exist_ok=True)
+                out_wav = out_dir / f"{Path(j.chapter_file).stem}.wav"
+                out_mp3 = out_dir / f"{Path(j.chapter_file).stem}.mp3"
+                rc = coqui_generate(text=text, model_name=BARK_MODEL, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+            elif j.engine == "tortoise":
+                out_dir = BASE_DIR / "tortoise_audio"
+                out_dir.mkdir(exist_ok=True)
+                out_wav = out_dir / f"{Path(j.chapter_file).stem}.wav"
+                out_mp3 = out_dir / f"{Path(j.chapter_file).stem}.mp3"
+                rc = coqui_generate(text=text, model_name=TORTOISE_MODEL, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
             else:
                 out_wav = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
@@ -440,11 +476,15 @@ def worker_loop():
                 actual_dur = time.time() - start
                 if actual_dur > 0:
                     new_cps = chars / actual_dur
-                    field = "xtts_cps" if j.engine == "xtts" else "piper_cps"
-                    old_cps = perf.get(field, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    cps_field = "xtts_cps"
+                    if j.engine == "bark": cps_field = "bark_cps"
+                    elif j.engine == "tortoise": cps_field = "tortoise_cps"
+                    elif j.engine == "piper": cps_field = "piper_cps"
+
+                    old_cps = perf.get(cps_field, 10.0) 
                     # Smoothed update (80% old, 20% new to avoid outlier fluctuations)
                     updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
-                    update_performance_metrics(**{field: updated_cps})
+                    update_performance_metrics(**{cps_field: updated_cps})
 
             if rc != 0 or not out_wav.exists():
                 update_job(

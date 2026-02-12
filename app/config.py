@@ -10,6 +10,11 @@ PIPER_OUT_DIR = BASE_DIR / "piper_audio"
 VOICES_DIR = BASE_DIR / "voices"
 AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
 
+# Engine Model Identifiers
+XTTS_V2_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+BARK_MODEL = "tts_models/multilingual/multi-dataset/bark"
+TORTOISE_MODEL = "tts_models/en/multi-dataset/tortoise-v2"
+
 # IMPORTANT: narrator file is in project root: ~/tts-dashboard/narrator_clean.wav
 NARRATOR_WAV = BASE_DIR / "narrator_clean.wav"
 

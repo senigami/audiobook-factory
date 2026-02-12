@@ -2,7 +2,10 @@ import shlex, subprocess, os, re
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
+from .config import (
+    XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR,
+    XTTS_V2_MODEL, BARK_MODEL, TORTOISE_MODEL
+)
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
 from .voices import piper_voice_paths
 
@@ -93,13 +96,13 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
+def coqui_generate(text: str, model_name: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, voice: str = None) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
-        on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
+        on_output(f"[error] Coqui TTS environment activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
-    if not NARRATOR_WAV.exists():
-        on_output(f"[error] narrator wav missing: {NARRATOR_WAV}\n")
-        return 1
+    
+    # Narrator wav is only strictly required for XTTS-style cloning, 
+    # but the script handles it being optional/required based on model.
 
     if safe_mode:
         text = sanitize_for_xtts(text)
@@ -111,16 +114,32 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     
     text = pack_text_to_limit(text, pad=True)
 
-    cmd = (
-        f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
-        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
-        f"--text {shlex.quote(text)} "
-        f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "
-        f"--language en "
-        f"--repetition_penalty 2.0 "
+    # Handle default voices for consistency if not provided
+    if not voice:
+        if "bark" in model_name.lower():
+            voice = "v2/en_speaker_6" # A known stable English male voice
+        elif "tortoise" in model_name.lower():
+            voice = "random"
+
+    cmd_parts = [
+        f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && ",
+        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'tts_inference.py'))} ",
+        f"--model_name {shlex.quote(model_name)} ",
+        f"--text {shlex.quote(text)} ",
+        f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} ",
+        f"--language en ",
+        f"--repetition_penalty 2.0 ",
         f"--out_path {shlex.quote(str(out_wav))}"
-    )
+    ]
+    if voice:
+        cmd_parts.append(f" --speaker_id {shlex.quote(voice)}")
+
+    cmd = "".join(cmd_parts)
     return run_cmd_stream(cmd, on_output, cancel_check)
+
+def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
+    """Legacy wrapper for XTTS v2 style generation."""
+    return coqui_generate(text, XTTS_V2_MODEL, out_wav, safe_mode, on_output, cancel_check)
 
 def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
     from .textops import clean_text_for_tts

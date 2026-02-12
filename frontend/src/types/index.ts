@@ -1,4 +1,4 @@
-export type Engine = 'xtts' | 'piper' | 'audiobook';
+export type Engine = 'xtts' | 'piper' | 'bark' | 'tortoise' | 'audiobook';
 export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'wav';
 
 export interface Job {
