@@ -317,10 +317,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div style={{ padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <input type="checkbox" readOnly checked={!!settings?.safe_mode} /> Safe Mode
-              </label>
-              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <input type="checkbox" readOnly checked={!!settings?.make_mp3} /> Make MP3
+                <input
+                  type="checkbox"
+                  checked={!!settings?.safe_mode}
+                  onChange={async (e) => {
+                    const formData = new URLSearchParams();
+                    formData.append('safe_mode', e.target.checked ? 'true' : 'false');
+                    await fetch('/settings', { method: 'POST', body: formData });
+                    onRefresh();
+                  }}
+                /> Safe Mode
               </label>
             </div>
 

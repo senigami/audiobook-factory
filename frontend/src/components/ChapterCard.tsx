@@ -47,6 +47,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [now, setNow] = useState(Date.now());
   const [showMenu, setShowMenu] = useState(false);
+  const [displayedRemaining, setDisplayedRemaining] = useState<number | null>(null);
 
   const status = job?.status || 'queued';
 
@@ -57,24 +58,9 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     return () => window.removeEventListener('click', close);
   }, [showMenu]);
 
-  // Custom label logic for "Finishing" state
-  const getDisplayConfig = () => {
-    const base = getStatusConfig(status, statusInfo);
-    if (status === 'running' && job?.progress && job.progress >= 0.99) {
-      return { ...base, label: 'Finishing...' };
-    }
-    return base;
-  };
-
-  const config = getDisplayConfig();
-  const Icon = config.icon;
-
-  // Stable ETA Cadence Logic
-  const [displayedRemaining, setDisplayedRemaining] = useState<number | null>(null);
-
   useEffect(() => {
     if (status !== 'running') {
-      setDisplayedRemaining(null);
+      setNow(Date.now()); // reset if not running
       return;
     }
     const interval = setInterval(() => {
@@ -101,31 +87,19 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-
-    // 1. Prioritize statusInfo (disk truth) if available
     if (statusInfo) {
       if (statusInfo.isXttsMp3) return `/out/xtts/${stem}.mp3`;
       if (statusInfo.isPiperMp3) return `/out/piper/${stem}.mp3`;
-
-      // CRITICAL: If statusInfo says NO MP3 exists, we must NOT return a URL,
-      // even if the job record is stale and says one exists. 
-      // This allows the UI to react to file deletions immediately.
       return null;
     }
-
-    // 2. Fallback to the direct job record (useful for immediate WS updates)
     if (job?.status === 'done' && job?.output_mp3) {
       const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
       return `${prefix}${job.output_mp3}`;
     }
-
-    // 3. Status check for WAV (though we usually want the player for MP3)
-    // If it's a WAV-only job that is done, we could show it too, but UI usually waits for MP3
     if (job?.status === 'done' && job?.output_wav && !job.make_mp3) {
       const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
       return `${prefix}${job.output_wav}`;
     }
-
     return null;
   };
 
@@ -136,16 +110,10 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     const elapsed = (now / 1000) - job.started_at;
     const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
     const currentProgress = Math.max(job.progress || 0, timeProgress);
-
-    // Weighted ETA Blend:
-    // We transition from the static prediction to the real-time projection
-    // as progress moves from 0% to 25%. This smooths out the 'model loading' lag.
     const blend = Math.min(1.0, currentProgress / 0.25);
     const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
     const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
-
     const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
-
     return {
       remaining: Math.max(0, Math.floor(refinedRemaining)),
       localProgress: currentProgress
@@ -154,20 +122,28 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const { remaining: calculatedRemaining, localProgress } = getProgressInfo();
 
-  // Sync displayed ETA to calculated ETA on a steady 1s rhythm (via the 'now' trigger)
+  const getDisplayConfig = () => {
+    const base = getStatusConfig(status, statusInfo);
+    if (status === 'running' && localProgress >= 0.99) {
+      return { ...base, label: 'Finishing...' };
+    }
+    return base;
+  };
+
+  const config = getDisplayConfig();
+  const Icon = config.icon;
+
   useEffect(() => {
     if (calculatedRemaining === null) {
       setDisplayedRemaining(null);
     } else {
-      // If we don't have a displayed value, or if it's counting down naturally, or if there's a huge jump
       if (displayedRemaining === null || Math.abs(displayedRemaining - calculatedRemaining) > 1) {
         setDisplayedRemaining(calculatedRemaining);
       } else if (displayedRemaining > 0) {
-        // Natural countdown
         setDisplayedRemaining(displayedRemaining - 1);
       }
     }
-  }, [now, calculatedRemaining === null]); // We use 'now' as the tick trigger
+  }, [now, calculatedRemaining === null]);
 
   return (
     <motion.div
@@ -393,7 +369,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
       )}
 
       <footer style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {getAudioSrc() ? (
+        {getAudioSrc() && (
           <div onClick={e => e.stopPropagation()}>
             <audio
               controls
@@ -402,15 +378,6 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
               preload="none"
               onError={(e) => (e.currentTarget.style.display = 'none')}
             />
-          </div>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              {status === 'running' ? 'Processing...' :
-                status === 'queued' ? 'Queued...' :
-                  (statusInfo?.isXttsWav || statusInfo?.isPiperWav) ? 'WAV ready (Needs MP3)' :
-                    'Ready for processing'}
-            </span>
           </div>
         )}
 

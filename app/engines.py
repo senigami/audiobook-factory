@@ -101,11 +101,13 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         on_output(f"[error] narrator wav missing: {NARRATOR_WAV}\n")
         return 1
 
-    # Advanced sanitization and packing
-    text = sanitize_for_xtts(text)
-    
     if safe_mode:
+        text = sanitize_for_xtts(text)
         text = safe_split_long_sentences(text)
+    else:
+        # Raw mode: Absolute bare minimum to prevent speech engine crashes
+        text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
+        text = text.strip()
     
     text = pack_text_to_limit(text, pad=True)
 
@@ -120,15 +122,14 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     )
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, on_output, cancel_check) -> int:
+def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
     from .textops import clean_text_for_tts
-    # For Piper, we read the file and clean it before writing to a temp location if needed,
-    # but since piper reads from file, let's just clean the text if we were reading it.
-    # Actually, piper --input_file is convenient. Let's stick to cleaning in memory for XTTS
-    # and maybe leave Piper alone unless it's a big issue, or clean it then write to a tmp file.
-    # To keep it simple and consistent:
+    # For Piper, we read the file and clean it before writing to a temp location
     text = chapter_file.read_text(encoding="utf-8", errors="replace")
-    text = clean_text_for_tts(text)
+    if safe_mode:
+        text = clean_text_for_tts(text)
+    else:
+        text = re.sub(r'[^\x00-\x7F]+', '', text).strip()
     
     tmp_path = chapter_file.with_suffix(".tmp.txt")
     tmp_path.write_text(text, encoding="utf-8")

@@ -429,7 +429,7 @@ def worker_loop():
                 if not voice:
                     update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="No Piper voice selected.", log="".join(logs))
                     continue
-                rc = piper_generate(chapter_file=chapter_path, voice_name=voice, out_wav=out_wav, on_output=on_output, cancel_check=cancel_check)
+                rc = piper_generate(chapter_file=chapter_path, voice_name=voice, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
 
             if cancel_ev.is_set():
                 update_job(jid, status="cancelled", finished_at=time.time(), progress=1.0, error="Cancelled.", log="".join(logs))

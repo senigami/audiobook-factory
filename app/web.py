@@ -295,16 +295,22 @@ def api_home():
 
 @app.post("/settings")
 def save_settings(
-    safe_mode: str = Form(None),
-    make_mp3: str = Form(None),
+    safe_mode: Optional[bool] = Form(None),
+    make_mp3: Optional[bool] = Form(None),
     default_piper_voice: str = Form("")
 ):
+    # Handle both Form and JSON-like updates (Simplified for FastAPI Form)
+    # We ignore make_mp3 and always set it to True
+    curr = get_settings()
+    
+    new_safe = safe_mode if safe_mode is not None else curr.get("safe_mode", True)
+    
     update_settings(
-        safe_mode=bool(safe_mode),
-        make_mp3=bool(make_mp3),
-        default_piper_voice=(default_piper_voice or None)
+        safe_mode=new_safe,
+        make_mp3=True,
+        default_piper_voice=(default_piper_voice or curr.get("default_piper_voice"))
     )
-    return RedirectResponse("/", status_code=303)
+    return {"status": "success", "settings": get_settings()}
 
 def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = None) -> List[Path]:
     """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
@@ -431,7 +437,7 @@ def start_xtts_queue():
             status="queued",
             created_at=time.time(),
             safe_mode=bool(settings.get("safe_mode", True)),
-            make_mp3=bool(settings.get("make_mp3", True)),
+            make_mp3=True,
             custom_title=existing_title
         )
         enqueue(j)
@@ -499,7 +505,7 @@ def start_piper_queue(piper_voice: str = Form("")):
             status="queued",
             created_at=time.time(),
             safe_mode=False,
-            make_mp3=bool(settings.get("make_mp3", True)),
+            make_mp3=True,
             piper_voice=voice,
             custom_title=existing_title
         ))
@@ -730,7 +736,7 @@ def enqueue_single(
         status="queued",
         created_at=time.time(),
         safe_mode=bool(settings.get("safe_mode", True)) if engine == "xtts" else False,
-        make_mp3=bool(settings.get("make_mp3", True)),
+        make_mp3=True,
         piper_voice=voice if engine == "piper" else None,
         bypass_pause=True,
         custom_title=existing_title
@@ -1140,13 +1146,18 @@ def api_preview(chapter_file: str, processed: bool = False):
     text = read_preview(p, max_chars=1000000)
     
     if processed:
-        # Mimic the engine processing pipeline
-        text = sanitize_for_xtts(text)
+        settings = get_settings()
+        is_safe = settings.get("safe_mode", True)
         
-        # For the technical preview, we always show the XTTS-style padding and splitting
-        # to demonstrate how the engine handles character limits.
-        text = safe_split_long_sentences(text)
-        
+        if is_safe:
+            # Mimic the engine processing pipeline (Safe Mode ON)
+            text = sanitize_for_xtts(text)
+            text = safe_split_long_sentences(text)
+        else:
+            # Raw mode: Absolute bare minimum to prevent speech engine crashes
+            text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
+            text = text.strip()
+            
         text = pack_text_to_limit(text, pad=True)
         
     return JSONResponse({"text": text})
