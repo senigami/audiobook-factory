@@ -204,14 +204,30 @@ def main():
                 if isinstance(wav_chunk, torch.Tensor):
                     wav_chunk = wav_chunk.cpu().numpy()
                 
-                all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                # Robustly flatten and convert to 1D FloatTensor
+                if wav_chunk is not None and wav_chunk.size > 0:
+                    flat_wav = wav_chunk.flatten()
+                    all_wav_chunks.append(torch.FloatTensor(flat_wav))
+                
                 pbar.update(1)
                 
                 # Emit progression token
                 print(f"SENTENCE_COMPLETED: {i + 1}", flush=True)
         
         if all_wav_chunks:
+            # Concatenate along time dimension (dim 0 since we flattened)
             final_wav = torch.cat(all_wav_chunks, dim=0)
+            
+            # Ensure it's 2D (channels, time) for torchaudio.save
+            # For mono, it should be (1, N)
+            audio_to_save = final_wav.unsqueeze(0)
+            
+            # Final safety check: if for some reason it's still > 2D, squeeze
+            while audio_to_save.ndim > 2:
+                audio_to_save = audio_to_save.squeeze(0)
+            if audio_to_save.ndim == 1:
+                audio_to_save = audio_to_save.unsqueeze(0)
+
             # Sample rate varies: XTTS v2 is 24kHz, Bark is 24kHz, Tortoise is 24kHz.
             # Coqui TTS wrapper usually handles this or returns a consistent rate.
             # For multilinguial/multi-dataset/xtts_v2 it is 24000.
@@ -223,7 +239,7 @@ def main():
             elif "tortoise" in args.model_name.lower():
                 sample_rate = 24000
                 
-            torchaudio.save(args.out_path, final_wav.unsqueeze(0), sample_rate)
+            torchaudio.save(args.out_path, audio_to_save, sample_rate)
             print(f"Effectively synthesized {len(sentences)} sentences.", file=sys.stderr)
         
     except Exception as e:

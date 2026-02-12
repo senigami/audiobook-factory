@@ -217,7 +217,8 @@ def worker_loop():
                         "tortoise_cps": 1.0
                     }
                     cps = perf.get(cps_field, defaults.get(cps_field, 10.0))
-                    eta = _estimate_seconds(chars, cps)
+                    tts_mult = perf.get("tts_speed_multiplier", 1.0)
+                    eta = int(_estimate_seconds(chars, cps) * tts_mult)
                 
                 header = [
                     f"Job Started: {j.chapter_file}\n",
@@ -318,7 +319,7 @@ def worker_loop():
                             j.progress = prog
                             j._last_broadcast_time = now
                             j._last_broadcast_p = prog
-                            update_job(jid, progress=prog)
+                            update_job(jid, progress=prog, eta_seconds=max(0, int(eta - elapsed)))
                     return
                 
                 # 1. Filter out noisy lines provided by XTTS/Piper
@@ -361,8 +362,8 @@ def worker_loop():
                     try:
                         current = int(s.split(":")[1].strip())
                         total = getattr(j, '_total_sentences', 1)
-                        # We use 0.95 as the cap for synthesis, reserving 5% for finishing/ffmpeg
-                        p_val = round((current / total) * 0.95, 2)
+                        # Use 0.95 as the cap for synthesis, reserving 5% for finishing/ffmpeg
+                        p_val = round((current / total) * 0.98, 2)
                         new_progress = p_val
                     except: pass
 
@@ -504,7 +505,16 @@ def worker_loop():
                     old_cps = perf.get(cps_field, 10.0) 
                     # Smoothed update (80% old, 20% new to avoid outlier fluctuations)
                     updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
-                    update_performance_metrics(**{cps_field: updated_cps})
+                    
+                    # Also tune the global tts_speed_multiplier if we are significantly off
+                    old_tts_mult = perf.get("tts_speed_multiplier", 1.0)
+                    # base_eta (predicted) vs actual_dur
+                    predicted_dur = (chars / old_cps) * old_tts_mult
+                    learned_mult_shift = actual_dur / max(1.0, predicted_dur / old_tts_mult)
+                    # We tune tts_mult very slowly (95% old, 5% new)
+                    updated_tts_mult = (old_tts_mult * 0.95) + (learned_mult_shift * 0.05)
+                    
+                    update_performance_metrics(**{cps_field: updated_cps, "tts_speed_multiplier": updated_tts_mult})
 
             if rc != 0 or not out_wav.exists():
                 update_job(
