@@ -1,5 +1,6 @@
 import React from 'react';
-import { Play, Mic, Terminal, Settings, Package, Upload, Pause, Trash2, FileAudio, CheckCircle, RefreshCw, Search, Loader2 } from 'lucide-react';
+import { Play, Mic, Terminal, Settings, Package, Upload, Pause, Trash2, FileAudio, CheckCircle, RefreshCw, Search, Loader2, X } from 'lucide-react';
+import { api } from '../api';
 import type { Settings as GlobalSettings, Job } from '../types';
 
 interface SidebarProps {
@@ -193,6 +194,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
             >
               {paused ? <Play size={14} /> : <Pause size={14} />} {paused ? 'Resume Queue' : 'Pause Queue'}
+            </button>
+
+            <button
+              onClick={async () => {
+                if (confirm('Cancel all pending and running jobs?')) {
+                  await api.cancelPending();
+                  onRefresh();
+                }
+              }}
+              className="btn-ghost"
+              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', color: 'var(--text-muted)' }}
+              title="Stop any running jobs and clear the queue"
+            >
+              <X size={14} /> Cancel Pending
             </button>
           </div>
         </section>

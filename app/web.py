@@ -88,21 +88,17 @@ def startup_event():
     existing = get_jobs()
     count = 0
     for jid, j in existing.items():
-        if j.status == "queued":
-            requeue(jid)
-            count += 1
-        elif j.status == "running":
-            # Reset interrupted running jobs to queued
-            update_job(jid, 
-                       status="queued", 
+        if j.status == "queued" or j.status == "running":
+            # Reset stale jobs to 'cancelled' on startup to prevent auto-start
+            update_job(jid,
+                       status="cancelled",
                        progress=0.0,
-                       log="",
                        started_at=None,
+                       log="Reset on startup.",
                        finished_at=None,
                        eta_seconds=None,
                        error="Restarted",
                        warning_count=0)
-            requeue(jid)
             count += 1
     if count > 0:
         print(f"recovered {count} jobs from state")
@@ -519,6 +515,20 @@ def resume_queue():
     set_paused(False)
     return JSONResponse({"status": "ok", "message": "Queue resumed"})
 
+@app.post("/api/queue/cancel_pending")
+def cancel_pending():
+    # 1. Clear in-memory queue
+    clear_job_queue()
+    # 2. Reset all non-done jobs in state
+    existing = get_jobs()
+    for jid, j in existing.items():
+        if j.status == "queued" or j.status == "running":
+            # For 'running' jobs, we should also try to terminate subprocesses
+            if j.status == "running":
+                cancel_job(jid)
+            update_job(jid, status="cancelled", progress=0.0, started_at=None, log="Cancelled by user.")
+    return JSONResponse({"status": "ok", "message": "Pending jobs cancelled"})
+
 @app.post("/create_audiobook")
 def create_audiobook(
     title: str = Form(...),
@@ -678,6 +688,57 @@ def delete_chapter(filename: str):
         return JSONResponse({"status": "ok", "message": f"Deleted chapter {filename}"})
         
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+@app.post("/api/queue/single")
+def enqueue_single(
+    chapter_file: str = Form(...),
+    engine: str = Form(...),
+    voice: Optional[str] = Form(None)
+):
+    settings = get_settings()
+    existing = get_jobs()
+    
+    # 1. Prune old records for this chapter
+    to_del = []
+    existing_title = None
+    for jid, j in existing.items():
+        if j.chapter_file == chapter_file:
+            if j.custom_title:
+                existing_title = j.custom_title
+            if j.engine == engine:
+                if j.status == "running":
+                    return JSONResponse({"status": "error", "message": "Chapter already running"}, status_code=400)
+                to_del.append(jid)
+    
+    if to_del:
+        from .state import delete_jobs
+        delete_jobs(to_del)
+    
+    # 2. Extract engine-specific settings
+    if engine == "piper":
+        if not voice:
+            voice = settings.get("default_piper_voice")
+        if not voice:
+            return JSONResponse({"status": "error", "message": "No voice selected"}, status_code=400)
+            
+    # 3. Create and enqueue
+    jid = uuid.uuid4().hex[:12]
+    j = Job(
+        id=jid,
+        engine=engine,
+        chapter_file=chapter_file,
+        status="queued",
+        created_at=time.time(),
+        safe_mode=bool(settings.get("safe_mode", True)) if engine == "xtts" else False,
+        make_mp3=bool(settings.get("make_mp3", True)),
+        piper_voice=voice if engine == "piper" else None,
+        bypass_pause=True,
+        custom_title=existing_title
+    )
+    enqueue(j)
+    update_job(jid, status="queued") # trigger bridge
+    
+    return JSONResponse({"status": "ok", "job_id": jid})
 
 @app.post("/analyze_long")
 def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):

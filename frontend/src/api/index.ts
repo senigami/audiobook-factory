@@ -38,6 +38,18 @@ export const api = {
     const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },
+  enqueueSingle: async (filename: string, engine: 'xtts' | 'piper', voice?: string): Promise<any> => {
+    const formData = new FormData();
+    formData.append('chapter_file', filename);
+    formData.append('engine', engine);
+    if (voice) formData.append('voice', voice);
+    const res = await fetch('/api/queue/single', { method: 'POST', body: formData });
+    return res.json();
+  },
+  cancelPending: async (): Promise<any> => {
+    const res = await fetch('/api/queue/cancel_pending', { method: 'POST' });
+    return res.json();
+  },
   // Basic helper for home data (since the / route returns HTML, we might need a dedicated API endpoint for initial state)
   // For now, we'll mimic the SSR data by calling specific APIs.
 };

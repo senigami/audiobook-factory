@@ -78,7 +78,7 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename, p
         return `${m}:${sec.toString().padStart(2, '0')}`;
     };
 
-    const { remaining, localProgress } = getRemainingAndProgress();
+    const { remaining } = getRemainingAndProgress();
 
     return (
         <div className="glass-panel" style={{
@@ -134,25 +134,6 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename, p
                 </div>
             </div>
 
-            {(status === 'running' || status === 'queued') && (
-                <div style={{
-                    height: '4px',
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.05)',
-                    overflow: 'hidden',
-                    position: 'relative'
-                }}>
-                    <div
-                        className="progress-bar-animated"
-                        style={{
-                            height: '100%',
-                            width: `${localProgress * 100}%`,
-                            backgroundColor: 'var(--accent)',
-                            transition: 'width 1s linear'
-                        }}
-                    />
-                </div>
-            )}
 
             <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--bg)' }}>
                 {activeTab === 'logs' ? (

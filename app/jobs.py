@@ -171,8 +171,8 @@ def worker_loop():
             if not j:
                 continue
 
-            # pause support
-            while pause_flag.is_set():
+            # pause support (unless bypassed by a single-chapter manual enqueue)
+            while pause_flag.is_set() and not j.bypass_pause:
                 time.sleep(0.2)
 
             cancel_ev = cancel_flags.get(jid) or threading.Event()

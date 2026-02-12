@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, Mic } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 
@@ -186,6 +186,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         gap: '0.75rem',
         border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
         boxShadow: isActive ? '0 0 20px var(--accent-glow)' : 'none',
+        zIndex: showMenu ? 50 : (isActive ? 10 : 1),
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
@@ -248,16 +249,73 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                   position: 'absolute',
                   top: '100%',
                   right: 0,
-                  zIndex: 100,
+                  zIndex: 1000,
                   minWidth: '150px',
                   padding: '4px',
                   marginTop: '4px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  boxShadow: '0 8px 16px rgba(0,0,0,0.6)',
                   background: 'var(--surface)',
                   border: '1px solid var(--border)'
                 }}
                 onClick={e => e.stopPropagation()}
               >
+                <button
+                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)}
+                  onClick={async () => {
+                    setShowMenu(false);
+                    try {
+                      await api.enqueueSingle(filename, 'xtts');
+                      onRefresh?.();
+                    } catch (err) {
+                      console.error('XTTS single enqueue failed', err);
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    justifyContent: 'flex-start',
+                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 0.5 : 1,
+                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 'not-allowed' : 'pointer'
+                  }}
+                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Run XTTS on just this one chapter"}
+                >
+                  <Play size={12} /> Process with XTTS
+                </button>
+                <button
+                  disabled={!!(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav)}
+                  onClick={async () => {
+                    setShowMenu(false);
+                    try {
+                      await api.enqueueSingle(filename, 'piper');
+                      onRefresh?.();
+                    } catch (err) {
+                      console.error('Piper single enqueue failed', err);
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    justifyContent: 'flex-start',
+                    opacity: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 0.5 : 1,
+                    cursor: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 'not-allowed' : 'pointer'
+                  }}
+                  title={(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? "Audio already generated. Reset to re-process." : "Run Piper on just this one chapter"}
+                >
+                  <Mic size={12} /> Process with Piper
+                </button>
+                <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
                 <button
                   onClick={async () => {
                     setShowMenu(false);
@@ -322,10 +380,10 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
             style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}
           >
             <div
-              className={localProgress >= 0.99 ? 'progress-bar-animated' : ''}
+              className="progress-bar-animated"
               style={{
                 height: '100%',
-                background: 'var(--accent)',
+                backgroundColor: 'var(--accent)',
                 width: `${localProgress * 100}%`,
                 transition: 'width 1s linear'
               }}

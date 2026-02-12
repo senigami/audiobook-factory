@@ -29,6 +29,7 @@ class Job:
     log: str = ""
     error: Optional[str] = None
     warning_count: int = 0
+    bypass_pause: bool = False
     custom_title: Optional[str] = None
     author_meta: Optional[str] = None
     narrator_meta: Optional[str] = None
