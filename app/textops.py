@@ -212,7 +212,7 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 # 9. Spacing: Ensures space after .!?, and removes space before ,;:.
 # 10. Sentence Integrity: Repair artifacts like ".," or ",." introduced by splitting.
 # 11. Consolidation: Split, strip leading punc (e.g. ". Or") and filter symbol-only lines (e.g. "!!!").
-#     Merge single-word sentences into neighbors using forward-favored commas.
+#     Merge short sentences (<= 2 words) into neighbors using forward-favored semicolons.
 
 def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
@@ -249,15 +249,15 @@ def clean_text_for_tts(text: str) -> str:
     # Fix artifacts like ".," or ".;" created by sentence splitting
     text = text.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
     
-    # Consolidate single-word sentences (like "Wait!" or "Move!") with neighbors
-    text = consolidate_single_word_sentences(text.strip())
+    # Consolidate short sentences (<= 2 words) (like "Wait!" or "No way!") with neighbors
+    text = consolidate_short_sentences(text.strip())
     
     return text.strip()
 
-def consolidate_single_word_sentences(text: str) -> str:
+def consolidate_short_sentences(text: str) -> str:
     """
-    TTS engines (especially XTTS) often fail on single-word sentences.
-    This merges them with neighbors using commas for a natural flow.
+    TTS engines (especially XTTS) often fail on short sentences.
+    This merges them (<= 2 words) with neighbors using semicolons for a natural flow.
     """
     # Filter to only keep sentences that actually contain a word/number.
     # We also strip leading dots/ellipses from sentences here to prevent " . Or was it" issues.
@@ -276,17 +276,17 @@ def consolidate_single_word_sentences(text: str) -> str:
         # Count actual words (containing at least one alphanumeric)
         word_count = len([w for w in curr.split() if re.search(r'\w', w)])
         
-        if word_count == 1:
+        if word_count <= 2:
             if i < len(sentences) - 1:
                 # Merge with NEXT (favored)
-                # Convert terminal punctuation to comma to merge with next in rejoining phase
-                new_sentences.append(curr.rstrip(".!?") + ",")
+                # Convert terminal punctuation to semicolon to merge with next in rejoining phase
+                new_sentences.append(curr.rstrip(".!?") + ";")
             elif new_sentences:
                 # Last resort: merge with PREVIOUS
                 prev = new_sentences.pop()
-                # Clean up prev if it already ends in a comma from a forward merge
-                # then merge with a comma
-                new_sentences.append(prev.rstrip(".!?,") + ", " + curr)
+                # Clean up prev if it already ends in a semicolon from a forward merge
+                # then merge with a semicolon
+                new_sentences.append(prev.rstrip(".!?;") + "; " + curr)
             else:
                 new_sentences.append(curr)
         else:

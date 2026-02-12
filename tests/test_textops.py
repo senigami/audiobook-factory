@@ -36,8 +36,15 @@ def test_sanitize_standalone_initials():
     # But single-word sentences are still consolidated with commas for pacing.
     assert sanitize_for_xtts("It is I. I am here.") == "It is I. I am here."
     assert sanitize_for_xtts("Plan A.") == "Plan A."
-    # Mr., A., and Smith are each single-word sentences, so they merge with commas.
-    assert sanitize_for_xtts("Mr. A. Smith") == "Mr, A, Smith."
+    # Mr., A., and Smith are each single or two-word sentences, so they merge with semicolons.
+    assert sanitize_for_xtts("Mr. A. Smith") == "Mr; A; Smith."
+
+def test_sanitize_xtts_merges_two_word_sentences():
+    # Two-word sentences should now be merged with semicolons
+    assert sanitize_for_xtts("Wait there. Move out.") == "Wait there; Move out."
+    assert sanitize_for_xtts("No way. I am here.") == "No way; I am here."
+    # Three words shouldn't merge (usually)
+    assert sanitize_for_xtts("Wait right there. Move along now.") == "Wait right there. Move along now."
 
 def test_safe_split_robust_for_short_text():
     # The bug we fixed: short text without punctuation was erased
