@@ -303,18 +303,22 @@ def worker_loop():
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
                     current_p = getattr(j, 'progress', 0.0)
-                    prog = min(0.98, max(current_p, elapsed / max(1, eta)))
+                    # For Bark/Tortoise where we have structured tokens, be very conservative with prediction
+                    cap = 0.85 if hasattr(j, '_total_sentences') and j._total_sentences > 0 else 0.98
+                    prog = min(cap, max(current_p, elapsed / max(1, eta)))
                     
                     last_b = getattr(j, '_last_broadcast_time', 0)
                     last_p = getattr(j, '_last_broadcast_p', 0.0)
                     
                     # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
-                    if (prog - last_p >= 0.01) or (now - last_b >= 30.0):
+                    if (prog > last_p + 0.01) or (now - last_b >= 30.0):
                         prog = round(prog, 2)
-                        j.progress = prog
-                        j._last_broadcast_time = now
-                        j._last_broadcast_p = prog
-                        update_job(jid, progress=prog)
+                        # Only update if it's actually an increase
+                        if prog > current_p:
+                            j.progress = prog
+                            j._last_broadcast_time = now
+                            j._last_broadcast_p = prog
+                            update_job(jid, progress=prog)
                     return
                 
                 # 1. Filter out noisy lines provided by XTTS/Piper
@@ -346,7 +350,23 @@ def worker_loop():
                     except:
                         pass
                 
-                # 3. Handle logs (only if not strictly progress, or if desired in logs)
+                # 3. Structured Progress Parsing
+                if s.startswith("SENTENCE_COUNT:"):
+                    try:
+                        count = int(s.split(":")[1].strip())
+                        j._total_sentences = count
+                    except: pass
+                
+                if s.startswith("SENTENCE_COMPLETED:"):
+                    try:
+                        current = int(s.split(":")[1].strip())
+                        total = getattr(j, '_total_sentences', 1)
+                        # We use 0.95 as the cap for synthesis, reserving 5% for finishing/ffmpeg
+                        p_val = round((current / total) * 0.95, 2)
+                        new_progress = p_val
+                    except: pass
+
+                # 4. Handle logs (only if not strictly progress, or if desired in logs)
                 # If it's a progress line, we skip adding it to terminal logs to keep them clean
                 # unless it contains other useful info (rare for tqdm).
                 if not is_progress_line:

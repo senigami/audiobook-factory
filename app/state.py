@@ -145,6 +145,13 @@ def update_job(job_id: str, **updates) -> None:
         j = jobs.get(job_id)
         if not j:
             return
+
+        if 'progress' in updates:
+            current_p = j.get('progress', 0.0)
+            new_p = updates['progress']
+            if new_p < current_p and new_p != 0.0: # allow reset to 0
+                del updates['progress']
+        
         j.update(updates)
         jobs[job_id] = j
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))

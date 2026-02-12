@@ -663,7 +663,15 @@ def reset_chapter(chapter_file: str = Form(...)):
             
     # 2. Delete files on disk
     count = 0
-    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+    dirs_to_clean = [
+        XTTS_OUT_DIR, 
+        PIPER_OUT_DIR, 
+        BASE_DIR / "bark_audio", 
+        BASE_DIR / "tortoise_audio"
+    ]
+    for d in dirs_to_clean:
+        if not d.exists():
+            continue
         for ext in [".wav", ".mp3"]:
             f = d / f"{stem}{ext}"
             if f.exists():
@@ -691,7 +699,15 @@ def delete_chapter(filename: str):
     stem = path.stem
     
     # 1. Delete audio files
-    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+    dirs_to_clean = [
+        XTTS_OUT_DIR, 
+        PIPER_OUT_DIR, 
+        BASE_DIR / "bark_audio", 
+        BASE_DIR / "tortoise_audio"
+    ]
+    for d in dirs_to_clean:
+        if not d.exists():
+            continue
         for ext in [".wav", ".mp3"]:
             f = d / f"{stem}{ext}"
             if f.exists():

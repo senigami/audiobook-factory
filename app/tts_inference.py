@@ -39,6 +39,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 try:
     from TTS.tts.configs.bark_config import BarkConfig
+    from TTS.tts.layers.bark.inference_funcs import load_voice
     # Force CACHE_DIR to avoid [Errno 30] /root access
     # Evaluated at class-level at import time, so we must override it here.
     BarkConfig.CACHE_DIR = os.path.join(home_dir, ".local", "share", "tts", "bark_v0")
@@ -117,19 +118,21 @@ def main():
         print(f"SENTENCE_COUNT: {len(sentences)}")
         sys.stdout.flush()
         
+        history_prompt = None
         all_wav_chunks = []
         
         with tqdm(total=len(sentences), unit="sent", desc="Synthesizing", file=sys.stderr) as pbar:
             for i, sentence in enumerate(sentences):
                 # Model-specific parameters
-                tts_kwargs = {
-                    "text": sentence,
-                }
                 
-                # Only pass language if model is explicitly multilingual or XTTS
-                # Bark and Tortoise in Coqui are sometimes picky about this
+                # Parameters for high-level tts.tts()
+                # Coqui high-level API uses 'speaker' for speaker_id, 
+                # but 'speaker_id' internally. To avoid duplicate argument errors,
+                # we pass it as 'speaker' which then maps to 'speaker_id' correctly.
+                # Prepare speaker and parameters
+                current_speaker = args.speaker_id
+                tts_kwargs = {}
                 if "xtts" in args.model_name.lower():
-                    tts_kwargs["language"] = args.language
                     tts_kwargs.update({
                         "speaker_wav": args.speaker_wav,
                         "repetition_penalty": args.repetition_penalty,
@@ -138,25 +141,74 @@ def main():
                 elif "tortoise" in args.model_name.lower():
                     tts_kwargs.update({
                         "preset": args.preset,
-                        "speaker_id": args.speaker_id if args.speaker_id else "random"
                     })
+                    current_speaker = args.speaker_id if args.speaker_id else "random"
                 elif "bark" in args.model_name.lower():
-                    # Bark handles language through tags or its propia way, usually no lang arg in TTS.tts
-                    # Passing speaker_id helps maintain consistency
-                    if args.speaker_id:
-                        tts_kwargs["speaker_id"] = args.speaker_id
+                    # Bark handles language through tags, no lang arg in TTS.tts
+                    pass # current_speaker is already set from args.speaker_id
                 else:
                     # Generic case, maybe it needs language
                     if hasattr(tts, 'is_multi_lingual') and tts.is_multi_lingual:
                         tts_kwargs["language"] = args.language
 
-                wav_chunk = tts.tts(**tts_kwargs)
+                # Synthesis call
+                try:
+                    if "bark" in args.model_name.lower():
+                        # Bark continuity logic: reuse tokens from previous sentence
+                        if i == 0 and current_speaker:
+                            try:
+                                history_prompt = load_voice(tts.synthesizer.tts_model, current_speaker)
+                            except Exception:
+                                history_prompt = (None, None, None)
+                        
+                        # generate_audio returns (wav, [semantic, coarse, fine])
+                        bark_out = tts.synthesizer.tts_model.generate_audio(
+                            sentence,
+                            history_prompt=history_prompt,
+                            **tts_kwargs
+                        )
+                        wav_chunk = bark_out[0]
+                        history_prompt = bark_out[1] # Capture tokens for continuity
+                    elif "tortoise" in args.model_name.lower():
+                        # Use model synthesize
+                        outputs = tts.synthesizer.tts_model.synthesize(
+                            text=sentence,
+                            config=tts.synthesizer.tts_config,
+                            speaker_id=current_speaker,
+                            **tts_kwargs
+                        )
+                        wav_chunk = outputs["wav"]
+                    elif "xtts" in args.model_name.lower():
+                        # Use high-level API for XTTS as it handles speaker_wav well
+                        wav_chunk = tts.tts(
+                            text=sentence,
+                            speaker_wav=args.speaker_wav,
+                            language=args.language,
+                            split_sentences=False,
+                            **tts_kwargs
+                        )
+                    else:
+                        # Standard fallback
+                        wav_chunk = tts.tts(
+                            text=sentence, 
+                            speaker=current_speaker, 
+                            language=args.language if hasattr(tts, 'is_multi_lingual') and tts.is_multi_lingual else None,
+                            split_sentences=False,
+                            **tts_kwargs
+                        )
+                except Exception as e:
+                    print(f"Direct synthesis failed, falling back to basic API: {e}", file=sys.stderr)
+                    # Basic fallback with minimal arguments
+                    wav_chunk = tts.tts(text=sentence, split_sentences=False)
+
+                if isinstance(wav_chunk, torch.Tensor):
+                    wav_chunk = wav_chunk.cpu().numpy()
+                
                 all_wav_chunks.append(torch.FloatTensor(wav_chunk))
                 pbar.update(1)
                 
                 # Emit progression token
-                print(f"SENTENCE_COMPLETED: {i + 1}")
-                sys.stdout.flush()
+                print(f"SENTENCE_COMPLETED: {i + 1}", flush=True)
         
         if all_wav_chunks:
             final_wav = torch.cat(all_wav_chunks, dim=0)
