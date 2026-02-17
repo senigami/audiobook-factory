@@ -150,7 +150,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, backgroundColor: 'var(--glass-hover)' }}
+      whileHover={{ backgroundColor: 'var(--glass-hover)' }}
       className={`glass-panel ${isActive ? 'active' : ''}`}
       onClick={onClick}
       style={{
