@@ -526,6 +526,26 @@ def update_speaker_test_text(name: str, text: str = Form(...)):
     meta_path.write_text(json.dumps(meta, indent=2))
     return {"status": "success", "test_text": text}
 
+@app.post("/api/speaker-profiles/{name}/reset-test-text")
+def reset_speaker_test_text(name: str):
+    import json
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+    
+    meta_path = profile_dir / "profile.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            if "test_text" in meta:
+                del meta["test_text"]
+                meta_path.write_text(json.dumps(meta, indent=2))
+        except: pass
+        
+    from .jobs import get_speaker_settings
+    new_settings = get_speaker_settings(name)
+    return {"status": "success", "test_text": new_settings["test_text"]}
+
 @app.post("/api/speaker-profiles/{name}/speed")
 def update_speaker_speed(name: str, speed: float = Form(...)):
     profile_dir = VOICES_DIR / name

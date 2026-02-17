@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save } from 'lucide-react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save, RotateCcw } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface SpeakerProfile {
@@ -172,6 +172,25 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             setEditingProfile(null);
         } catch (e) {
             console.error('Failed to save test text', e);
+        } finally {
+            setIsSavingText(false);
+        }
+    };
+
+    const handleResetTestText = async () => {
+        if (!editingProfile) return;
+        setIsSavingText(true);
+        try {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/reset-test-text`, {
+                method: 'POST'
+            });
+            const result = await resp.json();
+            if (result.status === 'success') {
+                setTestText(result.test_text);
+                onRefresh();
+            }
+        } catch (e) {
+            console.error('Failed to reset test text', e);
         } finally {
             setIsSavingText(false);
         }
@@ -394,6 +413,14 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                            <button
+                                onClick={handleResetTestText}
+                                className="btn-ghost"
+                                disabled={isSavingText}
+                                style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                                <RotateCcw size={14} /> Reset Original
+                            </button>
                             <button onClick={() => setEditingProfile(null)} className="btn-ghost">Cancel</button>
                             <button
                                 onClick={handleSaveTestText}

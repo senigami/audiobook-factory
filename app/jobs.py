@@ -8,6 +8,7 @@ from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR
 from .engines import xtts_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
+assembly_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
@@ -18,11 +19,19 @@ BASELINE_XTTS_CPS = 16.7
 def enqueue(job: Job):
     put_job(job)
     cancel_flags[job.id] = threading.Event()
-    job_queue.put(job.id)
+    if job.engine == "audiobook":
+        assembly_queue.put(job.id)
+    else:
+        job_queue.put(job.id)
 
 def requeue(job_id: str):
-    """Re-add an existing job id back into the worker queue."""
-    job_queue.put(job_id)
+    """Re-add an existing job id back into the correct worker queue."""
+    j = get_jobs().get(job_id)
+    if not j: return
+    if j.engine == "audiobook":
+        assembly_queue.put(job_id)
+    else:
+        job_queue.put(job_id)
     
 def cancel(job_id: str):
     ev = cancel_flags.get(job_id)
@@ -31,13 +40,14 @@ def cancel(job_id: str):
 
 
 def clear_job_queue():
-    """Empty the in-memory task queue."""
-    while not job_queue.empty():
-        try:
-            job_queue.get_nowait()
-            job_queue.task_done()
-        except queue.Empty:
-            break
+    """Empty the in-memory task queues."""
+    for q in [job_queue, assembly_queue]:
+        while not q.empty():
+            try:
+                q.get_nowait()
+                q.task_done()
+            except queue.Empty:
+                break
 
 
 def paused() -> bool:
@@ -58,6 +68,15 @@ def set_paused(value: bool):
 
 def _estimate_seconds(text_chars: int, cps: float) -> int:
     return max(5, int(text_chars / max(1.0, cps)))
+
+
+def format_seconds(seconds: int) -> str:
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    return f"{m}m {s}s"
 
 
 def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> bool:
@@ -216,16 +235,16 @@ def get_speaker_settings(profile_name: str) -> dict:
         
     return res
 
-def worker_loop():
+def worker_loop(q: "queue.Queue[str]"):
     while True:
-        jid = job_queue.get()
+        jid = q.get()
         try:
             j = get_jobs().get(jid)
             if not j:
                 continue
 
-            # pause support (unless bypassed by a single-chapter manual enqueue)
-            while pause_flag.is_set() and not j.bypass_pause:
+            # pause support (unless bypassed by a single-chapter manual enqueue or it's an audiobook job)
+            while pause_flag.is_set() and not j.bypass_pause and j.engine != "audiobook":
                 time.sleep(0.2)
 
             cancel_ev = cancel_flags.get(jid) or threading.Event()
@@ -252,7 +271,7 @@ def worker_loop():
                     f"Started At:  {start_dt}\n",
                     f"Engine: {j.engine.upper()}\n",
                     f"Character Count: {chars:,}\n",
-                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                    f"Predicted Duration: {format_seconds(eta)}\n",
                     "-" * 40 + "\n",
                     "\n"
                 ]
@@ -279,7 +298,7 @@ def worker_loop():
                     f"Engine: AUDIOBOOK ASSEMBLY\n",
                     f"Chapter Files: {num_files}\n",
                     f"Total Source Size: {total_size_mb:.1f} MB\n",
-                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                    f"Predicted Duration: {format_seconds(eta)}\n",
                     "-" * 40 + "\n",
                     "\n"
                 ]
@@ -560,8 +579,12 @@ def worker_loop():
                 print("FATAL: could not update job state after exception")
                 print(tb)
         finally:
-            job_queue.task_done()
+            q.task_done()
 
 
-worker_thread = threading.Thread(target=worker_loop, daemon=True)
-worker_thread.start()
+# Start dedicated workers
+synthesis_thread = threading.Thread(target=worker_loop, args=(job_queue,), name="SynthesisWorker", daemon=True)
+assembly_thread = threading.Thread(target=worker_loop, args=(assembly_queue,), name="AssemblyWorker", daemon=True)
+
+synthesis_thread.start()
+assembly_thread.start()

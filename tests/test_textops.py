@@ -68,3 +68,13 @@ def test_pack_text_to_limit():
 
 def test_sanitize_removes_non_ascii():
     assert sanitize_for_xtts("Hello 🚀") == "Hello."
+
+def test_sanitize_double_punctuation():
+    # Fix !. and ?.
+    assert sanitize_for_xtts("Let's see how it works!.") == "Let's see how it works!"
+    assert sanitize_for_xtts("Is it working?.") == "Is it working?"
+    # Preserve ellipses
+    assert sanitize_for_xtts("Thinking...") == "Thinking." # ellipses normalize to dot
+    # Collapse multiple energy marks
+    assert sanitize_for_xtts("Wow!!") == "Wow!"
+    assert sanitize_for_xtts("Really??") == "Really?"
