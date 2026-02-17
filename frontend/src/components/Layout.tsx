@@ -1,4 +1,4 @@
-import { Mic, Zap, Library, Settings } from 'lucide-react';
+import { Mic, Zap, Library } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,7 +12,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
     { id: 'voices', label: 'Voices', icon: Mic },
     { id: 'synthesis', label: 'Synthesis', icon: Zap },
     { id: 'library', label: 'Library', icon: Library },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (

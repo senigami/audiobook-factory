@@ -33,8 +33,11 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
       fetch('/api/audiobook/prepare')
         .then(res => res.json())
         .then((data: AssemblyPrep) => {
-          setChapters(data.chapters);
-          setSelectedFiles(new Set(data.chapters.map(c => c.filename)));
+          const sorted = [...data.chapters].sort((a, b) =>
+            a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
+          );
+          setChapters(sorted);
+          setSelectedFiles(new Set(sorted.map(c => c.filename)));
         })
         .catch(err => console.error('Failed to prepare assembly', err))
         .finally(() => setLoading(false));

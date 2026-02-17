@@ -197,11 +197,11 @@ def assemble_audiobook(
     list_file = output_m4b.with_suffix(".list.txt")
     
     metadata = ";FFMETADATA1\n"
-    metadata += f"title={shlex.quote(book_title)}\n"
+    metadata += f"title={book_title}\n"
     if author:
-        metadata += f"artist={shlex.quote(author)}\n"
+        metadata += f"artist={author}\n"
     if narrator:
-        metadata += f"comment={shlex.quote(narrator)}\n"
+        metadata += f"comment={narrator}\n"
     metadata += "\n"
     
     current_offset = 0.0
@@ -229,7 +229,7 @@ def assemble_audiobook(
                 metadata += "[CHAPTER]\nTIMEBASE=1/1000\n"
                 metadata += f"START={start_ms}\n"
                 metadata += f"END={end_ms}\n"
-                metadata += f"title={shlex.quote(display_name)}\n\n"
+                metadata += f"title={display_name}\n\n"
                 
                 current_offset += duration
 

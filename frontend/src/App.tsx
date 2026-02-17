@@ -6,7 +6,6 @@ import { AssemblyModal } from './components/AssemblyModal';
 import { VoicesTab } from './components/VoicesTab';
 import { SynthesisTab } from './components/SynthesisTab';
 import { LibraryTab } from './components/LibraryTab';
-import { SettingsTab } from './components/SettingsTab';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
 import type { Job } from './types';
@@ -114,6 +113,9 @@ function App() {
                 onRefresh={handleRefresh}
                 speakerProfiles={initialData?.speaker_profiles || []}
                 paused={initialData?.paused || false}
+                settings={initialData?.settings}
+                hideFinished={hideFinished}
+                onToggleHideFinished={() => setHideFinished(!hideFinished)}
               />
             )}
             {activeTab === 'library' && (
@@ -124,14 +126,6 @@ function App() {
                 onRefresh={handleRefresh}
                 progressHelper={getRemainingAndProgress}
                 formatSeconds={formatSeconds}
-              />
-            )}
-            {activeTab === 'settings' && (
-              <SettingsTab
-                settings={initialData?.settings}
-                hideFinished={hideFinished}
-                onToggleHideFinished={() => setHideFinished(!hideFinished)}
-                onRefresh={handleRefresh}
               />
             )}
           </main>
