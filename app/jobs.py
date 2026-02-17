@@ -1,6 +1,6 @@
 import queue, threading, time, traceback, os, re
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
@@ -178,6 +178,31 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
         
     return ",".join([str(w.absolute()) for w in wavs])
 
+
+def get_speaker_settings(profile_name: str) -> dict:
+    """Returns metadata (like speed) for a profile, falling back to global settings."""
+    from .config import VOICES_DIR
+    from .state import get_settings
+    import json
+    
+    defaults = get_settings()
+    res = {
+        "speed": defaults.get("xtts_speed", 1.0)
+    }
+    
+    if not profile_name:
+        return res
+        
+    p = VOICES_DIR / profile_name
+    meta_path = p / "profile.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            if "speed" in meta:
+                res["speed"] = meta["speed"]
+        except: pass
+        
+    return res
 
 def worker_loop():
     while True:
@@ -427,8 +452,10 @@ def worker_loop():
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
                 
-                # Resolve speaker WAVs from profile
+                # Resolve speaker WAVs and settings from profile
                 sw = get_speaker_wavs(j.speaker_profile)
+                spk_settings = get_speaker_settings(j.speaker_profile)
+                speed = spk_settings["speed"]
                 
                 rc = xtts_generate(
                     text=text, 
@@ -436,7 +463,8 @@ def worker_loop():
                     safe_mode=j.safe_mode, 
                     on_output=on_output, 
                     cancel_check=cancel_check,
-                    speaker_wav=sw
+                    speaker_wav=sw,
+                    speed=speed
                 )
             else:
                 update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Unknown engine: {j.engine}", log="".join(logs))

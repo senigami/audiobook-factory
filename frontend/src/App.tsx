@@ -13,7 +13,7 @@ import type { Job } from './types';
 
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
-  const { jobs, refreshJobs } = useJobs(refetchHome);
+  const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
   const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library' | 'settings'>('synthesis');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
@@ -94,6 +94,7 @@ function App() {
               <VoicesTab
                 speakerProfiles={initialData?.speaker_profiles || []}
                 onRefresh={handleRefresh}
+                testProgress={testProgress}
               />
             )}
             {activeTab === 'synthesis' && (

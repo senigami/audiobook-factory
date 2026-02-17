@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--out_path", required=True, help="Output wav path")
     parser.add_argument("--repetition_penalty", type=float, default=2.0, help="Repetition penalty")
     parser.add_argument("--temperature", type=float, default=0.75, help="Temperature")
+    parser.add_argument("--speed", type=float, default=1.0, help="Speaking speed (1.0 = normal)")
     
     args = parser.parse_args()
 
@@ -34,7 +35,6 @@ def main():
 
     # Voice Caching setup
     import hashlib
-    # We use a hash of the combined absolute paths to identify the speaker profile
     if isinstance(speaker_wavs, list):
         combined_paths = "|".join(sorted([os.path.abspath(p) for p in speaker_wavs]))
     else:
@@ -56,10 +56,39 @@ def main():
     finally:
         sys.stderr = original_stderr
 
-    # Note: inference_stream is more stable for long text as it forces chunk-based processing
-    # even if we are saving to a single file.
-    
-    print(f"Synthesizing to {args.out_path}...", file=sys.stderr)
+    # Compute or load latents manually for the speaker_id
+    latent_file = os.path.join(voice_dir, f"{speaker_id}.pth")
+    try:
+        if os.path.exists(latent_file):
+            print(f"Loading cached latents for {speaker_id}...", file=sys.stderr)
+            latents = torch.load(latent_file, map_location=device)
+            gpt_cond_latent = latents["gpt_cond_latent"]
+            speaker_embedding = latents["speaker_embedding"]
+        else:
+            print(f"Computing latents for {speaker_id}...", file=sys.stderr)
+            # Access the model directly to compute latents
+            # XTTS model has get_conditioning_latents
+            xtts_model = tts.synthesizer.tts_model
+            gpt_cond_latent, speaker_embedding = xtts_model.get_conditioning_latents(audio_path=speaker_wavs)
+            torch.save({
+                "gpt_cond_latent": gpt_cond_latent,
+                "speaker_embedding": speaker_embedding
+            }, latent_file)
+        
+        # Inject into the model's speaker manager to avoid KeyError in tts.tts()
+        if not hasattr(tts.synthesizer.tts_model, 'speaker_manager'):
+            # Some versions might have it nested or different
+            pass
+        else:
+            tts.synthesizer.tts_model.speaker_manager.speakers[speaker_id] = {
+                "gpt_cond_latent": gpt_cond_latent,
+                "speaker_embedding": speaker_embedding
+            }
+    except Exception as e:
+        print(f"Warning: Latent caching/injection failed: {e}. Falling back to standard processing.", file=sys.stderr)
+        speaker_id = None # Fallback to using speaker_wav every time
+
+    print(f"Synthesizing to {args.out_path} at {args.speed}x speed...", file=sys.stderr)
     
     try:
         from tqdm import tqdm
@@ -81,16 +110,25 @@ def main():
         with tqdm(total=len(sentences), unit="sent", desc="Synthesizing", file=sys.stderr) as pbar:
             for i, sentence in enumerate(sentences):
                 # We use tts() which returns a list of floats
-                # Passing speaker and voice_dir enables caching of voice latents
-                wav_chunk = tts.tts(
-                    text=sentence,
-                    speaker_wav=speaker_wavs,
-                    speaker=speaker_id,
-                    voice_dir=voice_dir,
-                    language=args.language,
-                    repetition_penalty=args.repetition_penalty,
-                    temperature=args.temperature,
-                )
+                if speaker_id:
+                    # Call synthesizer directly because tts.tts() named 'speed' argument is not forwarded
+                    wav_chunk = tts.synthesizer.tts(
+                        text=sentence,
+                        speaker_name=speaker_id,
+                        language_name=args.language,
+                        speed=args.speed,
+                        repetition_penalty=args.repetition_penalty,
+                        temperature=args.temperature
+                    )
+                else:
+                    wav_chunk = tts.synthesizer.tts(
+                        text=sentence,
+                        speaker_wav=speaker_wavs,
+                        language_name=args.language,
+                        speed=args.speed,
+                        repetition_penalty=args.repetition_penalty,
+                        temperature=args.temperature
+                    )
                 all_wav_chunks.append(torch.FloatTensor(wav_chunk))
                 pbar.update(1)
         

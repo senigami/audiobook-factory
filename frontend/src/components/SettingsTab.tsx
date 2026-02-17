@@ -10,6 +10,8 @@ interface SettingsTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, hideFinished, onToggleHideFinished, onRefresh }) => {
     const [saving, setSaving] = useState(false);
+    const [localSpeed, setLocalSpeed] = useState<number | null>(null);
+    const speed = localSpeed ?? settings?.xtts_speed ?? 1.0;
 
     const handleToggleSafeMode = async () => {
         setSaving(true);
@@ -42,6 +44,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, hideFinished
             alert('Backfill process started in background.');
         } catch (e) {
             console.error('Backfill failed', e);
+        }
+    };
+
+    const handleSpeedChange = async (val: number) => {
+        setSaving(true);
+        try {
+            const formData = new URLSearchParams();
+            formData.append('xtts_speed', val.toString());
+            await fetch('/settings', { method: 'POST', body: formData });
+            onRefresh();
+        } catch (e) {
+            console.error('Failed to update speed', e);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -83,6 +99,42 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, hideFinished
                             {settings?.safe_mode ? <Check size={16} /> : null}
                             {settings?.safe_mode ? 'Enabled' : 'Disabled'}
                         </button>
+                    </div>
+
+                    <div className="divider" style={{ margin: '2rem 0', opacity: 0.3 }} />
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '2rem' }}>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h4 style={{ fontSize: '1rem', marginBottom: '0.25rem' }}>Speaking Speed</h4>
+                                {saving && <span style={{ fontSize: '0.7rem', color: 'var(--accent)', opacity: 0.8 }}>Saving...</span>}
+                            </div>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                Adjust how fast the narrator speaks (1.0 is normal). Higher values result in faster narration.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '200px' }}>
+                            <input
+                                type="range"
+                                min="0.5"
+                                max="2.0"
+                                step="0.05"
+                                value={speed}
+                                onChange={(e) => setLocalSpeed(parseFloat(e.target.value))}
+                                onMouseUp={() => handleSpeedChange(speed)}
+                                onTouchEnd={() => handleSpeedChange(speed)}
+                                style={{ flex: 1, accentColor: 'var(--accent)' }}
+                            />
+                            <span style={{
+                                minWidth: '3.5rem',
+                                textAlign: 'right',
+                                fontWeight: 600,
+                                fontVariantNumeric: 'tabular-nums',
+                                color: 'var(--accent)'
+                            }}>
+                                {speed.toFixed(2)}x
+                            </span>
+                        </div>
                     </div>
 
                     <div className="divider" style={{ margin: '2rem 0', opacity: 0.3 }} />

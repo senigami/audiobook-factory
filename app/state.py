@@ -27,7 +27,8 @@ def _default_state() -> Dict[str, Any]:
             "safe_mode": True,
             "make_mp3": True,
             "default_engine": "xtts",
-            "default_piper_voice": None
+            "default_piper_voice": None,
+            "xtts_speed": 1.0
         },
         "performance_metrics": {
             "audiobook_speed_multiplier": 1.0,

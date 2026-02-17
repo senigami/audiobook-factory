@@ -4,6 +4,8 @@ export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface SpeakerProfile {
   name: string;
   wav_count: number;
+  speed: number;
+  preview_url: string | null;
 }
 
 export interface Job {

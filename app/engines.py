@@ -1,4 +1,4 @@
-import shlex, subprocess, os, re
+import shlex, subprocess, os, re, hashlib
 from pathlib import Path
 from typing import Tuple, List, Optional
 
@@ -92,7 +92,7 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, speaker_wav: str = None) -> int:
+def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, speaker_wav: str = None, speed: float = 1.0) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
@@ -121,6 +121,7 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         f"--speaker_wav {shlex.quote(sw)} "
         f"--language en "
         f"--repetition_penalty 2.0 "
+        f"--speed {speed} "
         f"--out_path {shlex.quote(str(out_wav))}"
     )
     return run_cmd_stream(cmd, on_output, cancel_check)
@@ -137,6 +138,21 @@ def get_audio_duration(file_path: Path) -> float:
         return float(result.stdout.strip())
     except Exception:
         return 0.0
+
+def get_speaker_latent_path(speaker_wavs_str: str) -> Optional[Path]:
+    """Computes the same latent path as xtts_inference.py."""
+    if not speaker_wavs_str:
+        return None
+        
+    if "," in speaker_wavs_str:
+        wavs = [s.strip() for s in speaker_wavs_str.split(",") if s.strip()]
+        combined_paths = "|".join(sorted([os.path.abspath(p) for p in wavs]))
+    else:
+        combined_paths = os.path.abspath(speaker_wavs_str)
+        
+    speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
+    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-factory/voices"))
+    return voice_dir / f"{speaker_id}.pth"
 
 def assemble_audiobook(
     input_folder: Path, 

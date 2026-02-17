@@ -1,10 +1,10 @@
-import time, uuid, re, os
+import time, uuid, re, os, sys
 from typing import Optional, List, Tuple
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from .engines import wav_to_mp3, terminate_all_subprocesses
+from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
@@ -90,13 +90,43 @@ def startup_event():
     if count > 0:
         print(f"recovered {count} jobs from state")
 
+# We'll use a globally accessible loop variable for the bridge
+_main_loop = [None]
+
+def broadcast_test_progress(name: str, progress: float):
+    import asyncio
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "test_progress", "name": name, "progress": progress}),
+            loop
+        )
+
+@app.on_event("startup")
+def startup_event():
+    # Re-populate in-memory queue from state on restart
+    existing = get_jobs()
+    count = 0
+    for jid, j in existing.items():
+        if j.status == "queued" or j.status == "running":
+            # Reset stale jobs to 'cancelled' on startup to prevent auto-start
+            update_job(jid,
+                       status="cancelled",
+                       progress=0.0,
+                       started_at=None,
+                       log="Reset on startup.",
+                       finished_at=None,
+                       eta_seconds=None,
+                       error="Restarted",
+                       warning_count=0)
+            count += 1
+    if count > 0:
+        print(f"recovered {count} jobs from state")
+
     # Register bridge between state updates and WebSocket broadcast
     import asyncio
     from .state import add_job_listener
 
-    # We'll use a globally accessible loop variable for the bridge
-    _main_loop = [None]
-    
     def job_update_bridge(job_id, updates):
         # We need to bridge from the sync world of state.py to async WebSocket
         loop = _main_loop[0]
@@ -216,13 +246,16 @@ def api_home():
 
 @app.post("/settings")
 def save_settings(
-    safe_mode: Optional[bool] = Form(None)
+    safe_mode: Optional[bool] = Form(None),
+    xtts_speed: Optional[float] = Form(None)
 ):
     curr = get_settings()
     new_safe = safe_mode if safe_mode is not None else curr.get("safe_mode", True)
+    new_speed = xtts_speed if xtts_speed is not None else curr.get("xtts_speed", 1.0)
     
     update_settings(
         safe_mode=new_safe,
+        xtts_speed=new_speed,
         make_mp3=True
     )
     return {"status": "success", "settings": get_settings()}
@@ -422,6 +455,29 @@ def prepare_audiobook():
 
     sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
     
+    preview = []
+    total_sec = 0.0
+    existing_jobs = get_jobs()
+    job_titles = {j.chapter_file: j.custom_title for j in existing_jobs.values() if j.custom_title}
+
+    for stem in sorted_stems:
+        fname = chapters_found[stem]
+        dur = get_audio_duration(src_dir / fname)
+        
+        display_name = job_titles.get(stem + ".txt") or job_titles.get(stem) or stem
+        preview.append({
+            "filename": fname,
+            "title": display_name,
+            "duration": dur
+        })
+        total_sec += dur
+
+    return {
+        "title": "Audiobook Project",
+        "chapters": preview,
+        "total_duration": total_sec
+    }
+
 @app.get("/api/speaker-profiles")
 def list_speaker_profiles():
     if not VOICES_DIR.exists():
@@ -430,35 +486,121 @@ def list_speaker_profiles():
     for d in VOICES_DIR.iterdir():
         if d.is_dir():
             wav_count = len(list(d.glob("*.wav")))
+            
+            # Load metadata if exists
+            meta_path = d / "profile.json"
+            speed = 1.0
+            if meta_path.exists():
+                try:
+                    import json
+                    meta = json.loads(meta_path.read_text())
+                    speed = meta.get("speed", 1.0)
+                except: pass
+                
+            test_wav = XTTS_OUT_DIR / f"test_{d.name}.wav"
+            
             profiles.append({
                 "name": d.name,
-                "wav_count": wav_count
+                "wav_count": wav_count,
+                "speed": speed,
+                "preview_url": f"/out/xtts/test_{d.name}.wav" if test_wav.exists() else None
             })
     return sorted(profiles, key=lambda x: x["name"])
+
+@app.post("/api/speaker-profiles/{name}/speed")
+def update_speaker_speed(name: str, speed: float = Form(...)):
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+    
+    meta_path = profile_dir / "profile.json"
+    import json
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except: pass
+    
+    meta["speed"] = speed
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return {"status": "success", "speed": speed}
 
 @app.post("/api/speaker-profiles/build")
 async def build_speaker_profile(
     name: str = Form(...),
     files: List[UploadFile] = File(...)
 ):
-    VOICES_DIR.mkdir(parents=True, exist_ok=True)
-    profile_dir = VOICES_DIR / name
-    if profile_dir.exists():
-        import shutil
-        shutil.rmtree(profile_dir)
-    profile_dir.mkdir()
-    
-    for f in files:
-        if not f.filename.lower().endswith(".wav"):
-            continue
-        dest = profile_dir / f.filename
-        content = await f.read()
-        dest.write_bytes(content)
-    
-    return {"status": "success", "profile": name}
+    try:
+        if not name or not name.strip():
+            return JSONResponse({"status": "error", "message": "Invalid profile name"}, status_code=400)
+            
+        VOICES_DIR.mkdir(parents=True, exist_ok=True)
+        profile_dir = VOICES_DIR / name
+        
+        # Security check to prevent path traversal
+        if not str(profile_dir.resolve()).startswith(str(VOICES_DIR.resolve())):
+             return JSONResponse({"status": "error", "message": "Invalid profile name (path traversal)"}, status_code=400)
+
+        if profile_dir.exists():
+            # Try to cleanup cached latents before deleting the old profile
+            try:
+                from .jobs import get_speaker_wavs
+                from .engines import get_speaker_latent_path
+                sw = get_speaker_wavs(name)
+                if sw:
+                    lp = get_speaker_latent_path(sw)
+                    if lp and lp.exists():
+                        lp.unlink()
+            except:
+                pass
+
+            import shutil
+            if profile_dir.is_dir():
+                shutil.rmtree(profile_dir)
+            else:
+                profile_dir.unlink()
+        profile_dir.mkdir()
+        
+        saved_count = 0
+        for f in files:
+            if not f.filename or not f.filename.lower().endswith(".wav"):
+                continue
+            
+            # Use only the basename to prevent sub-directory creation/traversal
+            basename = os.path.basename(f.filename)
+            dest = profile_dir / basename
+            content = await f.read()
+            dest.write_bytes(content)
+            saved_count += 1
+        
+        if saved_count == 0:
+            return JSONResponse({"status": "error", "message": "No valid .wav files were uploaded"}, status_code=400)
+            
+        return {"status": "success", "profile": name, "files_saved": saved_count}
+    except Exception as e:
+        import traceback
+        error_msg = f"Build failed: {str(e)}"
+        print(f"ERROR in build_speaker_profile: {error_msg}")
+        traceback.print_exc()
+        return JSONResponse({"status": "error", "message": error_msg, "traceback": traceback.format_exc()}, status_code=500)
 
 @app.delete("/api/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):
+    from .jobs import get_speaker_wavs
+    from .engines import get_speaker_latent_path
+    
+    # 1. Try to find and delete cached latents first
+    try:
+        sw = get_speaker_wavs(name)
+        if sw:
+            latent_path = get_speaker_latent_path(sw)
+            if latent_path and latent_path.exists():
+                print(f"Deleting cached latents at {latent_path}")
+                latent_path.unlink()
+    except Exception as e:
+        print(f"Warning: Failed to cleanup latent cache for {name}: {e}")
+
+    # 2. Delete the profile directory
     profile_dir = VOICES_DIR / name
     if profile_dir.exists():
         import shutil
@@ -475,42 +617,53 @@ def test_speaker_profile(name: str = Form(...)):
         return JSONResponse({"status": "error", "message": "No WAVs found for profile"}, status_code=400)
     
     test_out = XTTS_OUT_DIR / f"test_{name}.wav"
-    test_text = "This is a test of the averaged voice for speaker profile " + name + "."
+    test_text = (
+        f"The mysterious traveler, bathed in the soft glow of the azure twilight, "
+        f"whispered of ancient treasures buried beneath the jagged mountains. "
+        f"'Zephyr,' he exclaimed, his voice a mixture of awe and trepidation, "
+        f"'the path is treacherous, yet the reward is beyond measure.' "
+        f"Around them, the vibrant forest hummed with rhythmic sounds while a "
+        f"cold breeze carried the scent of wet earth and weathered stone."
+    )
     
     # We run it synchronously for the test
+    from .jobs import get_speaker_settings
+    spk_settings = get_speaker_settings(name)
+    speed = spk_settings["speed"]
+    settings = get_settings() # Added to get safe_mode setting
+    broadcast_test_progress(name, 0.0)
+
+    def on_xtts_output(line: str):
+        # Parse progress from XTTS tqdm output: "Synthesizing:  33%|███▎      | 1/3 [00:05<00:11,  5.69s/sent]"
+        # We look for "n/total"
+        match = re.search(r'(\d+)/(\d+)\s+\[', line)
+        if match:
+            current = int(match.group(1))
+            total = int(match.group(2))
+            if total > 0:
+                prog = current / total
+                broadcast_test_progress(name, prog)
+        print(line, end="", file=sys.stderr)
+
     rc = xtts_generate(
         text=test_text,
         out_wav=test_out,
-        safe_mode=True,
-        on_output=print,
+        safe_mode=settings.get("safe_mode", True),
+        on_output=on_xtts_output,
         cancel_check=lambda: False,
-        speaker_wav=sw
+        speaker_wav=sw,
+        speed=speed
     )
+    
+    # Final 100% signal
+    if rc == 0:
+        broadcast_test_progress(name, 1.0)
+    else:
+        broadcast_test_progress(name, 0.0)
     
     if rc == 0 and test_out.exists():
         return {"status": "success", "audio_url": f"/out/xtts/test_{name}.wav"}
     return JSONResponse({"status": "error", "message": f"Test generation failed (rc={rc})"}, status_code=500)
-    
-    preview = []
-    total_sec = 0.0
-    for stem in sorted_stems:
-        fname = chapters_found[stem]
-        dur = get_audio_duration(src_dir / fname)
-        
-        display_name = job_titles.get(stem + ".txt") or job_titles.get(stem) or stem
-        
-        preview.append({
-            "filename": fname,
-            "title": display_name,
-            "start_sec": total_sec,
-            "duration": dur
-        })
-        total_sec += dur
-        
-    return JSONResponse({
-        "chapters": preview,
-        "total_duration": total_sec
-    })
 
 @app.post("/cancel")
 def cancel(job_id: str = Form(...)):
@@ -742,7 +895,7 @@ def backfill_mp3_queue():
     
     # 2. Identify orphaned WAVs and convert surgically
     all_jobs = get_jobs()
-    for d_path in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+    for d_path in [XTTS_OUT_DIR]:
         d_path.mkdir(parents=True, exist_ok=True)
         for wav in d_path.glob("*.wav"):
             mp3 = wav.with_suffix(".mp3")
@@ -856,19 +1009,13 @@ def api_jobs():
             
         stem = Path(c).stem
         x_mp3 = (XTTS_OUT_DIR / f"{stem}.mp3")
-        p_mp3 = (PIPER_OUT_DIR / f"{stem}.mp3")
         x_wav = (XTTS_OUT_DIR / f"{stem}.wav")
-        p_wav = (PIPER_OUT_DIR / f"{stem}.wav")
         
         found_job = None
         if x_mp3.exists():
             found_job = {"status": "done", "engine": "xtts", "output_mp3": x_mp3.name, "log": "Job auto-discovered from existing files."}
-        elif p_mp3.exists():
-            found_job = {"status": "done", "engine": "piper", "output_mp3": p_mp3.name, "log": "Job auto-discovered from existing files."}
         elif x_wav.exists():
             found_job = {"status": "wav", "engine": "xtts", "output_wav": x_wav.name, "log": "WAV file found. Waiting for MP3 conversion."}
-        elif p_wav.exists():
-            found_job = {"status": "wav", "engine": "piper", "output_wav": p_wav.name, "log": "WAV file found. Waiting for MP3 conversion."}
             
         if found_job:
             if existing:

@@ -24,6 +24,8 @@ export const useJobs = (onJobComplete?: () => void) => {
     }
   }, []);
 
+  const [testProgress, setTestProgress] = useState<Record<string, number>>({});
+
   const handleUpdate = useCallback((data: any) => {
     if (data.type === 'job_updated') {
       const { job_id, updates } = data;
@@ -41,6 +43,9 @@ export const useJobs = (onJobComplete?: () => void) => {
 
         return { ...prev, [filename]: newJob };
       });
+    } else if (data.type === 'test_progress') {
+      const { name, progress } = data;
+      setTestProgress(prev => ({ ...prev, [name]: progress }));
     }
   }, [refreshJobs]);
 
@@ -67,5 +72,5 @@ export const useJobs = (onJobComplete?: () => void) => {
     return () => clearInterval(timer);
   }, [refreshJobs, connected]);
 
-  return { jobs, loading, refreshJobs };
+  return { jobs, loading, refreshJobs, testProgress };
 };
