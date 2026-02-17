@@ -21,13 +21,17 @@ echo "Uninstalling existing TTS..."
 # Uninstall twice to be safe against multiple installs or egg-links
 pip uninstall -y TTS || true
 pip uninstall -y TTS || true
+# The new fork uses check for coqui-tts
+pip uninstall -y coqui-tts || true
 
-echo "Installing latest TTS from GitHub..."
-# Install directly from the main branch of the Coqui TTS repository
-# We also include typical dependencies to ensure compatibility
-pip install "git+https://github.com/coqui-ai/TTS.git@dev" --no-cache-dir
+echo "Uninstalling conflicting dependencies..."
+pip uninstall -y coqpit || true
+
+echo "Installing latest TTS and dependencies..."
+pip install coqpit-config==0.2.4 "transformers<5.0.0" torchcodec --no-cache-dir
+pip install "git+https://github.com/idiap/coqui-ai-TTS.git@main" --no-cache-dir
 
 echo "Verifying installation..."
-pip show TTS
+pip show coqui-tts
 
 echo "XTTS update complete! You are now on the latest development version."

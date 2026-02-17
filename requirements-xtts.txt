@@ -1,7 +1,11 @@
 # XTTS-specific requirements
-# Required for Python 3.11 compatibility and to fix known ImportError/TypeError issues
-git+https://github.com/coqui-ai/TTS.git@dev
-transformers==4.40.2
-torch==2.5.1
+# Using the Idiap community fork for maintenance (2026)
+git+https://github.com/idiap/coqui-ai-TTS.git@main
+
+# Specific dependencies for compatibility with the Idiap fork
+coqpit-config==0.2.4
+transformers<5.0.0
+torch>=2.10.0
+torchcodec
 torchvision
 torchaudio
