@@ -17,13 +17,32 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def main():
     parser = argparse.ArgumentParser(description="XTTS Streaming Inference Script")
     parser.add_argument("--text", required=True, help="Text to synthesize")
-    parser.add_argument("--speaker_wav", required=True, help="Path to reference speaker wav")
+    parser.add_argument("--speaker_wav", required=True, help="Path to reference speaker wav(s). Can be a single path or a comma-separated list.")
     parser.add_argument("--language", default="en", help="Language code")
     parser.add_argument("--out_path", required=True, help="Output wav path")
     parser.add_argument("--repetition_penalty", type=float, default=2.0, help="Repetition penalty")
     parser.add_argument("--temperature", type=float, default=0.75, help="Temperature")
     
     args = parser.parse_args()
+
+    # Handle multiple speaker WAVs (Idiap fork feature)
+    # We support comma-separated paths or a single path
+    if "," in args.speaker_wav:
+        speaker_wavs = [s.strip() for s in args.speaker_wav.split(",") if s.strip()]
+    else:
+        speaker_wavs = args.speaker_wav
+
+    # Voice Caching setup
+    import hashlib
+    # We use a hash of the combined absolute paths to identify the speaker profile
+    if isinstance(speaker_wavs, list):
+        combined_paths = "|".join(sorted([os.path.abspath(p) for p in speaker_wavs]))
+    else:
+        combined_paths = os.path.abspath(speaker_wavs)
+        
+    speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
+    voice_dir = os.path.expanduser("~/.cache/audiobook-factory/voices")
+    os.makedirs(voice_dir, exist_ok=True)
 
     # Load model (quietly)
     print("Loading XTTS model...", file=sys.stderr)
@@ -62,9 +81,12 @@ def main():
         with tqdm(total=len(sentences), unit="sent", desc="Synthesizing", file=sys.stderr) as pbar:
             for i, sentence in enumerate(sentences):
                 # We use tts() which returns a list of floats
+                # Passing speaker and voice_dir enables caching of voice latents
                 wav_chunk = tts.tts(
                     text=sentence,
-                    speaker_wav=args.speaker_wav,
+                    speaker_wav=speaker_wavs,
+                    speaker=speaker_id,
+                    voice_dir=voice_dir,
                     language=args.language,
                     repetition_penalty=args.repetition_penalty,
                     temperature=args.temperature,
