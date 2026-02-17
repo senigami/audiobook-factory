@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw } from 'lucide-react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save } from 'lucide-react';
+import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface SpeakerProfile {
     name: string;
     wav_count: number;
     speed: number;
+    test_text?: string;
     preview_url: string | null;
 }
 
@@ -14,10 +16,11 @@ interface SpeakerCardProps {
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
     onRefresh: () => void;
-    progress?: number;
+    onEditTestText: (profile: SpeakerProfile) => void;
+    testStatus?: { progress: number; started_at?: number };
 }
 
-const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onRefresh, progress }) => {
+const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onRefresh, onEditTestText, testStatus }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
@@ -56,7 +59,17 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                         <Music size={16} />
                     </div>
                     <div>
-                        <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{profile.name}</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{profile.name}</h4>
+                            <button
+                                onClick={() => onEditTestText(profile)}
+                                className="btn-ghost"
+                                style={{ padding: '4px', color: 'var(--text-muted)' }}
+                                title="Edit Sample Text"
+                            >
+                                <FileEdit size={12} />
+                            </button>
+                        </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count} samples</span>
                     </div>
                 </div>
@@ -93,23 +106,14 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                 />
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minHeight: '40px' }}>
                 {isTesting ? (
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)' }}>Generating...</span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)' }}>{Math.round((progress || 0) * 100)}%</span>
-                        </div>
-                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{
-                                height: '100%',
-                                width: `${(progress || 0) * 100}%`,
-                                background: 'var(--accent)',
-                                transition: 'width 0.3s ease',
-                                boxShadow: '0 0 10px var(--accent)'
-                            }} />
-                        </div>
-                    </div>
+                    <PredictiveProgressBar
+                        progress={testStatus?.progress || 0}
+                        startedAt={testStatus?.started_at}
+                        etaSeconds={25} // Average XTTS test time is ~25s
+                        label="Generating Sample..."
+                    />
                 ) : profile.preview_url ? (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <audio src={`${profile.preview_url}?t=${cacheBuster}`} controls style={{ flex: 1, height: '32px' }} />
@@ -142,7 +146,7 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
 interface VoicesTabProps {
     onRefresh: () => void;
     speakerProfiles: SpeakerProfile[];
-    testProgress: Record<string, number>;
+    testProgress: Record<string, { progress: number; started_at?: number }>;
 }
 
 export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles, testProgress }) => {
@@ -150,6 +154,28 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [files, setFiles] = useState<FileList | null>(null);
     const [isBuilding, setIsBuilding] = useState(false);
     const [testingProfile, setTestingProfile] = useState<string | null>(null);
+    const [editingProfile, setEditingProfile] = useState<SpeakerProfile | null>(null);
+    const [testText, setTestText] = useState('');
+    const [isSavingText, setIsSavingText] = useState(false);
+
+    const handleSaveTestText = async () => {
+        if (!editingProfile) return;
+        setIsSavingText(true);
+        try {
+            const formData = new URLSearchParams();
+            formData.append('text', testText);
+            await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/test-text`, {
+                method: 'POST',
+                body: formData
+            });
+            onRefresh();
+            setEditingProfile(null);
+        } catch (e) {
+            console.error('Failed to save test text', e);
+        } finally {
+            setIsSavingText(false);
+        }
+    };
 
     const handleBuild = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -299,15 +325,88 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 key={p.name}
                                 profile={p}
                                 isTesting={testingProfile === p.name}
-                                progress={testProgress[p.name]}
+                                testStatus={testProgress[p.name]}
                                 onTest={handleTest}
                                 onDelete={handleDelete}
                                 onRefresh={onRefresh}
+                                onEditTestText={(profile) => {
+                                    setEditingProfile(profile);
+                                    setTestText(profile.test_text || '');
+                                }}
                             />
                         ))}
                     </div>
                 </section>
             </div>
+
+            {/* Edit Test Text Modal */}
+            {editingProfile && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.8)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    backdropFilter: 'blur(8px)'
+                }}>
+                    <div className="glass-panel animate-in" style={{
+                        width: '90%',
+                        maxWidth: '600px',
+                        padding: '2rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1.5rem'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <FileEdit color="var(--accent)" size={20} />
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Edit Sample Text for {editingProfile.name}</h3>
+                            </div>
+                            <button onClick={() => setEditingProfile(null)} className="btn-ghost">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="input-group">
+                            <label>The narrative text used for voice previews</label>
+                            <textarea
+                                value={testText}
+                                onChange={(e) => setTestText(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    minHeight: '150px',
+                                    background: 'rgba(0,0,0,0.2)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: '8px',
+                                    color: '#fff',
+                                    padding: '1rem',
+                                    fontSize: '0.9rem',
+                                    lineHeight: '1.5',
+                                    resize: 'vertical'
+                                }}
+                                placeholder="Enter the text you want this narrator to speak in the preview..."
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                            <button onClick={() => setEditingProfile(null)} className="btn-ghost">Cancel</button>
+                            <button
+                                onClick={handleSaveTestText}
+                                className="btn-primary"
+                                disabled={isSavingText}
+                            >
+                                {isSavingText ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                                Save Narrative
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -180,14 +180,24 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
 
 
 def get_speaker_settings(profile_name: str) -> dict:
-    """Returns metadata (like speed) for a profile, falling back to global settings."""
+    """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
     from .config import VOICES_DIR
     from .state import get_settings
     import json
     
     defaults = get_settings()
+    default_test_text = (
+        "The mysterious traveler, bathed in the soft glow of the azure twilight, "
+        "whispered of ancient treasures buried beneath the jagged mountains. "
+        "'Zephyr,' he exclaimed, his voice a mixture of awe and trepidation, "
+        "'the path is treacherous, yet the reward is beyond measure.' "
+        "Around them, the vibrant forest hummed with rhythmic sounds while a "
+        "cold breeze carried the scent of wet earth and weathered stone."
+    )
+    
     res = {
-        "speed": defaults.get("xtts_speed", 1.0)
+        "speed": defaults.get("xtts_speed", 1.0),
+        "test_text": default_test_text
     }
     
     if not profile_name:
@@ -200,6 +210,8 @@ def get_speaker_settings(profile_name: str) -> dict:
             meta = json.loads(meta_path.read_text())
             if "speed" in meta:
                 res["speed"] = meta["speed"]
+            if "test_text" in meta:
+                res["test_text"] = meta["test_text"]
         except: pass
         
     return res

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, Mic } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
+import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface ChapterCardProps {
   job?: Job;
@@ -18,11 +19,7 @@ interface ChapterCardProps {
   }
 }
 
-const formatTime = (seconds: number) => {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
+
 
 const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusInfo']) => {
   const config = {
@@ -45,9 +42,7 @@ const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusIn
 export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, statusInfo }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
-  const [now, setNow] = useState(Date.now());
   const [showMenu, setShowMenu] = useState(false);
-  const [displayedRemaining, setDisplayedRemaining] = useState<number | null>(null);
 
   const status = job?.status || 'queued';
 
@@ -57,17 +52,6 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [showMenu]);
-
-  useEffect(() => {
-    if (status !== 'running') {
-      setNow(Date.now()); // reset if not running
-      return;
-    }
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [status]);
 
   useEffect(() => {
     setEditedTitle(job?.custom_title || filename);
@@ -103,28 +87,9 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     return null;
   };
 
-  const getProgressInfo = () => {
-    if (status !== 'running' || !job?.started_at || !job?.eta_seconds) {
-      return { remaining: null, localProgress: job?.progress || 0 };
-    }
-    const elapsed = (now / 1000) - job.started_at;
-    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
-    const currentProgress = Math.max(job.progress || 0, timeProgress);
-    const blend = Math.min(1.0, currentProgress / 0.25);
-    const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
-    const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
-    const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
-    return {
-      remaining: Math.max(0, Math.floor(refinedRemaining)),
-      localProgress: currentProgress
-    };
-  };
-
-  const { remaining: calculatedRemaining, localProgress } = getProgressInfo();
-
   const getDisplayConfig = () => {
     const base = getStatusConfig(status, statusInfo);
-    if (status === 'running' && (displayedRemaining === 0)) {
+    if (status === 'running' && job?.progress && job.progress > 0.99) {
       return { ...base, label: 'Finishing...' };
     }
     return base;
@@ -132,18 +97,6 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const config = getDisplayConfig();
   const Icon = config.icon;
-
-  useEffect(() => {
-    if (calculatedRemaining === null) {
-      setDisplayedRemaining(null);
-    } else {
-      if (displayedRemaining === null || Math.abs(displayedRemaining - calculatedRemaining) > 1) {
-        setDisplayedRemaining(calculatedRemaining);
-      } else if (displayedRemaining > 0) {
-        setDisplayedRemaining(displayedRemaining - 1);
-      }
-    }
-  }, [now, calculatedRemaining === null]);
 
   return (
     <motion.div
@@ -336,35 +289,12 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
       {status === 'running' && (
         <div style={{ marginTop: '0.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Progress</span>
-            {displayedRemaining !== null && displayedRemaining > 0 && (
-              <span style={{
-                fontSize: '0.65rem',
-                color: 'var(--accent)',
-                fontWeight: 600,
-                display: 'inline-block',
-                width: '60px',
-                textAlign: 'right'
-              }}>
-                ETA: {formatTime(displayedRemaining)}
-              </span>
-            )}
-          </div>
-          <div
-            data-testid="progress-bar"
-            style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}
-          >
-            <div
-              className="progress-bar-animated"
-              style={{
-                height: '100%',
-                backgroundColor: 'var(--accent)',
-                width: `${localProgress * 100}%`,
-                transition: 'width 1s linear'
-              }}
-            />
-          </div>
+          <PredictiveProgressBar
+            progress={job?.progress || 0}
+            startedAt={job?.started_at}
+            etaSeconds={job?.eta_seconds}
+            label="Processing"
+          />
         </div>
       )}
 

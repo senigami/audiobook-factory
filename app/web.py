@@ -93,12 +93,15 @@ def startup_event():
 # We'll use a globally accessible loop variable for the bridge
 _main_loop = [None]
 
-def broadcast_test_progress(name: str, progress: float):
+def broadcast_test_progress(name: str, progress: float, started_at: float = None):
     import asyncio
     loop = _main_loop[0]
     if loop and loop.is_running():
+        msg = {"type": "test_progress", "name": name, "progress": progress}
+        if started_at:
+            msg["started_at"] = started_at
         asyncio.run_coroutine_threadsafe(
-            manager.broadcast({"type": "test_progress", "name": name, "progress": progress}),
+            manager.broadcast(msg),
             loop
         )
 
@@ -488,14 +491,11 @@ def list_speaker_profiles():
             wav_count = len(list(d.glob("*.wav")))
             
             # Load metadata if exists
-            meta_path = d / "profile.json"
-            speed = 1.0
-            if meta_path.exists():
-                try:
-                    import json
-                    meta = json.loads(meta_path.read_text())
-                    speed = meta.get("speed", 1.0)
-                except: pass
+            import json
+            from .jobs import get_speaker_settings
+            spk_settings = get_speaker_settings(d.name)
+            speed = spk_settings["speed"]
+            test_text = spk_settings["test_text"]
                 
             test_wav = XTTS_OUT_DIR / f"test_{d.name}.wav"
             
@@ -503,9 +503,28 @@ def list_speaker_profiles():
                 "name": d.name,
                 "wav_count": wav_count,
                 "speed": speed,
+                "test_text": test_text,
                 "preview_url": f"/out/xtts/test_{d.name}.wav" if test_wav.exists() else None
             })
     return sorted(profiles, key=lambda x: x["name"])
+
+@app.post("/api/speaker-profiles/{name}/test-text")
+def update_speaker_test_text(name: str, text: str = Form(...)):
+    import json
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+    
+    meta_path = profile_dir / "profile.json"
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except: pass
+        
+    meta["test_text"] = text
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return {"status": "success", "test_text": text}
 
 @app.post("/api/speaker-profiles/{name}/speed")
 def update_speaker_speed(name: str, speed: float = Form(...)):
@@ -617,21 +636,16 @@ def test_speaker_profile(name: str = Form(...)):
         return JSONResponse({"status": "error", "message": "No WAVs found for profile"}, status_code=400)
     
     test_out = XTTS_OUT_DIR / f"test_{name}.wav"
-    test_text = (
-        f"The mysterious traveler, bathed in the soft glow of the azure twilight, "
-        f"whispered of ancient treasures buried beneath the jagged mountains. "
-        f"'Zephyr,' he exclaimed, his voice a mixture of awe and trepidation, "
-        f"'the path is treacherous, yet the reward is beyond measure.' "
-        f"Around them, the vibrant forest hummed with rhythmic sounds while a "
-        f"cold breeze carried the scent of wet earth and weathered stone."
-    )
+    from .jobs import get_speaker_settings
+    spk_settings = get_speaker_settings(name)
+    test_text = spk_settings["test_text"]
+    speed = spk_settings["speed"]
     
     # We run it synchronously for the test
     from .jobs import get_speaker_settings
-    spk_settings = get_speaker_settings(name)
-    speed = spk_settings["speed"]
     settings = get_settings() # Added to get safe_mode setting
-    broadcast_test_progress(name, 0.0)
+    test_start_time = time.time()
+    broadcast_test_progress(name, 0.0, started_at=test_start_time)
 
     def on_xtts_output(line: str):
         # Parse progress from XTTS tqdm output: "Synthesizing:  33%|███▎      | 1/3 [00:05<00:11,  5.69s/sent]"
@@ -642,7 +656,7 @@ def test_speaker_profile(name: str = Form(...)):
             total = int(match.group(2))
             if total > 0:
                 prog = current / total
-                broadcast_test_progress(name, prog)
+                broadcast_test_progress(name, prog, started_at=test_start_time)
         print(line, end="", file=sys.stderr)
 
     rc = xtts_generate(

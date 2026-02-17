@@ -5,6 +5,7 @@ export interface SpeakerProfile {
   name: string;
   wav_count: number;
   speed: number;
+  test_text?: string;
   preview_url: string | null;
 }
 
