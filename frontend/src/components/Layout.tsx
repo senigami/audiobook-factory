@@ -38,22 +38,62 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
           {/* Logo Section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => onTabChange('synthesis')}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+            onClick={() => onTabChange('synthesis')}
+          >
             <div style={{
-              background: 'linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%)',
-              padding: '8px',
-              borderRadius: '10px',
-              boxShadow: '0 4px 12px var(--accent-glow)',
+              position: 'relative',
+              width: '42px',
+              height: '42px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Home size={18} color="white" />
+              <div style={{
+                position: 'absolute',
+                inset: '-8px',
+                background: 'var(--accent)',
+                borderRadius: '14px',
+                opacity: 0.15,
+                filter: 'blur(12px)'
+              }} />
+              <img
+                src="/logo.png"
+                alt="Audiobook Factory"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 4px 12px rgba(139, 92, 246, 0.3))',
+                  zIndex: 1
+                }}
+              />
             </div>
-            <div>
-              <h1 style={{ fontSize: '1.1rem', fontWeight: 900, letterSpacing: '-0.03em', margin: 0, background: 'linear-gradient(to bottom, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <h1 style={{
+                fontSize: '1.2rem',
+                fontWeight: 900,
+                letterSpacing: '-0.03em',
+                margin: 0,
+                background: 'linear-gradient(to bottom, #fff, #94a3b8)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                lineHeight: 1
+              }}>
                 FACTORY
               </h1>
+              <span style={{
+                fontSize: '0.6rem',
+                fontWeight: 800,
+                color: 'var(--accent)',
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                opacity: 0.8,
+                marginTop: '1px'
+              }}>
+                PRODUCTION
+              </span>
             </div>
           </div>
 
