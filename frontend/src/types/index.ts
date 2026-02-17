@@ -1,5 +1,10 @@
-export type Engine = 'xtts' | 'piper' | 'audiobook';
-export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'wav';
+export type Engine = 'xtts' | 'audiobook';
+export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+export interface SpeakerProfile {
+  name: string;
+  wav_count: number;
+}
 
 export interface Job {
   id: string;
@@ -21,13 +26,13 @@ export interface Job {
   narrator_meta?: string;
   output_wav?: string | null;
   output_mp3?: string | null;
+  speaker_profile?: string | null;
 }
 
 export interface Settings {
   safe_mode: boolean;
   make_mp3: boolean;
   default_engine: Engine;
-  default_piper_voice?: string;
 }
 
 export interface AssemblyChapter {
@@ -46,11 +51,9 @@ export interface GlobalState {
   settings: Settings;
   paused: boolean;
   chapters: string[];
-  piper_voices: string[];
   audiobooks: string[];
   xtts_mp3: string[];
   xtts_wav_only: string[];
-  piper_mp3: string[];
-  piper_wav_only: string[];
   narrator_ok: boolean;
+  speaker_profiles: SpeakerProfile[];
 }

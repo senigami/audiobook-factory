@@ -2,20 +2,18 @@ import time, uuid, re, os
 from typing import Optional, List, Tuple
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .engines import wav_to_mp3, terminate_all_subprocesses
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, PIPER_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT, AUDIOBOOK_DIR
+    XTTS_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR
 )
 from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
 from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue, clear_job_queue
-from .voices import list_piper_voices
 from .textops import (
     split_by_chapter_markers, write_chapters_to_folder, 
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
@@ -24,19 +22,8 @@ from .textops import (
 
 app = FastAPI()
 
-# Ensure directories exist before mounting
-for d in [XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR, BASE_DIR / "static"]:
-    d.mkdir(parents=True, exist_ok=True)
-
-templates = Environment(
-    loader=FileSystemLoader(str(BASE_DIR / "templates")),
-    autoescape=select_autoescape(["html"])
-)
-
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
-app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -169,7 +156,7 @@ def output_exists(engine: str, chapter_file: str) -> bool:
     stem = Path(chapter_file).stem
     if engine == "xtts":
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
-    return (PIPER_OUT_DIR / f"{stem}.mp3").exists() or (PIPER_OUT_DIR / f"{stem}.wav").exists()
+    return False
 
 def xtts_outputs_for(chapter_file: str):
     stem = Path(chapter_file).stem
@@ -177,83 +164,24 @@ def xtts_outputs_for(chapter_file: str):
     mp3 = XTTS_OUT_DIR / f"{stem}.mp3"
     return wav, mp3
 
-def piper_outputs_for(chapter_file: str):
-    stem = Path(chapter_file).stem
-    wav = PIPER_OUT_DIR / f"{stem}.wav"
-    mp3 = PIPER_OUT_DIR / f"{stem}.mp3"
-    return wav, mp3
 
 def list_audiobooks():
     if not AUDIOBOOK_DIR.exists(): return []
     return sorted([p.name for p in AUDIOBOOK_DIR.glob("*.m4b")], reverse=True)
 
-@app.get("/", response_class=HTMLResponse)
-def home(chapter: str = "", legacy: bool = False):
-    # If React dev server is running, and user is NOT explicitly asking for legacy,
-    # we can redirect them to 5173.
-    # To allow getting back, we'll respect a ?legacy=1 flag.
-    import fastapi
-    from fastapi.responses import RedirectResponse
-    
-    # Check if we should redirect to React frontend
-    if not legacy and is_react_dev_active():
-        return RedirectResponse("http://127.0.0.1:5173")
-
-    from .jobs import cleanup_and_reconcile
-    cleanup_and_reconcile()
-    
-    chapters = [p.name for p in list_chapters()]
-    jobs = list(get_jobs().values())
-    jobs.sort(key=lambda j: j.created_at, reverse=True)
-
-    settings = get_settings()
-    piper_voices = list_piper_voices()
-
-    # --- status sets (MUST be inside this function) ---
-    xtts_wav_only = set()
-    xtts_mp3 = set()
-    piper_wav_only = set()
-    piper_mp3 = set()
-
-    for c in chapters:
-        stem = Path(c).stem
-
-        x_wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
-        x_mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
-        if x_mp3:
-            xtts_mp3.add(c)
-        elif x_wav:
-            xtts_wav_only.add(c)
-
-        p_wav = (PIPER_OUT_DIR / f"{stem}.wav").exists()
-        p_mp3 = (PIPER_OUT_DIR / f"{stem}.mp3").exists()
-        if p_mp3:
-            piper_mp3.add(c)
-        elif p_wav:
-            piper_wav_only.add(c)
-
-    preview_text = ""
-    if chapter:
-        p = CHAPTER_DIR / chapter
-        if p.exists():
-            preview_text = read_preview(p)
-
-    tpl = templates.get_template("index.html")
-    return HTMLResponse(tpl.render(
-        chapters=chapters,
-        selected_chapter=chapter,
-        preview_text=preview_text,
-        jobs=jobs[:200],
-        settings=settings,
-        piper_voices=piper_voices,
-        paused=paused(),
-        narrator_ok=NARRATOR_WAV.exists(),
-        xtts_mp3=xtts_mp3,
-        xtts_wav_only=xtts_wav_only,
-        piper_mp3=piper_mp3,
-        piper_wav_only=piper_wav_only,
-        audiobooks=list_audiobooks(),
-    ))
+@app.get("/")
+def api_welcome():
+    """Welcome endpoint for the API."""
+    return {
+        "name": "Audiobook Factory API",
+        "status": "online",
+        "frontend": "Please use the React frontend (usually on port 5173 in dev or served on this port in production if built).",
+        "endpoints": {
+            "home": "/api/home",
+            "jobs": "/api/jobs",
+            "speaker_profiles": "/api/speaker-profiles"
+        }
+    }
 
 @app.get("/api/home")
 def api_home():
@@ -264,51 +192,38 @@ def api_home():
     chapters = [p.name for p in list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
     settings = get_settings()
-    piper_voices = list_piper_voices()
     
     # status sets logic
     xtts_wav_only = []
     xtts_mp3 = []
-    piper_wav_only = []
-    piper_mp3 = []
 
     for c in chapters:
         stem = Path(c).stem
         if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): xtts_mp3.append(c)
         elif (XTTS_OUT_DIR / f"{stem}.wav").exists(): xtts_wav_only.append(c)
-        if (PIPER_OUT_DIR / f"{stem}.mp3").exists(): piper_mp3.append(c)
-        elif (PIPER_OUT_DIR / f"{stem}.wav").exists(): piper_wav_only.append(c)
 
     return {
         "chapters": chapters,
         "jobs": jobs,
         "settings": settings,
-        "piper_voices": piper_voices,
         "paused": paused(),
         "narrator_ok": NARRATOR_WAV.exists(),
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
-        "piper_mp3": piper_mp3,
-        "piper_wav_only": piper_wav_only,
         "audiobooks": list_audiobooks(),
+        "speaker_profiles": list_speaker_profiles(),
     }
 
 @app.post("/settings")
 def save_settings(
-    safe_mode: Optional[bool] = Form(None),
-    make_mp3: Optional[bool] = Form(None),
-    default_piper_voice: str = Form("")
+    safe_mode: Optional[bool] = Form(None)
 ):
-    # Handle both Form and JSON-like updates (Simplified for FastAPI Form)
-    # We ignore make_mp3 and always set it to True
     curr = get_settings()
-    
     new_safe = safe_mode if safe_mode is not None else curr.get("safe_mode", True)
     
     update_settings(
         safe_mode=new_safe,
-        make_mp3=True,
-        default_piper_voice=(default_piper_voice or curr.get("default_piper_voice"))
+        make_mp3=True
     )
     return {"status": "success", "settings": get_settings()}
 
@@ -344,7 +259,6 @@ def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = 
 @app.post("/upload")
 async def upload(
     file: UploadFile = File(...), 
-    json: bool = False, 
     mode: str = "parts", 
     max_chars: Optional[int] = None
 ):
@@ -353,40 +267,18 @@ async def upload(
     content = await file.read()
     dest.write_bytes(content)
     
-    if json:
-        try:
-            written = process_and_split_file(file.filename, mode=mode, max_chars=max_chars)
-            return JSONResponse({
-                "status": "success", 
-                "filename": file.filename, 
-                "chapters": [p.name for p in written]
-            })
-        except Exception as e:
-            return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
-
-    return RedirectResponse(f"/split?file={dest.name}", status_code=303)
-
-@app.get("/split", response_class=HTMLResponse)
-def split_page(file: str):
-    tpl = templates.get_template("split.html")
-    return HTMLResponse(tpl.render(file=file, part_limit=PART_CHAR_LIMIT))
-
-@app.post("/split")
-def do_split(
-    file: str = Form(...),
-    mode: str = Form("parts"),
-    max_chars: Optional[int] = Form(None)
-):
     try:
-        written = process_and_split_file(file, mode, max_chars)
-        return RedirectResponse(f"/?chapter={written[0].name}", status_code=303)
-    except ValueError as e:
-        return PlainTextResponse(str(e), status_code=400)
-    except FileNotFoundError as e:
-        return JSONResponse({"error": str(e)}, status_code=404)
+        written = process_and_split_file(file.filename, mode=mode, max_chars=max_chars)
+        return JSONResponse({
+            "status": "success", 
+            "filename": file.filename, 
+            "chapters": [p.name for p in written]
+        })
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
 @app.post("/queue/start_xtts")
-def start_xtts_queue():
+def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
     settings = get_settings()
     existing = get_jobs()
     active = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
@@ -425,7 +317,8 @@ def start_xtts_queue():
                        eta_seconds=None,
                        log="",
                        error=None,
-                       warning_count=0)
+                       warning_count=0,
+                       speaker_profile=speaker_profile)
             requeue(existing_queued_id)
             continue
 
@@ -438,7 +331,8 @@ def start_xtts_queue():
             created_at=time.time(),
             safe_mode=bool(settings.get("safe_mode", True)),
             make_mp3=True,
-            custom_title=existing_title
+            custom_title=existing_title,
+            speaker_profile=speaker_profile
         )
         enqueue(j)
         update_job(jid, status="queued") # trigger bridge
@@ -449,67 +343,6 @@ def start_xtts_queue_get():
     # Fallback if something triggers GET (e.g., link click or manual navigation)
     return start_xtts_queue()
 
-@app.post("/queue/start_piper")
-def start_piper_queue(piper_voice: str = Form("")):
-    settings = get_settings()
-    existing = get_jobs()
-    voice = piper_voice or settings.get("default_piper_voice")
-    if not voice:
-        return PlainTextResponse("Select a Piper voice (or set default).", status_code=400)
-
-    active_piper = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
-    for p in list_chapters():
-        c = p.name
-        if output_exists("piper", c):
-            continue
-        # Also check active to avoid duplicates if user clicks twice fast
-        if ("piper", c) in active_piper:
-            continue
-
-        # Prune any old records for this chapter to prevent duplicates
-        # But PRESERVE the custom title and check for existing queued job
-        existing_title = None
-        existing_queued_id = None
-        to_del = []
-        for jid, j in existing.items():
-            if j.chapter_file == c:
-                if j.custom_title:
-                    existing_title = j.custom_title
-                if j.engine == "piper":
-                    if j.status == "queued":
-                        existing_queued_id = jid
-                    else:
-                        to_del.append(jid)
-        
-        if to_del:
-            from .state import delete_jobs
-            delete_jobs(to_del)
-
-        if existing_queued_id:
-            update_job(existing_queued_id, 
-                       progress=0.0, 
-                       started_at=None,
-                       finished_at=None,
-                       eta_seconds=None,
-                       log="",
-                       error=None,
-                       warning_count=0)
-            requeue(existing_queued_id)
-            continue
-            
-        jid = uuid.uuid4().hex[:12]
-        enqueue(Job(
-            id=jid,
-            engine="piper",
-            chapter_file=c,
-            status="queued",
-            created_at=time.time(),
-            safe_mode=False,
-            make_mp3=True,
-            piper_voice=voice,
-            custom_title=existing_title
-        ))
-    return JSONResponse({"status": "ok", "message": "Piper queue started"})
 
 @app.post("/queue/pause")
 def pause_queue():
@@ -568,12 +401,9 @@ def create_audiobook(
 @app.get("/api/audiobook/prepare")
 def prepare_audiobook():
     """Scans folders and returns a preview of chapters/durations for the modal."""
-    from .engines import get_audio_duration
-    from .config import XTTS_OUT_DIR, PIPER_OUT_DIR
+    from .config import XTTS_OUT_DIR
     
     src_dir = XTTS_OUT_DIR
-    if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
-        src_dir = PIPER_OUT_DIR
         
     if not src_dir.exists():
         return JSONResponse({"title": "", "chapters": []})
@@ -592,9 +422,74 @@ def prepare_audiobook():
 
     sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
     
-    # Get custom titles from state
-    from .state import get_jobs
-    job_titles = {j.chapter_file: j.custom_title for j in get_jobs().values() if j.custom_title}
+@app.get("/api/speaker-profiles")
+def list_speaker_profiles():
+    if not VOICES_DIR.exists():
+        return []
+    profiles = []
+    for d in VOICES_DIR.iterdir():
+        if d.is_dir():
+            wav_count = len(list(d.glob("*.wav")))
+            profiles.append({
+                "name": d.name,
+                "wav_count": wav_count
+            })
+    return sorted(profiles, key=lambda x: x["name"])
+
+@app.post("/api/speaker-profiles/build")
+async def build_speaker_profile(
+    name: str = Form(...),
+    files: List[UploadFile] = File(...)
+):
+    VOICES_DIR.mkdir(parents=True, exist_ok=True)
+    profile_dir = VOICES_DIR / name
+    if profile_dir.exists():
+        import shutil
+        shutil.rmtree(profile_dir)
+    profile_dir.mkdir()
+    
+    for f in files:
+        if not f.filename.lower().endswith(".wav"):
+            continue
+        dest = profile_dir / f.filename
+        content = await f.read()
+        dest.write_bytes(content)
+    
+    return {"status": "success", "profile": name}
+
+@app.delete("/api/speaker-profiles/{name}")
+def delete_speaker_profile(name: str):
+    profile_dir = VOICES_DIR / name
+    if profile_dir.exists():
+        import shutil
+        shutil.rmtree(profile_dir)
+        return {"status": "success"}
+    return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+@app.post("/api/speaker-profiles/test")
+def test_speaker_profile(name: str = Form(...)):
+    # Quick one-sentence test
+    from .jobs import get_speaker_wavs
+    sw = get_speaker_wavs(name)
+    if not sw:
+        return JSONResponse({"status": "error", "message": "No WAVs found for profile"}, status_code=400)
+    
+    test_out = XTTS_OUT_DIR / f"test_{name}.wav"
+    test_text = "This is a test of the averaged voice for speaker profile " + name + "."
+    
+    # We run it synchronously for the test
+    rc = xtts_generate(
+        text=test_text,
+        out_wav=test_out,
+        safe_mode=True,
+        on_output=print,
+        cancel_check=lambda: False,
+        speaker_wav=sw
+    )
+    
+    if rc == 0 and test_out.exists():
+        return {"status": "success", "audio_url": f"/out/xtts/test_{name}.wav"}
+    return JSONResponse({"status": "error", "message": f"Test generation failed (rc={rc})"}, status_code=500)
     
     preview = []
     total_sec = 0.0
@@ -642,7 +537,7 @@ def reset_chapter(chapter_file: str = Form(...)):
             
     # 2. Delete files on disk
     count = 0
-    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+    for d in [XTTS_OUT_DIR]:
         for ext in [".wav", ".mp3"]:
             f = d / f"{stem}{ext}"
             if f.exists():
@@ -670,7 +565,7 @@ def delete_chapter(filename: str):
     stem = path.stem
     
     # 1. Delete audio files
-    for d in [XTTS_OUT_DIR, PIPER_OUT_DIR]:
+    for d in [XTTS_OUT_DIR]:
         for ext in [".wav", ".mp3"]:
             f = d / f"{stem}{ext}"
             if f.exists():
@@ -698,8 +593,7 @@ def delete_chapter(filename: str):
 @app.post("/api/queue/single")
 def enqueue_single(
     chapter_file: str = Form(...),
-    engine: str = Form(...),
-    voice: Optional[str] = Form(None)
+    engine: str = Form("xtts")
 ):
     settings = get_settings()
     existing = get_jobs()
@@ -720,14 +614,7 @@ def enqueue_single(
         from .state import delete_jobs
         delete_jobs(to_del)
     
-    # 2. Extract engine-specific settings
-    if engine == "piper":
-        if not voice:
-            voice = settings.get("default_piper_voice")
-        if not voice:
-            return JSONResponse({"status": "error", "message": "No voice selected"}, status_code=400)
-            
-    # 3. Create and enqueue
+    # 2. Create and enqueue
     jid = uuid.uuid4().hex[:12]
     j = Job(
         id=jid,
@@ -735,9 +622,8 @@ def enqueue_single(
         chapter_file=chapter_file,
         status="queued",
         created_at=time.time(),
-        safe_mode=bool(settings.get("safe_mode", True)) if engine == "xtts" else False,
+        safe_mode=bool(settings.get("safe_mode", True)),
         make_mp3=True,
-        piper_voice=voice if engine == "piper" else None,
         bypass_pause=True,
         custom_title=existing_title
     )
@@ -832,59 +718,11 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     settings = get_settings()
     is_safe = settings.get("safe_mode", True)
 
-    if ajax:
-        return JSONResponse({
-            "report": report_text,
-            "safe_mode": is_safe
-        })
-    return RedirectResponse(f"/report/{report_path.name}", status_code=303)
-@app.get("/analyze_batch", response_class=HTMLResponse)
-def analyze_batch():
-    chapters = list_chapters()
-    results = []
-    
-    from .config import SENT_CHAR_LIMIT
-    
-    for p in chapters:
-        try:
-            text = p.read_text(encoding="utf-8", errors="replace")
-            raw_hits = find_long_sentences(text)
-            
-            # Analyze what safe split would do
-            cleaned_text = clean_text_for_tts(text)
-            split_text = safe_split_long_sentences(cleaned_text)
-            cleaned_hits = find_long_sentences(split_text)
-            
-            uncleanable_count = len(cleaned_hits)
-            
-            results.append({
-                "filename": p.name,
-                "char_count": len(text),
-                "raw_count": len(raw_hits),
-                "auto_fixed": len(raw_hits) - uncleanable_count,
-                "uncleanable": uncleanable_count,
-                "report_name": f"long_sentences_{p.stem}.txt"
-            })
-        except Exception as e:
-            print(f"Error processing {p.name}: {e}")
-            results.append({
-                "filename": p.name,
-                "char_count": 0,
-                "raw_count": 0,
-                "auto_fixed": 0,
-                "uncleanable": 0,
-                "error": str(e)
-            })
-    
-    settings = get_settings()
-    is_safe = settings.get("safe_mode", True)
-
-    tpl = templates.get_template("report_batch.html")
-    return HTMLResponse(tpl.render(
-        results=results,
-        limit=SENT_CHAR_LIMIT,
-        safe_mode=is_safe
-    ))
+    return JSONResponse({
+        "status": "success",
+        "report": report_text,
+        "report_url": f"/report/{report_path.name}"
+    })
 
 
 @app.post("/queue/backfill_mp3")

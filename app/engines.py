@@ -2,9 +2,8 @@ import shlex, subprocess, os, re
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
+from .config import XTTS_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
-from .voices import piper_voice_paths
 
 _active_processes = set()
 
@@ -93,12 +92,16 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
+def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, speaker_wav: str = None) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
-    if not NARRATOR_WAV.exists():
-        on_output(f"[error] narrator wav missing: {NARRATOR_WAV}\n")
+    
+    # Use provided speaker_wav or fallback to global NARRATOR_WAV
+    sw = speaker_wav or str(NARRATOR_WAV)
+    
+    if not sw:
+        on_output(f"[error] no narrator wav or speaker profile provided\n")
         return 1
 
     if safe_mode:
@@ -115,40 +118,13 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
         f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
         f"--text {shlex.quote(text)} "
-        f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "
+        f"--speaker_wav {shlex.quote(sw)} "
         f"--language en "
         f"--repetition_penalty 2.0 "
         f"--out_path {shlex.quote(str(out_wav))}"
     )
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
-    from .textops import clean_text_for_tts
-    # For Piper, we read the file and clean it before writing to a temp location
-    text = chapter_file.read_text(encoding="utf-8", errors="replace")
-    if safe_mode:
-        text = clean_text_for_tts(text)
-    else:
-        text = re.sub(r'[^\x00-\x7F]+', '', text).strip()
-    
-    tmp_path = chapter_file.with_suffix(".tmp.txt")
-    tmp_path.write_text(text, encoding="utf-8")
-    
-    model, cfg = piper_voice_paths(voice_name)
-    if not model.exists() or not cfg.exists():
-        on_output(f"[error] Missing Piper voice files: {model} / {cfg}\n")
-        return 1
-
-    prefix = f"source {shlex.quote(str(PIPER_ENV_ACTIVATE))} && " if PIPER_ENV_ACTIVATE.exists() else ""
-    cmd = (
-        prefix +
-        f"piper --model {shlex.quote(str(model))} --config {shlex.quote(str(cfg))} "
-        f"--input_file {shlex.quote(str(tmp_path))} --output_file {shlex.quote(str(out_wav))}"
-    )
-    rc = run_cmd_stream(cmd, on_output, cancel_check)
-    if tmp_path.exists():
-        tmp_path.unlink()
-    return rc
 
 def get_audio_duration(file_path: Path) -> float:
     """Uses ffprobe to get the duration of an audio file in seconds."""

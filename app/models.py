@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Literal, List
 
-Engine = Literal["xtts", "piper", "audiobook"]
+Engine = Literal["xtts", "audiobook"]
 Status = Literal["queued", "running", "done", "failed", "cancelled"]
 
 @dataclass
@@ -18,7 +18,7 @@ class Job:
     safe_mode: bool = True
     make_mp3: bool = True
 
-    piper_voice: Optional[str] = None
+    speaker_profile: Optional[str] = None
 
     output_wav: Optional[str] = None
     output_mp3: Optional[str] = None

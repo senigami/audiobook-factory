@@ -4,8 +4,8 @@ from typing import Dict
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR
-from .engines import xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
+from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR
+from .engines import xtts_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
@@ -13,7 +13,6 @@ pause_flag = threading.Event()
 
 # These are default fallbacks; the system will auto-tune these over time in state.json
 BASELINE_XTTS_CPS = 16.7
-BASELINE_PIPER_CPS = 220.0
 
 
 def enqueue(job: Job):
@@ -70,8 +69,8 @@ def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> boo
         mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
         wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
     else:
-        mp3 = (PIPER_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (PIPER_OUT_DIR / f"{stem}.wav").exists()
+        # Fallback for unexpected engine names
+        return False
 
     if make_mp3:
         return mp3
@@ -118,8 +117,8 @@ def cleanup_and_reconcile():
             
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
-            has_mp3 = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.mp3"
-            has_wav = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.wav"
+            has_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
+            has_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
             
             if j.make_mp3:
                 if not has_mp3.exists() and not has_wav.exists():
@@ -163,6 +162,23 @@ def cleanup_and_reconcile():
     return reset_ids
 
 
+def get_speaker_wavs(profile_name: str) -> Optional[str]:
+    """Returns a comma-separated string of absolute paths for the given profile."""
+    from .config import VOICES_DIR, NARRATOR_WAV
+    if not profile_name:
+        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+    
+    p = VOICES_DIR / profile_name
+    if not p.exists() or not p.is_dir():
+        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+    
+    wavs = sorted(p.glob("*.wav"))
+    if not wavs:
+        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+        
+    return ",".join([str(w.absolute()) for w in wavs])
+
+
 def worker_loop():
     while True:
         jid = job_queue.get()
@@ -191,8 +207,7 @@ def worker_loop():
                     text = chapter_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
                     perf = get_performance_metrics()
-                    cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
-                                   BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
                     eta = _estimate_seconds(chars, cps)
                 
                 header = [
@@ -207,8 +222,6 @@ def worker_loop():
             else:
                 # Audiobook identity
                 src_dir = XTTS_OUT_DIR
-                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
-                    src_dir = PIPER_OUT_DIR
                 
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
@@ -373,15 +386,7 @@ def worker_loop():
 
             # --- Generate WAV or Audiobook ---
             if j.engine == "audiobook":
-                # Audiobook creation uses the selected output dir (xtts or piper)
-                # For now, let's assume we use whichever one has more files, or just piper_audio if not specified.
-                # The user's request says "from the output of this app". 
-                # Let's check both and use the one that exists. 
-                # Actually, better to let the user specify. But for now, check xtts then piper.
                 src_dir = XTTS_OUT_DIR
-                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
-                    src_dir = PIPER_OUT_DIR
-                
                 title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
                 out_file = AUDIOBOOK_DIR / f"{title}.m4b"
                 
@@ -421,15 +426,21 @@ def worker_loop():
             elif j.engine == "xtts":
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-                rc = xtts_generate(text=text, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+                
+                # Resolve speaker WAVs from profile
+                sw = get_speaker_wavs(j.speaker_profile)
+                
+                rc = xtts_generate(
+                    text=text, 
+                    out_wav=out_wav, 
+                    safe_mode=j.safe_mode, 
+                    on_output=on_output, 
+                    cancel_check=cancel_check,
+                    speaker_wav=sw
+                )
             else:
-                out_wav = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
-                out_mp3 = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-                voice = j.piper_voice or get_settings().get("default_piper_voice")
-                if not voice:
-                    update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="No Piper voice selected.", log="".join(logs))
-                    continue
-                rc = piper_generate(chapter_file=chapter_path, voice_name=voice, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Unknown engine: {j.engine}", log="".join(logs))
+                continue
 
             if cancel_ev.is_set():
                 update_job(jid, status="cancelled", finished_at=time.time(), progress=1.0, error="Cancelled.", log="".join(logs))
@@ -440,8 +451,8 @@ def worker_loop():
                 actual_dur = time.time() - start
                 if actual_dur > 0:
                     new_cps = chars / actual_dur
-                    field = "xtts_cps" if j.engine == "xtts" else "piper_cps"
-                    old_cps = perf.get(field, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    field = "xtts_cps"
+                    old_cps = perf.get(field, BASELINE_XTTS_CPS)
                     # Smoothed update (80% old, 20% new to avoid outlier fluctuations)
                     updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
                     update_performance_metrics(**{field: updated_cps})

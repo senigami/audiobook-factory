@@ -1,109 +1,137 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
-import { ChapterGrid } from './components/ChapterGrid';
 import { Panel } from './components/Panel';
 import { AssemblyModal } from './components/AssemblyModal';
+import { VoicesTab } from './components/VoicesTab';
+import { SynthesisTab } from './components/SynthesisTab';
+import { LibraryTab } from './components/LibraryTab';
+import { SettingsTab } from './components/SettingsTab';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
+import type { Job } from './types';
 
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
   const { jobs, refreshJobs } = useJobs(refetchHome);
+  const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library' | 'settings'>('synthesis');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleRefresh = async () => {
     await Promise.all([refetchHome(), refreshJobs()]);
   };
 
-  // Prioritize audiobook engine for the "active" job to ensure it shows in the Panel
+  const getRemainingAndProgress = (job: Job) => {
+    if (job.status !== 'running' || !job.started_at || !job.eta_seconds) {
+      return { remaining: null, progress: job.progress || 0 };
+    }
+    const elapsed = (now / 1000) - job.started_at;
+    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
+    const currentProgress = Math.max(job.progress || 0, timeProgress);
+
+    const blend = Math.min(1.0, currentProgress / 0.25);
+    const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
+    const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
+    const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
+
+    return {
+      remaining: Math.max(0, Math.floor(refinedRemaining)),
+      progress: currentProgress
+    };
+  };
+
+  const formatSeconds = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
   const runningJobs = Object.values(jobs).filter(j => j.status === 'running' || j.status === 'queued');
   const activeJob = runningJobs.find(j => j.engine === 'audiobook') || runningJobs[0];
-
-  const audiobookJob = Object.values(jobs).find(j => j.engine === 'audiobook' && (j.status === 'running' || j.status === 'queued'));
   const viewingJob = selectedFile ? jobs[selectedFile] : activeJob;
 
   const chaptersToShow = (initialData?.chapters || []).filter(c => {
     if (!hideFinished) return true;
     const isFinished = (initialData?.xtts_mp3 || []).includes(c) ||
-      (initialData?.piper_mp3 || []).includes(c) ||
-      (initialData?.xtts_wav_only || []).includes(c) ||
-      (initialData?.piper_wav_only || []).includes(c);
+      (initialData?.xtts_wav_only || []).includes(c);
     return !isFinished;
   });
 
   if (initialLoading) return null;
 
+  const audiobookJob = Object.values(jobs).find(j => j.engine === 'audiobook' && (j.status === 'running' || j.status === 'queued'));
+
   return (
     <div className="app-container">
-      <Layout sidebar={
-        <Sidebar
-          onOpenAssembly={() => setIsAssemblyOpen(true)}
-          settings={initialData?.settings}
-          piperVoices={initialData?.piper_voices || []}
-          audiobooks={initialData?.audiobooks || []}
-          paused={initialData?.paused || false}
-          narratorOk={initialData?.narrator_ok || false}
-          hideFinished={hideFinished}
-          onToggleHideFinished={() => setHideFinished(!hideFinished)}
-          onRefresh={handleRefresh}
-          audiobookJob={audiobookJob}
-        />
-      }>
+      <Layout
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+        headerRight={
+          <Sidebar
+            paused={initialData?.paused || false}
+            onRefresh={handleRefresh}
+          />
+        }
+      >
         <div style={{
-          height: '100vh',
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          padding: '2rem',
-          gap: '2rem',
+          gap: '2.5rem',
           minWidth: 0,
           overflowX: 'hidden'
         }}>
-          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h2 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Chapters</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                {initialData?.chapters.length || 0} files ready for processing
-              </p>
-            </div>
-
-            <div className="glass-panel" style={{ display: 'flex', gap: '4px', padding: '4px' }}>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}
-                style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={viewMode === 'list' ? 'btn-primary' : 'btn-ghost'}
-                style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '6px' }}
-              >
-                List
-              </button>
-            </div>
-          </header>
-
-          <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
-            <ChapterGrid
-              chapters={chaptersToShow}
-              jobs={jobs}
-              selectedFilename={selectedFile}
-              onSelect={setSelectedFile}
-              viewMode={viewMode}
-              onRefresh={handleRefresh}
-              statusSets={{
-                xttsMp3: initialData?.xtts_mp3 || [],
-                xttsWav: initialData?.xtts_wav_only || [],
-                piperMp3: initialData?.piper_mp3 || [],
-                piperWav: initialData?.piper_wav_only || [],
-              }}
-            />
-          </div>
+          <main style={{ flex: 1 }}>
+            {activeTab === 'voices' && (
+              <VoicesTab
+                speakerProfiles={initialData?.speaker_profiles || []}
+                onRefresh={handleRefresh}
+              />
+            )}
+            {activeTab === 'synthesis' && (
+              <SynthesisTab
+                chapters={chaptersToShow}
+                jobs={jobs}
+                selectedFile={selectedFile}
+                onSelect={setSelectedFile}
+                statusSets={{
+                  xttsMp3: initialData?.xtts_mp3 || [],
+                  xttsWav: initialData?.xtts_wav_only || [],
+                  piperMp3: [],
+                  piperWav: [],
+                }}
+                onRefresh={handleRefresh}
+                speakerProfiles={initialData?.speaker_profiles || []}
+                paused={initialData?.paused || false}
+              />
+            )}
+            {activeTab === 'library' && (
+              <LibraryTab
+                audiobooks={initialData?.audiobooks || []}
+                audiobookJob={audiobookJob}
+                onOpenAssembly={() => setIsAssemblyOpen(true)}
+                onRefresh={handleRefresh}
+                progressHelper={getRemainingAndProgress}
+                formatSeconds={formatSeconds}
+              />
+            )}
+            {activeTab === 'settings' && (
+              <SettingsTab
+                settings={initialData?.settings}
+                hideFinished={hideFinished}
+                onToggleHideFinished={() => setHideFinished(!hideFinished)}
+                onRefresh={handleRefresh}
+              />
+            )}
+          </main>
 
           <Panel
             title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
@@ -134,6 +162,7 @@ function App() {
           });
 
           if (resp.ok) {
+            setActiveTab('library');
             await Promise.all([refetchHome(), refreshJobs()]);
           } else {
             const err = await resp.json();
