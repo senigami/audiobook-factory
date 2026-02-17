@@ -1,85 +1,15 @@
 import React from 'react';
-import { Play, Mic, Terminal, Settings, Package, Upload, Pause, Trash2, FileAudio, CheckCircle, RefreshCw, Search, Loader2, X } from 'lucide-react';
-import { api } from '../api';
-import type { Settings as GlobalSettings, Job } from '../types';
+import { Play, Pause } from 'lucide-react';
 
 interface SidebarProps {
-  onOpenAssembly: () => void;
-  settings?: GlobalSettings;
-  piperVoices: string[];
-  audiobooks: string[];
   paused: boolean;
-  narratorOk: boolean;
-  hideFinished: boolean;
-  onToggleHideFinished: () => void;
   onRefresh: () => void;
-  audiobookJob?: Job;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  onOpenAssembly,
-  settings,
-  piperVoices,
-  audiobooks,
   paused,
-  narratorOk,
-  hideFinished,
-  onToggleHideFinished,
-  onRefresh,
-  audiobookJob
+  onRefresh
 }) => {
-  const [selectedVoice, setSelectedVoice] = React.useState('');
-  const [now, setNow] = React.useState(Date.now());
-
-  React.useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const getRemainingAndProgress = (job: Job) => {
-    if (job.status !== 'running' || !job.started_at || !job.eta_seconds) {
-      return { remaining: null, progress: job.progress || 0 };
-    }
-    const elapsed = (now / 1000) - job.started_at;
-    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
-    const currentProgress = Math.max(job.progress || 0, timeProgress);
-
-    // Weighted ETA Blend:
-    // We transition from the static prediction to the real-time projection
-    // as progress moves from 0% to 25%. This smooths out the 'model loading' lag.
-    const blend = Math.min(1.0, currentProgress / 0.25);
-    const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
-    const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
-
-    const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
-
-    return {
-      remaining: Math.max(0, Math.floor(refinedRemaining)),
-      progress: currentProgress
-    };
-  };
-
-  const formatSeconds = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  const handleStartQueue = async (engine: 'xtts' | 'piper') => {
-    const endpoint = engine === 'xtts' ? '/queue/start_xtts' : '/queue/start_piper';
-    const body = engine === 'piper' ? new URLSearchParams({ piper_voice: selectedVoice }) : undefined;
-    try {
-      await fetch(endpoint, {
-        method: 'POST',
-        headers: engine === 'piper' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {},
-        body
-      });
-      onRefresh();
-    } catch (e) {
-      console.error('Failed to start queue', e);
-    }
-  };
-
   const handlePauseToggle = async () => {
     try {
       await fetch('/queue/pause', { method: 'POST' });
@@ -89,266 +19,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleClear = async () => {
-    if (!confirm('Are you sure you want to clear all jobs and reset state?')) return;
-    try {
-      await fetch('/api/clear', { method: 'POST' });
-      onRefresh();
-    } catch (e) {
-      console.error('Failed to clear', e);
-    }
-  };
-
-  const handleBackfill = async () => {
-    try {
-      await fetch('/queue/backfill_mp3', { method: 'POST' });
-      onRefresh();
-    } catch (e) {
-      console.error('Backfill failed', e);
-    }
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.[0]) return;
-    const formData = new FormData();
-    formData.append('file', e.target.files[0]);
-    try {
-      const response = await fetch('/upload?json=1', { method: 'POST', body: formData });
-      const result = await response.json();
-      if (result.status === 'success') {
-        alert(`Uploaded and split into ${result.chapters.length} chapters.`);
-        onRefresh();
-      } else {
-        alert(`Upload error: ${result.message}`);
-      }
-    } catch (e) {
-      console.error('Upload failed', e);
-      alert('Upload failed. See console for details.');
-    } finally {
-      // Clear input so same file can be uploaded again
-      e.target.value = '';
-    }
-  };
-
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingRight: '0.5rem' }}>
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff 0%, #cbd5e1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>FACTORY</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          Audiobook Production
-        </p>
-      </header>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <button
+        onClick={handlePauseToggle}
+        className="btn-glass"
+        style={{ padding: '12px 16px', borderRadius: '12px', justifyContent: 'flex-start', border: '1px solid rgba(255,255,255,0.05)' }}
+      >
+        {paused ? <Play size={16} /> : <Pause size={16} />}
+        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{paused ? 'Resume Processing' : 'Pause All Jobs'}</span>
+      </button>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <Upload size={14} color="var(--accent)" />
-            <h3 style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Upload Text
-            </h3>
-          </div>
-          <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <input type="file" accept=".txt" onChange={handleUpload} style={{ fontSize: '0.75rem', width: '100%', color: 'var(--text-primary)' }} />
-          </div>
-        </section>
-
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <Terminal size={14} color="var(--accent)" />
-            <h3 style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Queue Controls
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button
-              onClick={() => handleStartQueue('xtts')}
-              className="btn-glass"
-              disabled={paused}
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
-            >
-              <Play size={14} /> Start XTTS Queue
-            </button>
-
-            <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <select
-                value={selectedVoice}
-                onChange={e => setSelectedVoice(e.target.value)}
-                style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', color: '#fff', fontSize: '0.75rem', padding: '6px', borderRadius: '4px' }}
-              >
-                <option value="">(Piper Voice)</option>
-                {piperVoices.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-              <button
-                onClick={() => handleStartQueue('piper')}
-                className="btn-ghost"
-                disabled={paused || !selectedVoice}
-                style={{ padding: '0.5rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
-              >
-                <Mic size={14} /> Start Piper
-              </button>
-            </div>
-
-            <button
-              onClick={handlePauseToggle}
-              className="btn-glass"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
-            >
-              {paused ? <Play size={14} /> : <Pause size={14} />} {paused ? 'Resume Queue' : 'Pause Queue'}
-            </button>
-
-            <button
-              onClick={async () => {
-                if (confirm('Cancel all pending and running jobs?')) {
-                  await api.cancelPending();
-                  onRefresh();
-                }
-              }}
-              className="btn-ghost"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', color: 'var(--text-muted)' }}
-              title="Stop any running jobs and clear the queue"
-            >
-              <X size={14} /> Cancel Pending
-            </button>
-          </div>
-        </section>
-
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <Package size={14} color="var(--accent)" />
-            <h3 style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Audiobook
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button
-              onClick={onOpenAssembly}
-              className="btn-primary"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
-            >
-              <Package size={14} /> Assemble M4B
-            </button>
-
-            {audiobookJob && (audiobookJob.status === 'running' || audiobookJob.status === 'queued') && (() => {
-              const { remaining, progress } = getRemainingAndProgress(audiobookJob);
-              return (
-                <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Loader2 size={12} className={audiobookJob.status === 'running' ? 'animate-spin' : ''} />
-                      {audiobookJob.status === 'running' ? 'Assembling...' : 'Queued...'}
-                    </span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                      {audiobookJob.status === 'running'
-                        ? (remaining !== null ? `ETA: ${formatSeconds(remaining)}` : `ETA: ${audiobookJob.eta_seconds}s`)
-                        : 'Waiting...'}
-                    </span>
-                  </div>
-                  <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div
-                      className="progress-bar-animated"
-                      style={{
-                        height: '100%',
-                        width: `${Math.max(progress, 0.05) * 100}%`,
-                        backgroundColor: 'var(--accent)',
-                        transition: 'width 1s linear'
-                      }}
-                    />
-                  </div>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {audiobookJob.chapter_file}
-                  </span>
-                </div>
-              );
-            })()}
-
-            {audiobooks.map(b => (
-              <div key={b} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <a href={`/out/audiobook/${b}`} download className="glass-panel" style={{ flex: 1, padding: '0.5rem 1rem', fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FileAudio size={12} /> {b}
-                </a>
-                <button
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    if (confirm(`Delete ${b}?`)) {
-                      await fetch(`/api/audiobook/${encodeURIComponent(b)}`, { method: 'DELETE' });
-                      onRefresh();
-                    }
-                  }}
-                  className="btn-ghost"
-                  style={{ padding: '0.4rem', color: 'var(--text-muted)' }}
-                  title="Delete Audiobook"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <Settings size={14} color="var(--accent)" />
-            <h3 style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              Options
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button
-              onClick={onToggleHideFinished}
-              className="btn-glass"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', color: hideFinished ? 'var(--accent)' : 'inherit' }}
-            >
-              <CheckCircle size={14} /> {hideFinished ? 'Show Finished' : 'Hide Finished'}
-            </button>
-            <button
-              onClick={handleBackfill}
-              className="btn-glass"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem' }}
-            >
-              <RefreshCw size={14} /> Resolve Missing MP3s
-            </button>
-            <a
-              href="/analyze_batch"
-              className="btn-glass"
-              style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '100%', fontSize: '0.875rem', textDecoration: 'none', color: 'var(--text-primary)' }}
-            >
-              <Search size={14} /> Run Batch Analysis
-            </a>
-
-            <div style={{ padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <input
-                  type="checkbox"
-                  checked={!!settings?.safe_mode}
-                  onChange={async (e) => {
-                    const formData = new URLSearchParams();
-                    formData.append('safe_mode', e.target.checked ? 'true' : 'false');
-                    await fetch('/settings', { method: 'POST', body: formData });
-                    onRefresh();
-                  }}
-                /> Safe Mode
-              </label>
-            </div>
-
-            <button
-              onClick={handleClear}
-              className="btn-ghost"
-              style={{ color: 'var(--error)', fontSize: '0.8rem', textAlign: 'left', padding: '0.5rem 0' }}
-            >
-              <Trash2 size={14} /> Reset Factory
-            </button>
-          </div>
-        </section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 8px' }}>
+        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: paused ? 'var(--warning)' : 'var(--success)', boxShadow: paused ? '0 0 10px var(--warning)' : '0 0 10px var(--success)' }}></div>
+        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)', opacity: 0.8 }}>
+          {paused ? 'System Idle' : 'Monitoring Queue'}
+        </span>
       </div>
-
-      <div className="divider" />
-
-      <footer>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: narratorOk ? 'var(--success)' : 'var(--error)', boxShadow: narratorOk ? '0 0 10px var(--success)' : '0 0 10px var(--error)' }}></div>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Narrator Sample: {narratorOk ? 'Found' : 'Missing'}</span>
-        </div>
-      </footer>
     </div>
   );
 };

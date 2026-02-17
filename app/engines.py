@@ -1,10 +1,9 @@
-import shlex, subprocess, os, re
+import shlex, subprocess, os, re, hashlib
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from .config import XTTS_ENV_ACTIVATE, PIPER_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
+from .config import XTTS_ENV_ACTIVATE, MP3_QUALITY, BASE_DIR
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
-from .voices import piper_voice_paths
 
 _active_processes = set()
 
@@ -93,12 +92,16 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
+def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, speaker_wav: str = None, speed: float = 1.0) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
-    if not NARRATOR_WAV.exists():
-        on_output(f"[error] narrator wav missing: {NARRATOR_WAV}\n")
+    
+    # Use provided speaker_wav
+    sw = speaker_wav
+    
+    if not sw:
+        on_output(f"[error] No speaker profile or reference WAV provided\n")
         return 1
 
     if safe_mode:
@@ -115,40 +118,14 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
         f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
         f"--text {shlex.quote(text)} "
-        f"--speaker_wav {shlex.quote(str(NARRATOR_WAV))} "
+        f"--speaker_wav {shlex.quote(sw)} "
         f"--language en "
         f"--repetition_penalty 2.0 "
+        f"--speed {speed} "
         f"--out_path {shlex.quote(str(out_wav))}"
     )
     return run_cmd_stream(cmd, on_output, cancel_check)
 
-def piper_generate(chapter_file: Path, voice_name: str, out_wav: Path, safe_mode: bool, on_output, cancel_check) -> int:
-    from .textops import clean_text_for_tts
-    # For Piper, we read the file and clean it before writing to a temp location
-    text = chapter_file.read_text(encoding="utf-8", errors="replace")
-    if safe_mode:
-        text = clean_text_for_tts(text)
-    else:
-        text = re.sub(r'[^\x00-\x7F]+', '', text).strip()
-    
-    tmp_path = chapter_file.with_suffix(".tmp.txt")
-    tmp_path.write_text(text, encoding="utf-8")
-    
-    model, cfg = piper_voice_paths(voice_name)
-    if not model.exists() or not cfg.exists():
-        on_output(f"[error] Missing Piper voice files: {model} / {cfg}\n")
-        return 1
-
-    prefix = f"source {shlex.quote(str(PIPER_ENV_ACTIVATE))} && " if PIPER_ENV_ACTIVATE.exists() else ""
-    cmd = (
-        prefix +
-        f"piper --model {shlex.quote(str(model))} --config {shlex.quote(str(cfg))} "
-        f"--input_file {shlex.quote(str(tmp_path))} --output_file {shlex.quote(str(out_wav))}"
-    )
-    rc = run_cmd_stream(cmd, on_output, cancel_check)
-    if tmp_path.exists():
-        tmp_path.unlink()
-    return rc
 
 def get_audio_duration(file_path: Path) -> float:
     """Uses ffprobe to get the duration of an audio file in seconds."""
@@ -161,6 +138,21 @@ def get_audio_duration(file_path: Path) -> float:
         return float(result.stdout.strip())
     except Exception:
         return 0.0
+
+def get_speaker_latent_path(speaker_wavs_str: str) -> Optional[Path]:
+    """Computes the same latent path as xtts_inference.py."""
+    if not speaker_wavs_str:
+        return None
+        
+    if "," in speaker_wavs_str:
+        wavs = [s.strip() for s in speaker_wavs_str.split(",") if s.strip()]
+        combined_paths = "|".join(sorted([os.path.abspath(p) for p in wavs]))
+    else:
+        combined_paths = os.path.abspath(speaker_wavs_str)
+        
+    speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
+    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-factory/voices"))
+    return voice_dir / f"{speaker_id}.pth"
 
 def assemble_audiobook(
     input_folder: Path, 
@@ -205,11 +197,11 @@ def assemble_audiobook(
     list_file = output_m4b.with_suffix(".list.txt")
     
     metadata = ";FFMETADATA1\n"
-    metadata += f"title={shlex.quote(book_title)}\n"
+    metadata += f"title={book_title}\n"
     if author:
-        metadata += f"artist={shlex.quote(author)}\n"
+        metadata += f"artist={author}\n"
     if narrator:
-        metadata += f"comment={shlex.quote(narrator)}\n"
+        metadata += f"comment={narrator}\n"
     metadata += "\n"
     
     current_offset = 0.0
@@ -237,7 +229,7 @@ def assemble_audiobook(
                 metadata += "[CHAPTER]\nTIMEBASE=1/1000\n"
                 metadata += f"START={start_ms}\n"
                 metadata += f"END={end_ms}\n"
-                metadata += f"title={shlex.quote(display_name)}\n\n"
+                metadata += f"title={display_name}\n\n"
                 
                 current_offset += duration
 

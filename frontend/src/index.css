@@ -14,12 +14,11 @@
   /* Lighter for better contrast */
   --text-muted: #94a3b8;
   /* Lighter for better contrast */
-  --border: rgba(255, 255, 255, 0.12);
-  /* Increased opacity */
-  --glass: rgba(255, 255, 255, 0.04);
-  --glass-hover: rgba(255, 255, 255, 0.08);
-  --glass-active: rgba(255, 255, 255, 0.12);
-  --sidebar-width: 280px;
+  --border: rgba(255, 255, 255, 0.08);
+  --glass: rgba(255, 255, 255, 0.02);
+  --glass-hover: rgba(255, 255, 255, 0.06);
+  --glass-active: rgba(255, 255, 255, 0.1);
+  --header-height: 72px;
 }
 
 * {
@@ -29,17 +28,31 @@
 }
 
 body {
-  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background-color: var(--bg);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #0c0c0e;
+  background-image: url('/background.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--text-primary);
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-  background-image:
-    radial-gradient(circle at 10% 10%, rgba(139, 92, 246, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 90% 90%, rgba(59, 130, 246, 0.1) 0%, transparent 40%);
-  background-attachment: fixed;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.08) 0%, transparent 70%),
+    radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 h1,
@@ -53,6 +66,9 @@ h4 {
 button {
   cursor: pointer;
   font-family: inherit;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
   outline: none;
@@ -89,6 +105,7 @@ button {
   background: var(--glass);
   color: var(--text-primary);
   border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
 }
 
 .btn-glass:hover:not(:disabled) {
@@ -121,11 +138,12 @@ button {
 }
 
 .glass-panel {
-  background: var(--glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(23, 23, 28, 0.6);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
 }
 
 .divider {
@@ -133,6 +151,38 @@ button {
   background: var(--border);
   width: 100%;
   margin: 1rem 0;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.input-group input,
+.input-group textarea {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #fff;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.input-group input:focus,
+.input-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 /* Scrollbar */
@@ -162,7 +212,6 @@ button {
   min-width: 0;
   display: block;
   box-sizing: border-box;
-  /* Important for flex children */
 }
 
 .engine-chunk:hover {
@@ -236,4 +285,24 @@ button {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: fadeInDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -16,16 +16,18 @@ interface ChapterGridProps {
     piperWav: string[];
   };
   onRefresh?: () => void;
+  onOpenPreview?: (filename: string) => void;
 }
 
-export const ChapterGrid: React.FC<ChapterGridProps> = ({ 
-  chapters, 
-  jobs, 
-  selectedFilename, 
+export const ChapterGrid: React.FC<ChapterGridProps> = ({
+  chapters,
+  jobs,
+  selectedFilename,
   onSelect,
   viewMode,
   statusSets,
-  onRefresh
+  onRefresh,
+  onOpenPreview
 }) => {
   return (
     <div style={{
@@ -42,6 +44,7 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
             isActive={selectedFilename === filename}
             onClick={() => onSelect(filename)}
             onRefresh={onRefresh}
+            onOpenPreview={onOpenPreview}
             statusInfo={{
               isXttsMp3: statusSets.xttsMp3.includes(filename),
               isXttsWav: statusSets.xttsWav.includes(filename),

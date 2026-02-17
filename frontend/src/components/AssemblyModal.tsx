@@ -18,14 +18,26 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const formatDuration = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.round(seconds % 60);
+
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  };
+
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
       fetch('/api/audiobook/prepare')
         .then(res => res.json())
         .then((data: AssemblyPrep) => {
-          setChapters(data.chapters);
-          setSelectedFiles(new Set(data.chapters.map(c => c.filename)));
+          const sorted = [...data.chapters].sort((a, b) =>
+            a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
+          );
+          setChapters(sorted);
+          setSelectedFiles(new Set(sorted.map(c => c.filename)));
         })
         .catch(err => console.error('Failed to prepare assembly', err))
         .finally(() => setLoading(false));
@@ -79,9 +91,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
   };
 
   const selectedData = chapters.filter(c => selectedFiles.has(c.filename));
-  const totalDurationSeconds = selectedData.reduce((acc, c) => acc + (c.duration || 0), 0);
-  const totalM = Math.floor(totalDurationSeconds / 60);
-  const totalS = Math.round(totalDurationSeconds % 60);
+  const totalDurationSeconds = selectedData.reduce((acc: number, c: any) => acc + (c.duration || 0), 0);
 
   return (
     <AnimatePresence>
@@ -263,7 +273,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                         </span>
                       </div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {Math.floor(c.duration / 60)}m {Math.round(c.duration % 60)}s
+                        {formatDuration(c.duration)}
                       </span>
                     </Reorder.Item>
                   ))}
@@ -277,7 +287,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                     Combining {selectedFiles.size} chapters into a single M4B.
                   </p>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Total Duration: {totalM}m {totalS}s
+                    Total Duration: {formatDuration(totalDurationSeconds)}
                   </p>
                 </div>
               </div>

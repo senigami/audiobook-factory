@@ -246,8 +246,13 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r' +', ' ', text)
     # Remove spaces before punctuation
     text = re.sub(r' +([,;:])', r'\1', text)
-    # Fix artifacts like ".," or ".;" created by sentence splitting
+    # Remove redundant punctuation
+    # Fix !. -> ! and ?. -> ? but preserve ... and ..
+    text = re.sub(r'([!?])\.+', r'\1', text)
+    # Fix ., -> , and ,. -> . and .; -> ; etc
     text = text.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
+    # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
+    text = re.sub(r'([!?])\1+', r'\1', text)
     
     # Consolidate short sentences (<= 2 words) (like "Wait!" or "No way!") with neighbors
     text = consolidate_short_sentences(text.strip())

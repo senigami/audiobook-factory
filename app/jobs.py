@@ -1,29 +1,37 @@
 import queue, threading, time, traceback, os, re
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, AUDIOBOOK_DIR
-from .engines import xtts_generate, piper_generate, wav_to_mp3, assemble_audiobook
+from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR
+from .engines import xtts_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
+assembly_queue: "queue.Queue[str]" = queue.Queue()
 cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
 # These are default fallbacks; the system will auto-tune these over time in state.json
 BASELINE_XTTS_CPS = 16.7
-BASELINE_PIPER_CPS = 220.0
 
 
 def enqueue(job: Job):
     put_job(job)
     cancel_flags[job.id] = threading.Event()
-    job_queue.put(job.id)
+    if job.engine == "audiobook":
+        assembly_queue.put(job.id)
+    else:
+        job_queue.put(job.id)
 
 def requeue(job_id: str):
-    """Re-add an existing job id back into the worker queue."""
-    job_queue.put(job_id)
+    """Re-add an existing job id back into the correct worker queue."""
+    j = get_jobs().get(job_id)
+    if not j: return
+    if j.engine == "audiobook":
+        assembly_queue.put(job_id)
+    else:
+        job_queue.put(job_id)
     
 def cancel(job_id: str):
     ev = cancel_flags.get(job_id)
@@ -32,13 +40,14 @@ def cancel(job_id: str):
 
 
 def clear_job_queue():
-    """Empty the in-memory task queue."""
-    while not job_queue.empty():
-        try:
-            job_queue.get_nowait()
-            job_queue.task_done()
-        except queue.Empty:
-            break
+    """Empty the in-memory task queues."""
+    for q in [job_queue, assembly_queue]:
+        while not q.empty():
+            try:
+                q.get_nowait()
+                q.task_done()
+            except queue.Empty:
+                break
 
 
 def paused() -> bool:
@@ -61,6 +70,15 @@ def _estimate_seconds(text_chars: int, cps: float) -> int:
     return max(5, int(text_chars / max(1.0, cps)))
 
 
+def format_seconds(seconds: int) -> str:
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    return f"{m}m {s}s"
+
+
 def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> bool:
     stem = Path(chapter_file).stem
     if engine == "audiobook":
@@ -70,8 +88,8 @@ def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> boo
         mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
         wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
     else:
-        mp3 = (PIPER_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (PIPER_OUT_DIR / f"{stem}.wav").exists()
+        # Fallback for unexpected engine names
+        return False
 
     if make_mp3:
         return mp3
@@ -118,8 +136,8 @@ def cleanup_and_reconcile():
             
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
-            has_mp3 = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.mp3"
-            has_wav = (XTTS_OUT_DIR if j.engine == "xtts" else PIPER_OUT_DIR) / f"{Path(j.chapter_file).stem}.wav"
+            has_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
+            has_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
             
             if j.make_mp3:
                 if not has_mp3.exists() and not has_wav.exists():
@@ -163,16 +181,71 @@ def cleanup_and_reconcile():
     return reset_ids
 
 
-def worker_loop():
+def get_speaker_wavs(profile_name: str) -> Optional[str]:
+    """Returns a comma-separated string of absolute paths for the given profile."""
+    from .config import VOICES_DIR
+    
+    # User choice or system default
+    target_profile = profile_name if profile_name else "Default"
+    p = VOICES_DIR / target_profile
+    
+    if not p.exists() or not p.is_dir():
+        return None
+    
+    wavs = sorted(p.glob("*.wav"))
+    if not wavs:
+        return None
+        
+    return ",".join([str(w.absolute()) for w in wavs])
+
+
+def get_speaker_settings(profile_name: str) -> dict:
+    """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
+    from .config import VOICES_DIR
+    from .state import get_settings
+    import json
+    
+    defaults = get_settings()
+    default_test_text = (
+        "The mysterious traveler, bathed in the soft glow of the azure twilight, "
+        "whispered of ancient treasures buried beneath the jagged mountains. "
+        "'Zephyr,' he exclaimed, his voice a mixture of awe and trepidation, "
+        "'the path is treacherous, yet the reward is beyond measure.' "
+        "Around them, the vibrant forest hummed with rhythmic sounds while a "
+        "cold breeze carried the scent of wet earth and weathered stone."
+    )
+    
+    res = {
+        "speed": defaults.get("xtts_speed", 1.0),
+        "test_text": default_test_text
+    }
+    
+    # User choice or system default
+    target_profile = profile_name if profile_name else "Default"
+    p = VOICES_DIR / target_profile
+    
+    meta_path = p / "profile.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            if "speed" in meta:
+                res["speed"] = meta["speed"]
+            if "test_text" in meta:
+                res["test_text"] = meta["test_text"]
+        except: pass
+        
+    return res
+
+def worker_loop(q: "queue.Queue[str]"):
     while True:
-        jid = job_queue.get()
+        jid = q.get()
         try:
             j = get_jobs().get(jid)
             if not j:
                 continue
 
-            # pause support (unless bypassed by a single-chapter manual enqueue)
-            while pause_flag.is_set() and not j.bypass_pause:
+            # pause support (unless bypassed by a single-chapter manual enqueue or it's an audiobook job)
+            while pause_flag.is_set() and not j.bypass_pause and j.engine != "audiobook":
                 time.sleep(0.2)
 
             cancel_ev = cancel_flags.get(jid) or threading.Event()
@@ -191,8 +264,7 @@ def worker_loop():
                     text = chapter_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
                     perf = get_performance_metrics()
-                    cps = perf.get("xtts_cps" if j.engine == "xtts" else "piper_cps", 
-                                   BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
                     eta = _estimate_seconds(chars, cps)
                 
                 header = [
@@ -200,15 +272,13 @@ def worker_loop():
                     f"Started At:  {start_dt}\n",
                     f"Engine: {j.engine.upper()}\n",
                     f"Character Count: {chars:,}\n",
-                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                    f"Predicted Duration: {format_seconds(eta)}\n",
                     "-" * 40 + "\n",
                     "\n"
                 ]
             else:
                 # Audiobook identity
                 src_dir = XTTS_OUT_DIR
-                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
-                    src_dir = PIPER_OUT_DIR
                 
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
@@ -229,7 +299,7 @@ def worker_loop():
                     f"Engine: AUDIOBOOK ASSEMBLY\n",
                     f"Chapter Files: {num_files}\n",
                     f"Total Source Size: {total_size_mb:.1f} MB\n",
-                    f"Predicted Duration: {eta // 60}m {eta % 60}s\n",
+                    f"Predicted Duration: {format_seconds(eta)}\n",
                     "-" * 40 + "\n",
                     "\n"
                 ]
@@ -373,15 +443,7 @@ def worker_loop():
 
             # --- Generate WAV or Audiobook ---
             if j.engine == "audiobook":
-                # Audiobook creation uses the selected output dir (xtts or piper)
-                # For now, let's assume we use whichever one has more files, or just piper_audio if not specified.
-                # The user's request says "from the output of this app". 
-                # Let's check both and use the one that exists. 
-                # Actually, better to let the user specify. But for now, check xtts then piper.
                 src_dir = XTTS_OUT_DIR
-                if not any(src_dir.glob("*.wav")) and not any(src_dir.glob("*.mp3")):
-                    src_dir = PIPER_OUT_DIR
-                
                 title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
                 out_file = AUDIOBOOK_DIR / f"{title}.m4b"
                 
@@ -421,15 +483,24 @@ def worker_loop():
             elif j.engine == "xtts":
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-                rc = xtts_generate(text=text, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+                
+                # Resolve speaker WAVs and settings from profile
+                sw = get_speaker_wavs(j.speaker_profile)
+                spk_settings = get_speaker_settings(j.speaker_profile)
+                speed = spk_settings["speed"]
+                
+                rc = xtts_generate(
+                    text=text, 
+                    out_wav=out_wav, 
+                    safe_mode=j.safe_mode, 
+                    on_output=on_output, 
+                    cancel_check=cancel_check,
+                    speaker_wav=sw,
+                    speed=speed
+                )
             else:
-                out_wav = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
-                out_mp3 = PIPER_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-                voice = j.piper_voice or get_settings().get("default_piper_voice")
-                if not voice:
-                    update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="No Piper voice selected.", log="".join(logs))
-                    continue
-                rc = piper_generate(chapter_file=chapter_path, voice_name=voice, out_wav=out_wav, safe_mode=j.safe_mode, on_output=on_output, cancel_check=cancel_check)
+                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Unknown engine: {j.engine}", log="".join(logs))
+                continue
 
             if cancel_ev.is_set():
                 update_job(jid, status="cancelled", finished_at=time.time(), progress=1.0, error="Cancelled.", log="".join(logs))
@@ -440,8 +511,8 @@ def worker_loop():
                 actual_dur = time.time() - start
                 if actual_dur > 0:
                     new_cps = chars / actual_dur
-                    field = "xtts_cps" if j.engine == "xtts" else "piper_cps"
-                    old_cps = perf.get(field, BASELINE_XTTS_CPS if j.engine == "xtts" else BASELINE_PIPER_CPS)
+                    field = "xtts_cps"
+                    old_cps = perf.get(field, BASELINE_XTTS_CPS)
                     # Smoothed update (80% old, 20% new to avoid outlier fluctuations)
                     updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
                     update_performance_metrics(**{field: updated_cps})
@@ -509,8 +580,12 @@ def worker_loop():
                 print("FATAL: could not update job state after exception")
                 print(tb)
         finally:
-            job_queue.task_done()
+            q.task_done()
 
 
-worker_thread = threading.Thread(target=worker_loop, daemon=True)
-worker_thread.start()
+# Start dedicated workers
+synthesis_thread = threading.Thread(target=worker_loop, args=(job_queue,), name="SynthesisWorker", daemon=True)
+assembly_thread = threading.Thread(target=worker_loop, args=(assembly_queue,), name="AssemblyWorker", daemon=True)
+
+synthesis_thread.start()
+assembly_thread.start()
