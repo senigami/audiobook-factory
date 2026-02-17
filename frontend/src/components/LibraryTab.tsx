@@ -26,7 +26,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Audiobook Library</h2>
                     <p style={{ color: 'var(--text-muted)' }}>Manage your generated works and assemble new audiobooks.</p>
                 </div>
-                <button onClick={onOpenAssembly} className="btn-primary" style={{ padding: '0.75rem 1.5rem' }}>
+                <button onClick={onOpenAssembly} className="btn-primary">
                     <Package size={18} /> Assemble New Book
                 </button>
             </header>

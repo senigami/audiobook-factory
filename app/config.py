@@ -9,8 +9,6 @@ XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
 AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
 VOICES_DIR = BASE_DIR / "voices"
 
-# IMPORTANT: narrator file is in project root: ~/tts-dashboard/narrator_clean.wav
-NARRATOR_WAV = BASE_DIR / "narrator_clean.wav"
 
 # Your existing environments (adjust only if different)
 XTTS_ENV_ACTIVATE = Path.home() / "xtts-env" / "bin" / "activate"

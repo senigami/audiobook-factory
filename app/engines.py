@@ -2,7 +2,7 @@ import shlex, subprocess, os, re, hashlib
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from .config import XTTS_ENV_ACTIVATE, NARRATOR_WAV, MP3_QUALITY, BASE_DIR
+from .config import XTTS_ENV_ACTIVATE, MP3_QUALITY, BASE_DIR
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
 
 _active_processes = set()
@@ -97,11 +97,11 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
     
-    # Use provided speaker_wav or fallback to global NARRATOR_WAV
-    sw = speaker_wav or str(NARRATOR_WAV)
+    # Use provided speaker_wav
+    sw = speaker_wav
     
     if not sw:
-        on_output(f"[error] no narrator wav or speaker profile provided\n")
+        on_output(f"[error] No speaker profile or reference WAV provided\n")
         return 1
 
     if safe_mode:

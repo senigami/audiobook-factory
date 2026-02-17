@@ -183,17 +183,18 @@ def cleanup_and_reconcile():
 
 def get_speaker_wavs(profile_name: str) -> Optional[str]:
     """Returns a comma-separated string of absolute paths for the given profile."""
-    from .config import VOICES_DIR, NARRATOR_WAV
-    if not profile_name:
-        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+    from .config import VOICES_DIR
     
-    p = VOICES_DIR / profile_name
+    # User choice or system default
+    target_profile = profile_name if profile_name else "Default"
+    p = VOICES_DIR / target_profile
+    
     if not p.exists() or not p.is_dir():
-        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+        return None
     
     wavs = sorted(p.glob("*.wav"))
     if not wavs:
-        return str(NARRATOR_WAV) if NARRATOR_WAV.exists() else None
+        return None
         
     return ",".join([str(w.absolute()) for w in wavs])
 
@@ -219,10 +220,10 @@ def get_speaker_settings(profile_name: str) -> dict:
         "test_text": default_test_text
     }
     
-    if not profile_name:
-        return res
-        
-    p = VOICES_DIR / profile_name
+    # User choice or system default
+    target_profile = profile_name if profile_name else "Default"
+    p = VOICES_DIR / target_profile
+    
     meta_path = p / "profile.json"
     if meta_path.exists():
         try:

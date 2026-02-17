@@ -396,18 +396,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             <textarea
                                 value={testText}
                                 onChange={(e) => setTestText(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    minHeight: '150px',
-                                    background: 'rgba(0,0,0,0.2)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: '8px',
-                                    color: '#fff',
-                                    padding: '1rem',
-                                    fontSize: '0.9rem',
-                                    lineHeight: '1.5',
-                                    resize: 'vertical'
-                                }}
+                                style={{ minHeight: '150px', lineHeight: '1.5', resize: 'vertical' }}
                                 placeholder="Enter the text you want this narrator to speak in the preview..."
                             />
                         </div>

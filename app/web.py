@@ -9,7 +9,7 @@ from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, NARRATOR_WAV, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR
+    XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR
 )
 from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
@@ -24,6 +24,7 @@ app = FastAPI()
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
+app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -240,7 +241,7 @@ def api_home():
         "jobs": jobs,
         "settings": settings,
         "paused": paused(),
-        "narrator_ok": NARRATOR_WAV.exists(),
+        "narrator_ok": (VOICES_DIR / "Default").exists(),
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
         "audiobooks": list_audiobooks(),
@@ -497,14 +498,14 @@ def list_speaker_profiles():
             speed = spk_settings["speed"]
             test_text = spk_settings["test_text"]
                 
-            test_wav = XTTS_OUT_DIR / f"test_{d.name}.wav"
+            test_wav = VOICES_DIR / d.name / "sample.wav"
             
             profiles.append({
                 "name": d.name,
                 "wav_count": wav_count,
                 "speed": speed,
                 "test_text": test_text,
-                "preview_url": f"/out/xtts/test_{d.name}.wav" if test_wav.exists() else None
+                "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
             })
     return sorted(profiles, key=lambda x: x["name"])
 
@@ -655,7 +656,7 @@ def test_speaker_profile(name: str = Form(...)):
     if not sw:
         return JSONResponse({"status": "error", "message": "No WAVs found for profile"}, status_code=400)
     
-    test_out = XTTS_OUT_DIR / f"test_{name}.wav"
+    test_out = VOICES_DIR / name / "sample.wav"
     from .jobs import get_speaker_settings
     spk_settings = get_speaker_settings(name)
     test_text = spk_settings["test_text"]
@@ -696,7 +697,7 @@ def test_speaker_profile(name: str = Form(...)):
         broadcast_test_progress(name, 0.0)
     
     if rc == 0 and test_out.exists():
-        return {"status": "success", "audio_url": f"/out/xtts/test_{name}.wav"}
+        return {"status": "success", "audio_url": f"/out/voices/{name}/sample.wav"}
     return JSONResponse({"status": "error", "message": f"Test generation failed (rc={rc})"}, status_code=500)
 
 @app.post("/cancel")
