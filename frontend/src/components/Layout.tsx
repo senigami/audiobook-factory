@@ -72,7 +72,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <h1 style={{
-                fontSize: '1.2rem',
+                fontSize: '1.1rem',
                 fontWeight: 900,
                 letterSpacing: '-0.03em',
                 margin: 0,
@@ -81,18 +81,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 WebkitTextFillColor: 'transparent',
                 lineHeight: 1
               }}>
-                FACTORY
+                AUDIOBOOK
               </h1>
               <span style={{
-                fontSize: '0.6rem',
+                fontSize: '0.8rem',
                 fontWeight: 800,
                 color: 'var(--accent)',
-                letterSpacing: '0.2em',
+                letterSpacing: '0.6em',
                 textTransform: 'uppercase',
                 opacity: 0.8,
                 marginTop: '1px'
               }}>
-                PRODUCTION
+                FACTORY
               </span>
             </div>
           </div>
