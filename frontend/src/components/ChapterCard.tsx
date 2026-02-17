@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, Mic } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
@@ -11,6 +11,7 @@ interface ChapterCardProps {
   isActive?: boolean;
   onClick?: () => void;
   onRefresh?: () => void;
+  onOpenPreview?: (filename: string) => void;
   statusInfo?: {
     isXttsMp3: boolean;
     isXttsWav: boolean;
@@ -39,7 +40,7 @@ const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusIn
   return config[status] || config.queued;
 };
 
-export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, statusInfo }) => {
+export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [showMenu, setShowMenu] = useState(false);
@@ -179,7 +180,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                   top: '100%',
                   right: 0,
                   zIndex: 1000,
-                  minWidth: '150px',
+                  minWidth: '180px',
                   padding: '4px',
                   marginTop: '4px',
                   boxShadow: '0 8px 16px rgba(0,0,0,0.6)',
@@ -212,39 +213,21 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                     opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 0.5 : 1,
                     cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 'not-allowed' : 'pointer'
                   }}
-                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Run XTTS on just this one chapter"}
+                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Synthesize just this one chapter"}
                 >
-                  <Play size={12} /> Process with XTTS
-                </button>
-                <button
-                  disabled={!!(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav)}
-                  onClick={async () => {
-                    setShowMenu(false);
-                    try {
-                      await api.enqueueSingle(filename, 'piper');
-                      onRefresh?.();
-                    } catch (err) {
-                      console.error('Piper single enqueue failed', err);
-                    }
-                  }}
-                  className="btn-ghost"
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px',
-                    fontSize: '0.75rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    justifyContent: 'flex-start',
-                    opacity: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 0.5 : 1,
-                    cursor: (statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? 'not-allowed' : 'pointer'
-                  }}
-                  title={(statusInfo?.isPiperMp3 || statusInfo?.isPiperWav) ? "Audio already generated. Reset to re-process." : "Run Piper on just this one chapter"}
-                >
-                  <Mic size={12} /> Process with Piper
+                  <Play size={12} /> Process Synthesis
                 </button>
                 <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onOpenPreview?.(filename);
+                  }}
+                  className="btn-ghost"
+                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start' }}
+                >
+                  <FileText size={12} /> Preview & Analyze
+                </button>
                 <button
                   onClick={async () => {
                     setShowMenu(false);

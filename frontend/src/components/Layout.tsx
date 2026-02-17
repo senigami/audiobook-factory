@@ -1,13 +1,15 @@
-import { Mic, Zap, Library } from 'lucide-react';
+import { Mic, Zap, Library, Terminal } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeTab: string;
   onTabChange: (tab: any) => void;
   headerRight?: React.ReactNode;
+  showLogs?: boolean;
+  onToggleLogs?: () => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs }) => {
   const navItems = [
     { id: 'voices', label: 'Voices', icon: Mic },
     { id: 'synthesis', label: 'Synthesis', icon: Zap },
@@ -124,6 +126,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
 
         {/* Global Controls Section */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          {onToggleLogs && (
+            <button
+              onClick={onToggleLogs}
+              className="btn-ghost"
+              title={showLogs ? "Hide Console" : "Show Console"}
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                color: showLogs ? 'var(--accent)' : 'var(--text-muted)',
+                background: showLogs ? 'rgba(139, 92, 246, 0.1)' : 'var(--glass)',
+                border: showLogs ? '1px solid var(--accent)' : '1px solid var(--border)',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0
+              }}
+            >
+              <Terminal size={18} />
+            </button>
+          )}
           {headerRight}
         </div>
       </header>

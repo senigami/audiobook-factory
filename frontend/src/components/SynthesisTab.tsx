@@ -15,6 +15,7 @@ interface SynthesisTabProps {
     settings: any;
     hideFinished: boolean;
     onToggleHideFinished: () => void;
+    onOpenPreview: (filename: string) => void;
 }
 
 export const SynthesisTab: React.FC<SynthesisTabProps> = ({
@@ -28,7 +29,8 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
     paused,
     settings,
     hideFinished,
-    onToggleHideFinished
+    onToggleHideFinished,
+    onOpenPreview
 }) => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [selectedProfile, setSelectedProfile] = useState('');
@@ -140,6 +142,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                     <button
                         onClick={() => setShowSettings(!showSettings)}
                         className={`btn-ghost ${showSettings ? 'active' : ''}`}
+                        title="Synthesis Settings"
                         style={{
                             padding: '0.75rem',
                             borderRadius: '10px',
@@ -249,6 +252,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                     viewMode={viewMode}
                     onRefresh={onRefresh}
                     statusSets={statusSets}
+                    onOpenPreview={onOpenPreview}
                 />
             </div>
         </div>

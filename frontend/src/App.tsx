@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { Panel } from './components/Panel';
 import { AssemblyModal } from './components/AssemblyModal';
+import { PreviewModal } from './components/PreviewModal';
 import { VoicesTab } from './components/VoicesTab';
 import { SynthesisTab } from './components/SynthesisTab';
 import { LibraryTab } from './components/LibraryTab';
@@ -15,6 +16,8 @@ function App() {
   const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
   const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library' | 'settings'>('synthesis');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [previewFilename, setPreviewFilename] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
   const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -75,6 +78,8 @@ function App() {
       <Layout
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
+        showLogs={showLogs}
+        onToggleLogs={() => setShowLogs(!showLogs)}
         headerRight={
           <Sidebar
             paused={initialData?.paused || false}
@@ -116,6 +121,9 @@ function App() {
                 settings={initialData?.settings}
                 hideFinished={hideFinished}
                 onToggleHideFinished={() => setHideFinished(!hideFinished)}
+                onOpenPreview={setPreviewFilename}
+                showLogs={showLogs}
+                onToggleLogs={() => setShowLogs(!showLogs)}
               />
             )}
             {activeTab === 'library' && (
@@ -130,16 +138,19 @@ function App() {
             )}
           </main>
 
-          <Panel
-            title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
-            subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
-            logs={viewingJob?.log}
-            filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
-            progress={viewingJob?.progress}
-            status={viewingJob?.status}
-            startedAt={viewingJob?.started_at}
-            etaSeconds={viewingJob?.eta_seconds}
-          />
+          {showLogs && (
+            <Panel
+              title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
+              subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
+              logs={viewingJob?.log}
+              filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
+              progress={viewingJob?.progress}
+              status={viewingJob?.status}
+              startedAt={viewingJob?.started_at}
+              etaSeconds={viewingJob?.eta_seconds}
+              onClose={() => setShowLogs(false)}
+            />
+          )}
         </div>
       </Layout>
 
@@ -166,6 +177,12 @@ function App() {
             alert(`Failed to start assembly: ${err.message || resp.statusText}`);
           }
         }}
+      />
+
+      <PreviewModal
+        isOpen={!!previewFilename}
+        onClose={() => setPreviewFilename(null)}
+        filename={previewFilename || ''}
       />
     </div>
   );
