@@ -134,6 +134,23 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, filename, p
                 </div>
             </div>
 
+            {(status === 'running' || status === 'queued') && (
+                <div
+                    data-testid="panel-progress"
+                    style={{ height: '2px', background: 'rgba(255,255,255,0.05)', width: '100%', overflow: 'hidden' }}
+                >
+                    <div
+                        className="progress-bar-animated"
+                        style={{
+                            height: '100%',
+                            background: 'var(--accent)',
+                            width: `${getRemainingAndProgress().localProgress * 100}%`,
+                            transition: 'width 1s linear'
+                        }}
+                    />
+                </div>
+            )}
+
 
             <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--bg)' }}>
                 {activeTab === 'logs' ? (

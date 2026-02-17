@@ -1,4 +1,4 @@
-import { Mic, Zap, Library, Home, Settings } from 'lucide-react';
+import { Mic, Zap, Library, Settings } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
