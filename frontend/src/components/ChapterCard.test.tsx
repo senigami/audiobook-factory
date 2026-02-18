@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { ChapterCard } from './ChapterCard'
 import { describe, it, expect } from 'vitest'
 import type { Job } from '../types'
@@ -71,8 +71,21 @@ describe('ChapterCard', () => {
 
     const progressBar = screen.getByTestId('progress-bar');
     expect(progressBar).toBeInTheDocument();
-    // Check if the inner motion.div has the correct width
-    const indicator = progressBar.firstChild as HTMLElement;
+    // PredictiveProgressBar structure: root -> infoDiv, containerDiv -> indicatorDiv
+    const indicator = progressBar.children[1].firstChild as HTMLElement;
     expect(indicator.style.width).toBe('45%');
+  });
+
+  it('applies overflow: visible and high zIndex when menu is open', () => {
+    const { container } = render(<ChapterCard filename="test.txt" job={mockJob} />);
+
+    // Find the kebab button and click it
+    const kebabBtn = screen.getByTitle('More options');
+    fireEvent.click(kebabBtn);
+
+    // The main container is the motion.div
+    const card = container.firstChild as HTMLElement;
+    expect(card.style.overflow).toBe('visible');
+    expect(card.style.zIndex).toBe('100');
   });
 })

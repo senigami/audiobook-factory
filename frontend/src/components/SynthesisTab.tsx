@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChapterGrid } from './ChapterGrid';
 import { Upload, Play, List, Grid, Settings as SettingsIcon, RefreshCw, Trash2, Check, X } from 'lucide-react';
 import type { Job } from '../types';
@@ -33,10 +33,16 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
     onOpenPreview
 }) => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-    const [selectedProfile, setSelectedProfile] = useState('');
+    const [selectedProfile, setSelectedProfile] = useState(settings?.default_speaker_profile || '');
     const [isUploading, setIsUploading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (!selectedProfile && settings?.default_speaker_profile) {
+            setSelectedProfile(settings.default_speaker_profile);
+        }
+    }, [settings?.default_speaker_profile]);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.[0]) return;
@@ -127,8 +133,14 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                             className="select-glass"
                             style={{ fontSize: '0.875rem', minWidth: '180px' }}
                         >
-                            <option value="">(Default Narrator)</option>
-                            {speakerProfiles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                            {speakerProfiles.length === 0 ? (
+                                <option value="">No narrators found</option>
+                            ) : (
+                                <>
+                                    {!settings?.default_speaker_profile && <option value="">Select Narrator...</option>}
+                                    {speakerProfiles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                                </>
+                            )}
                         </select>
                         <button
                             onClick={handleStartQueue}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Terminal, X } from 'lucide-react';
 
 interface PanelProps {
@@ -14,7 +14,13 @@ interface PanelProps {
 }
 
 export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, progress, status, startedAt, etaSeconds, onClose }) => {
+    const [now, setNow] = useState(Date.now());
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -26,7 +32,6 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, progress, s
         if (status !== 'running' || !startedAt || !etaSeconds) {
             return { remaining: null, localProgress: progress || 0 };
         }
-        const now = Date.now();
         const elapsed = (now / 1000) - startedAt;
         const timeProgress = Math.min(0.99, elapsed / etaSeconds);
         const currentProgress = Math.max(progress || 0, timeProgress);

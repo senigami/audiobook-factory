@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save, RotateCcw } from 'lucide-react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save, RotateCcw, Star } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface SpeakerProfile {
     name: string;
     wav_count: number;
     speed: number;
+    is_default: boolean;
     test_text?: string;
     preview_url: string | null;
 }
@@ -15,18 +16,18 @@ interface SpeakerCardProps {
     isTesting: boolean;
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
+    onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
     testStatus?: { progress: number; started_at?: number };
 }
 
-const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onRefresh, onEditTestText, testStatus }) => {
+const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, onEditTestText, testStatus }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
     const speed = localSpeed ?? profile.speed;
 
-    // Update cache buster when preview_url is restored or stays stable but we want a fresh look
     useEffect(() => {
         if (profile.preview_url) {
             setCacheBuster(Date.now());
@@ -73,14 +74,38 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count} samples</span>
                     </div>
                 </div>
-                <button
-                    onClick={() => onDelete(profile.name)}
-                    className="btn-ghost"
-                    style={{ color: 'var(--error)', padding: '8px' }}
-                    title="Delete Profile"
-                >
-                    <Trash2 size={14} />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSetDefault(profile.name);
+                        }}
+                        className="btn-ghost"
+                        style={{
+                            padding: '8px',
+                            color: profile.is_default ? 'var(--warning)' : 'var(--text-muted)',
+                            transition: 'all 0.3s ease',
+                            cursor: 'pointer',
+                            zIndex: 10
+                        }}
+                        title={profile.is_default ? "Default Narrator" : "Set as Default"}
+                    >
+                        <Star size={16} fill={profile.is_default ? 'var(--warning)' : 'none'} />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDelete(profile.name);
+                        }}
+                        className="btn-ghost"
+                        style={{ color: 'var(--error)', padding: '8px' }}
+                        title="Delete Profile"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                </div>
             </div>
 
             <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
@@ -111,7 +136,7 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                     <PredictiveProgressBar
                         progress={testStatus?.progress || 0}
                         startedAt={testStatus?.started_at}
-                        etaSeconds={25} // Average XTTS test time is ~25s
+                        etaSeconds={25}
                         label="Generating Sample..."
                     />
                 ) : profile.preview_url ? (
@@ -220,11 +245,10 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 onRefresh();
             } else {
                 const errorData = await resp.json();
-                alert(`Build failed: ${errorData.message}\n\n${errorData.traceback || ''}`);
+                alert(`Build failed: ${errorData.message}`);
             }
         } catch (err) {
             console.error('Failed to build profile', err);
-            alert('Build failed. Check console for details.');
         } finally {
             setIsBuilding(false);
         }
@@ -262,10 +286,23 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
+    const handleSetDefault = async (name: string) => {
+        try {
+            const formData = new URLSearchParams();
+            formData.append('name', name);
+            await fetch('/api/settings/default-speaker', {
+                method: 'POST',
+                body: formData
+            });
+            onRefresh();
+        } catch (err) {
+            console.error('Failed to set default speaker', err);
+        }
+    };
+
     return (
         <div className="tab-content animate-in">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                {/* Builder Section */}
                 <section className="glass-panel" style={{ padding: '2rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
                         <Plus size={20} color="var(--accent)" />
@@ -310,24 +347,20 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
                                 <Info size={14} />
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Voice Optimization</span>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Voice optimization</span>
                             </div>
                             <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    <strong style={{ color: 'var(--text-main)' }}>Individual Samples:</strong> 6 to 10 seconds is the ideal length.
+                                    Ideal sample length is 6 to 10 seconds.
                                 </li>
                                 <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    <strong style={{ color: 'var(--text-main)' }}>Total Profile:</strong> 3 to 5 samples (approx. 30s total) for stability.
-                                </li>
-                                <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    <strong style={{ color: 'var(--text-main)' }}>Audio Quality:</strong> Use clean recordings with no background noise or music.
+                                    Use 3 to 5 clean samples for best results.
                                 </li>
                             </ul>
                         </div>
                     </form>
                 </section>
 
-                {/* List Section */}
                 <section>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
                         <User size={20} color="var(--accent)" />
@@ -336,7 +369,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem' }}>
                         {speakerProfiles.length === 0 && (
                             <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
-                                No custom speakers yet. Upload some WAVs to begin.
+                                No narrators found. Create one to begin.
                             </p>
                         )}
                         {speakerProfiles.map((p) => (
@@ -347,6 +380,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 testStatus={testProgress[p.name]}
                                 onTest={handleTest}
                                 onDelete={handleDelete}
+                                onSetDefault={handleSetDefault}
                                 onRefresh={onRefresh}
                                 onEditTestText={(profile) => {
                                     setEditingProfile(profile);
@@ -358,7 +392,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 </section>
             </div>
 
-            {/* Edit Test Text Modal */}
             {editingProfile && (
                 <div style={{
                     position: 'fixed',
@@ -384,7 +417,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <FileEdit color="var(--accent)" size={20} />
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Edit Sample Text for {editingProfile.name}</h3>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Sample Text: {editingProfile.name}</h3>
                             </div>
                             <button onClick={() => setEditingProfile(null)} className="btn-ghost">
                                 <X size={20} />
@@ -392,12 +425,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </div>
 
                         <div className="input-group">
-                            <label>The narrative text used for voice previews</label>
+                            <label>Text used for voice previews</label>
                             <textarea
                                 value={testText}
                                 onChange={(e) => setTestText(e.target.value)}
                                 style={{ minHeight: '150px', lineHeight: '1.5', resize: 'vertical' }}
-                                placeholder="Enter the text you want this narrator to speak in the preview..."
+                                placeholder="Enter preview text..."
                             />
                         </div>
 
@@ -410,7 +443,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             >
                                 <RotateCcw size={14} /> Reset Original
                             </button>
-                            <button onClick={() => setEditingProfile(null)} className="btn-ghost">Cancel</button>
+                            <button onClick={() => setEditingProfile(null)} className="btn-ghost" disabled={isSavingText}>Cancel</button>
                             <button
                                 onClick={handleSaveTestText}
                                 className="btn-primary"

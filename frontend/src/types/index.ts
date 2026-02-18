@@ -5,6 +5,7 @@ export interface SpeakerProfile {
   name: string;
   wav_count: number;
   speed: number;
+  is_default: boolean;
   test_text?: string;
   preview_url: string | null;
 }
@@ -36,6 +37,7 @@ export interface Settings {
   safe_mode: boolean;
   make_mp3: boolean;
   default_engine: Engine;
+  default_speaker_profile?: string;
 }
 
 export interface AssemblyChapter {

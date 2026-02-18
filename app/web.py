@@ -223,9 +223,14 @@ def api_home():
     from .jobs import cleanup_and_reconcile
     cleanup_and_reconcile()
     
+    # 1. Get profiles first (this auto-sets default_speaker_profile if needed)
+    profiles = list_speaker_profiles()
+    
+    # 2. Re-fetch settings so they include the potential new default
+    settings = get_settings()
+    
     chapters = [p.name for p in list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
-    settings = get_settings()
     
     # status sets logic
     xtts_wav_only = []
@@ -245,7 +250,7 @@ def api_home():
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
         "audiobooks": list_audiobooks(),
-        "speaker_profiles": list_speaker_profiles(),
+        "speaker_profiles": profiles,
     }
 
 @app.post("/settings")
@@ -263,6 +268,11 @@ def save_settings(
         make_mp3=True
     )
     return {"status": "success", "settings": get_settings()}
+
+@app.post("/api/settings/default-speaker")
+def set_default_speaker(name: str = Form(...)):
+    update_settings(default_speaker_profile=name)
+    return {"status": "success", "default_speaker_profile": name}
 
 def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = None) -> List[Path]:
     """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
@@ -486,28 +496,44 @@ def prepare_audiobook():
 def list_speaker_profiles():
     if not VOICES_DIR.exists():
         return []
+    
+    dirs = sorted([d for d in VOICES_DIR.iterdir() if d.is_dir()], key=lambda x: x.name)
+    settings = get_settings()
+    default_speaker = settings.get("default_speaker_profile")
+
+    # Auto-set default if only one exists and none currently set (or current set doesn't exist)
+    if dirs:
+        names = [d.name for d in dirs]
+        if len(dirs) == 1 and default_speaker != names[0]:
+            default_speaker = names[0]
+            update_settings(default_speaker_profile=default_speaker)
+        elif default_speaker and default_speaker not in names:
+            # Current default was deleted
+            default_speaker = names[0] if len(dirs) > 0 else None
+            update_settings(default_speaker_profile=default_speaker)
+
     profiles = []
-    for d in VOICES_DIR.iterdir():
-        if d.is_dir():
-            wav_count = len(list(d.glob("*.wav")))
+    for d in dirs:
+        wav_count = len(list(d.glob("*.wav")))
+        
+        # Load metadata if exists
+        import json
+        from .jobs import get_speaker_settings
+        spk_settings = get_speaker_settings(d.name)
+        speed = spk_settings["speed"]
+        test_text = spk_settings["test_text"]
             
-            # Load metadata if exists
-            import json
-            from .jobs import get_speaker_settings
-            spk_settings = get_speaker_settings(d.name)
-            speed = spk_settings["speed"]
-            test_text = spk_settings["test_text"]
-                
-            test_wav = VOICES_DIR / d.name / "sample.wav"
-            
-            profiles.append({
-                "name": d.name,
-                "wav_count": wav_count,
-                "speed": speed,
-                "test_text": test_text,
-                "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
-            })
-    return sorted(profiles, key=lambda x: x["name"])
+        test_wav = VOICES_DIR / d.name / "sample.wav"
+        
+        profiles.append({
+            "name": d.name,
+            "is_default": d.name == default_speaker,
+            "wav_count": wav_count,
+            "speed": speed,
+            "test_text": test_text,
+            "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
+        })
+    return profiles
 
 @app.post("/api/speaker-profiles/{name}/test-text")
 def update_speaker_test_text(name: str, text: str = Form(...)):

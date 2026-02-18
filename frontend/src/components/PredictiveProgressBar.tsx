@@ -65,7 +65,7 @@ export const PredictiveProgressBar: React.FC<PredictiveProgressBarProps> = ({
     }, [now, calculatedRemaining]);
 
     return (
-        <div style={{ width: '100%' }}>
+        <div style={{ width: '100%' }} data-testid="progress-bar">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
                 {showEta && displayedRemaining !== null && (
