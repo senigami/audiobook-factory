@@ -116,6 +116,28 @@ def test_delete_profile(clean_voices):
     assert response.status_code == 200
     assert not profile_dir.exists()
 
+def test_rename_profile(clean_voices):
+    from app.state import update_settings, get_settings
+    name = "Original"
+    new_name = "Renamed"
+    profile_dir = clean_voices / name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / "sample.wav").write_text("audio")
+    
+    # Set as default to test settings update
+    update_settings(default_speaker_profile=name)
+    
+    response = client.post(f"/api/speaker-profiles/{name}/rename", data={"new_name": new_name})
+    assert response.status_code == 200
+    assert response.json()["new_name"] == new_name
+    
+    assert not (clean_voices / name).exists()
+    assert (clean_voices / new_name).exists()
+    assert (clean_voices / new_name / "sample.wav").exists()
+    
+    # Verify settings updated
+    assert get_settings()["default_speaker_profile"] == new_name
+
 def test_get_speaker_settings(clean_voices):
     from app.jobs import get_speaker_settings
     from app.state import update_settings

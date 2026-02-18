@@ -650,6 +650,44 @@ async def build_speaker_profile(
         traceback.print_exc()
         return JSONResponse({"status": "error", "message": error_msg, "traceback": traceback.format_exc()}, status_code=500)
 
+@app.post("/api/speaker-profiles/{name}/rename")
+def rename_speaker_profile(name: str, new_name: str = Form(...)):
+    from .jobs import get_speaker_wavs
+    from .engines import get_speaker_latent_path
+    import shutil
+    
+    old_dir = VOICES_DIR / name
+    new_dir = VOICES_DIR / new_name
+    
+    if not old_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+    if new_dir.exists():
+        return JSONResponse({"status": "error", "message": f"Profile '{new_name}' already exists"}, status_code=400)
+    
+    # 1. Cleanup old latent cache for the old path
+    try:
+        sw = get_speaker_wavs(name)
+        if sw:
+            lp = get_speaker_latent_path(sw)
+            if lp and lp.exists():
+                print(f"Cleanup latent cache for renamed narrator: {name}")
+                lp.unlink()
+    except Exception as e:
+        print(f"Warning: Failed to cleanup latent cache for {name}: {e}")
+
+    # 2. Rename directory
+    try:
+        shutil.move(str(old_dir), str(new_dir))
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": f"Move failed: {str(e)}"}, status_code=500)
+    
+    # 3. Update global settings if this was the default
+    settings = get_settings()
+    if settings.get("default_speaker_profile") == name:
+        update_settings(default_speaker_profile=new_name)
+        
+    return {"status": "success", "new_name": new_name}
+
 @app.delete("/api/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):
     from .jobs import get_speaker_wavs

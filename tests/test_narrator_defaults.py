@@ -101,3 +101,24 @@ def test_no_narrators_default_is_none(clean_state):
     
     response = client.get("/api/home")
     assert response.json()["settings"].get("default_speaker_profile") is None
+
+def test_rename_default_narrator_persists(clean_state):
+    test_voices, _ = clean_state
+    
+    # 1. Create and set as default
+    (test_voices / "OldName").mkdir()
+    client.post("/api/settings/default-speaker", data={"name": "OldName"})
+    
+    # 2. Rename it
+    response = client.post("/api/speaker-profiles/OldName/rename", data={"new_name": "NewName"})
+    assert response.status_code == 200
+    
+    # 3. Check home data - should now point to NewName
+    response = client.get("/api/home")
+    assert response.json()["settings"]["default_speaker_profile"] == "NewName"
+    
+    # 4. Check profile list - NewName should be default
+    profiles = response.json()["speaker_profiles"]
+    assert len(profiles) == 1
+    assert profiles[0]["name"] == "NewName"
+    assert profiles[0]["is_default"] is True

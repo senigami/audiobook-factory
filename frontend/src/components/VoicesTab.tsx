@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, Save, RotateCcw, Star } from 'lucide-react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface SpeakerProfile {
@@ -181,22 +181,42 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [testingProfile, setTestingProfile] = useState<string | null>(null);
     const [editingProfile, setEditingProfile] = useState<SpeakerProfile | null>(null);
     const [testText, setTestText] = useState('');
+    const [editedName, setEditedName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
         setIsSavingText(true);
         try {
+            // 1. Handle Rename if needed
+            let currentName = editingProfile.name;
+            if (editedName.trim() && editedName.trim() !== editingProfile.name) {
+                const renameData = new URLSearchParams();
+                renameData.append('new_name', editedName.trim());
+                const renameResp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/rename`, {
+                    method: 'POST',
+                    body: renameData
+                });
+                if (!renameResp.ok) {
+                    const error = await renameResp.json();
+                    alert(`Rename failed: ${error.message}`);
+                    setIsSavingText(false);
+                    return;
+                }
+                currentName = editedName.trim();
+            }
+
+            // 2. Handle Text Update
             const formData = new URLSearchParams();
             formData.append('text', testText);
-            await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/test-text`, {
+            await fetch(`/api/speaker-profiles/${encodeURIComponent(currentName)}/test-text`, {
                 method: 'POST',
                 body: formData
             });
             onRefresh();
             setEditingProfile(null);
         } catch (e) {
-            console.error('Failed to save test text', e);
+            console.error('Failed to save profile', e);
         } finally {
             setIsSavingText(false);
         }
@@ -385,6 +405,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 onEditTestText={(profile) => {
                                     setEditingProfile(profile);
                                     setTestText(profile.test_text || '');
+                                    setEditedName(profile.name);
                                 }}
                             />
                         ))}
@@ -417,7 +438,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <FileEdit color="var(--accent)" size={20} />
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Sample Text: {editingProfile.name}</h3>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Edit Narrator: {editingProfile.name}</h3>
                             </div>
                             <button onClick={() => setEditingProfile(null)} className="btn-ghost">
                                 <X size={20} />
@@ -425,7 +446,32 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </div>
 
                         <div className="input-group">
-                            <label>Text used for voice previews</label>
+                            <label>Narrator Name</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="text"
+                                    value={editedName}
+                                    onChange={(e) => setEditedName(e.target.value)}
+                                    placeholder="Enter narrator name..."
+                                    style={{
+                                        fontSize: '1.1rem',
+                                        fontWeight: 600,
+                                        background: 'rgba(255,255,255,0.03)',
+                                        borderRadius: '8px',
+                                        padding: '10px 14px',
+                                        flex: 1
+                                    }}
+                                />
+                                {editedName.trim() !== editingProfile.name && editedName.trim() !== '' && (
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                        Name changed
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="input-group">
+                            <label>The narrative text used for voice previews</label>
                             <textarea
                                 value={testText}
                                 onChange={(e) => setTestText(e.target.value)}
@@ -441,16 +487,16 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 disabled={isSavingText}
                                 style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}
                             >
-                                <RotateCcw size={14} /> Reset Original
+                                <RotateCcw size={14} /> Reset Narrative
                             </button>
                             <button onClick={() => setEditingProfile(null)} className="btn-ghost" disabled={isSavingText}>Cancel</button>
                             <button
                                 onClick={handleSaveTestText}
                                 className="btn-primary"
-                                disabled={isSavingText}
+                                disabled={isSavingText || !editedName.trim()}
                             >
-                                {isSavingText ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                                Save Narrative
+                                {isSavingText ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
+                                {isSavingText ? 'Saving Changes...' : 'Save Changes'}
                             </button>
                         </div>
                     </div>

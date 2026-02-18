@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { VoicesTab } from './VoicesTab'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -38,5 +38,32 @@ describe('VoicesTab', () => {
         fireEvent.click(setBtn)
 
         expect(fetchMock).toHaveBeenCalledWith('/api/settings/default-speaker', expect.anything())
+    })
+
+    it('opens edit modal and allows renaming', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
+        global.fetch = fetchMock
+
+        render(<VoicesTab {...mockProps} />)
+
+        // Open modal for Narrator1
+        const editBtn = screen.getAllByTitle('Edit Sample Text')[0]
+        fireEvent.click(editBtn)
+
+        // Find name input and change it
+        const nameInput = screen.getByDisplayValue('Narrator1')
+        fireEvent.change(nameInput, { target: { value: 'Super Narrator' } })
+
+        // Click Save Changes
+        const saveBtn = screen.getByText('Save Changes')
+        await act(async () => {
+            fireEvent.click(saveBtn)
+        })
+
+        // Verify rename fetch call
+        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/speaker-profiles/Narrator1/rename'), expect.objectContaining({
+            method: 'POST',
+            body: expect.any(URLSearchParams)
+        }))
     })
 })
