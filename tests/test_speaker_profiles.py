@@ -90,8 +90,8 @@ def test_speaker_profile_test_endpoint(mock_xtts, clean_voices):
     mock_xtts.return_value = 0
     
     # We need to make sure the expected output file exists or the endpoint will return 500
-    test_out = XTTS_OUT_DIR / f"test_{name}.wav"
-    XTTS_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    test_out = clean_voices / name / "sample.wav"
+    test_out.parent.mkdir(parents=True, exist_ok=True)
     test_out.write_text("output audio")
     
     response = client.post(
@@ -99,10 +99,8 @@ def test_speaker_profile_test_endpoint(mock_xtts, clean_voices):
         data={"name": name}
     )
     
-    # This checks if we fixed the NameError: name 'sys' is not defined
-    # because if it wasn't defined, the endpoint would throw 500 when it tries to print
     assert response.status_code == 200
-    assert "audio_url" in response.json()
+    assert response.json()["audio_url"] == f"/out/voices/{name}/sample.wav"
     
     # Cleanup test output
     if test_out.exists():
