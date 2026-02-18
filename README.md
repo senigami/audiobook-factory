@@ -1,13 +1,12 @@
 # 🎧 Audiobook Factory
 
-Audiobook Factory is a self-hosted web dashboard for turning
-chapter-marked text files into full audiobook audio using:
+Audiobook Factory is a modern, self-hosted web dashboard for turning chapter-marked text files into high-quality audiobook audio using **local AI speech synthesis**.
 
--   **XTTS-v2 (voice cloning)**
--   **Piper (fast ONNX voices)**
--   **Auto-Tuning ETA (Learns your hardware speed)**
--   **Interactive Assembly (Rename/Skip chapters)**
--   **Audible Project Overview (Synthesized locally)**
+-   **XTTS-v2 (Native Voice Cloning)**: Clone any voice from just 60 seconds of audio.
+-   **Modern Glassmorphism UI**: High-performance dashboard with deep customization.
+-   **Per-Chapter Preview**: Preview and analyze text segments before synthesis.
+-   **Auto-Tuning ETA**: Progress tracking that learns from your hardware's speed.
+-   **Interactive Assembly**: Smart interface for renaming, reordering, and building final M4B files.
 
 ![Audiobook Factory Dashboard](docs/assets/home.png)
 
@@ -15,26 +14,21 @@ chapter-marked text files into full audiobook audio using:
 > **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://senigami.github.io/audiobook-factory/)
 > *(Includes an embedded audio player and interactive feature tour)*
 
-It runs entirely locally and supports queued batch processing, live
-progress tracking, WAV + MP3 generation, and browser audio preview.
+It runs entirely locally and supports queued batch processing, live progress tracking, and browser-based audio preview.
 
-No cloud required.
+No cloud required. No subscriptions. Total privacy.
 
 ------------------------------------------------------------------------
 
 # 🚀 Features
 
--   📖 Upload large `.txt` manuscripts
--   ✂ Automatically split into chapters
--   🎙 Voice cloning with XTTS (your narrator voice)
--   🔊 Piper ONNX voice support
--   🧠 One-click queued batch processing
--   📊 **Live Auto-Tuning ETA**: Progress bars that learn from your hardware performance.
--   🎧 **Interactive Assembly**: Resize, rename, or skip chapters before building the M4B.
--   🎧 Built-in audio player
--   🔁 Backfill MP3 from WAV
--   🔄 Reconcile job state with existing audio files
--   🧹 Clear completed jobs
+-   🎙 **Voice Cloning**: Use XTTS-v2 to narrate with your own cloned voice profiles.
+-   📝 **Per-Chapter Analysis**: Dedicated modal for previewing raw text vs. engine-processed text.
+-   🖥 **System Console**: Integrated terminal for real-time logs, togglable from the global header.
+-   📊 **Live Auto-Tuning ETA**: Progress bars that adapt to your hardware performance in real-time.
+-   🎧 **Interactive Assembly**: Rename, skip, or reorder chapters before final assembly into M4B.
+-   🔊 **MP3/WAV Support**: High-fidelity WAV generation with automatic MP3 backfilling.
+-   🧹 **Job Management**: One-click clearing of completed jobs and reconciliation of existing files.
 
 ![Interactive Audiobook Assembly](docs/assets/export.png)
 
@@ -46,7 +40,7 @@ No cloud required.
 
 -   macOS, Linux, or Windows
 -   Python 3.11+ (Required for XTTS)
--   `ffmpeg` (required for MP3 generation)
+-   `ffmpeg` (Required for MP3 and M4B generation)
 
 ------------------------------------------------------------------------
 
@@ -69,9 +63,6 @@ cd audiobook-factory
 brew install python@3.11 ffmpeg
 ```
 
-> [!TIP]
-> **Python Version**: Ensure you use `python3.11` when creating the virtual environment if multiple python versions are installed.
-
 ### Ubuntu / Debian
 
 ``` bash
@@ -87,11 +78,6 @@ sudo apt install -y python3 python3-venv ffmpeg
 python3.11 -m venv venv
 source venv/bin/activate
 pip install -U pip
-```
-
-Install required packages:
-
-``` bash
 pip install -r requirements.txt
 ```
 
@@ -108,126 +94,44 @@ pip install -U pip
 pip install -r requirements-xtts.txt
 ```
 
-Test XTTS:
+### 🎤 Voice Profiles
 
-``` bash
-tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 \
-    --text "Testing Audiobook Factory." \
-    --speaker_wav narrator_clean.wav \
-    --language_idx en \
-    --out_path test.wav
-```
+Place your voice samples in the `voices/` directory:
 
-------------------------------------------------------------------------
-
-## 🎤 Narrator Voice Sample
-
-Place your clean narrator recording in:
-
-    audiobook-factory/
-      narrator_clean.wav
-
-Recommended: - 30--120 seconds - Quiet room - No background noise -
-Consistent tone - WAV format (mono preferred)
-
-------------------------------------------------------------------------
-
-# 🔊 Piper Setup (Optional)
-
-Place `.onnx` voice files in:
-
+```text
     voices/
-      en_US-voice.onnx
-      en_US-voice.onnx.json
-
-Optional separate environment:
-
-``` bash
-python3 -m venv ~/piper-env
-source ~/piper-env/bin/activate
-pip install -U pip
-pip install piper-tts
+      Default/
+        profile.json
+        speaker.wav
+      MyVoice/
+        speaker.wav
 ```
 
-------------------------------------------------------------------------
-
-# 🗂 Recommended Folder Structure
-
-    ├── app/
-    ├── assets/             <-- README screenshots & audio
-    ├── templates/
-    ├── chapters_out/
-    ├── uploads/
-    ├── reports/
-    ├── xtts_audio/
-    ├── piper_audio/
-    ├── voices/
-    ├── narrator_clean.wav
-    ├── state.json
-    └── README.md
+The system will automatically detect these profiles in the Dashboard.
 
 ------------------------------------------------------------------------
 
 # ▶ Running Audiobook Factory
 
+1. **Start the backend**:
 ``` bash
 cd audiobook-factory
 source venv/bin/activate
 uvicorn run:app --port 8123
 ```
 
-Open:
-
-    http://127.0.0.1:8123
-
-⚠ For long queues, do NOT use `--reload`.
+2. **Access the Dashboard**:
+Open `http://127.0.0.1:8123` in your browser.
 
 ------------------------------------------------------------------------
 
-# � React Frontend Setup (Development)
+# 📖 Usage
 
-If you wish to run the React frontend in development mode (with Hot Module Replacement):
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend will be available at:
-
-    http://127.0.0.1:5173
-
-It is configured to proxy API requests to the Python backend at `http://127.0.0.1:8123`.
-
-------------------------------------------------------------------------
-
-# �📖 Usage
-
-1.  Upload `.txt` manuscript.
-
-2.  Ensure chapters follow format:
-
-    Chapter 1591: Years Later
-
-3.  Split into chapters.
-
-4.  Start queue.
-
-5.  Monitor progress live.
-
-6.  Download WAV or MP3 files.
-
-------------------------------------------------------------------------
-
-# 🔁 State Management
-
-If jobs appear stuck:
-
--   Reset stuck RUNNING jobs
--   Reconcile jobs with existing files
--   Clear DONE jobs
--   Or delete `state.json`
+1.  **Upload**: Upload your `.txt` manuscript.
+2.  **Split**: Automatically split the file into chapters.
+3.  **Preview**: Use the **Preview & Analyze** modal from the chapter card's menu to check text processing.
+4.  **Synthesize**: Select a Voice Profile and click **Start Batch**.
+5.  **Assemble**: Once finished, go to the **Library** tab to assemble your chapters into a final M4B audiobook.
 
 ------------------------------------------------------------------------
 
@@ -242,38 +146,18 @@ pytest -v
 
 ------------------------------------------------------------------------
 
-# 📦 requirements.txt
-
-# 🧹 Optional: .gitignore
-
-    venv/
-    __pycache__/
-    *.pyc
-    state.json
-    uploads/
-    reports/
-    xtts_audio/
-    piper_audio/
-    chapters_out/
-    narrator_clean.wav
-    voices/
-
-------------------------------------------------------------------------
-
 # 🔐 Security
 
-Designed for local use only. Do not expose directly to the public
-internet.
+Designed for **local use only**. Do not expose directly to the public internet without proper authentication and reverse proxy setup.
 
 ------------------------------------------------------------------------
 
 # 📜 License
 
-MIT recommended.
+MIT License.
 
 ------------------------------------------------------------------------
 
 # 🎧 Why Audiobook Factory?
 
-Because sometimes you just want to feed in a manuscript and let the
-machinery hum until it becomes a voice.
+Because turning a manuscript into a high-quality audiobook shouldn't require a cloud subscription or technical wizardry—just a local machine and the right machinery.
