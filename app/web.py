@@ -256,16 +256,15 @@ def api_home():
 @app.post("/settings")
 def save_settings(
     safe_mode: Optional[bool] = Form(None),
-    xtts_speed: Optional[float] = Form(None)
+    make_mp3: Optional[bool] = Form(None)
 ):
     curr = get_settings()
     new_safe = safe_mode if safe_mode is not None else curr.get("safe_mode", True)
-    new_speed = xtts_speed if xtts_speed is not None else curr.get("xtts_speed", 1.0)
+    new_mp3 = make_mp3 if make_mp3 is not None else curr.get("make_mp3", False)
     
     update_settings(
         safe_mode=new_safe,
-        xtts_speed=new_speed,
-        make_mp3=True
+        make_mp3=new_mp3
     )
     return {"status": "success", "settings": get_settings()}
 

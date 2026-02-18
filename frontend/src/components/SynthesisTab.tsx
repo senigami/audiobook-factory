@@ -36,7 +36,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
     const [selectedProfile, setSelectedProfile] = useState(settings?.default_speaker_profile || '');
     const [isUploading, setIsUploading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
-    const [, setSaving] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (!selectedProfile && settings?.default_speaker_profile) {
@@ -90,6 +90,20 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
             onRefresh();
         } catch (e) {
             console.error('Failed to update settings', e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleToggleMP3 = async () => {
+        setSaving(true);
+        try {
+            const formData = new URLSearchParams();
+            formData.append('make_mp3', (!settings?.make_mp3).toString());
+            await fetch('/settings', { method: 'POST', body: formData });
+            onRefresh();
+        } catch (e) {
+            console.error('Failed to update MP3 setting', e);
         } finally {
             setSaving(false);
         }
@@ -164,6 +178,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                     >
                         <SettingsIcon size={20} className={showSettings ? 'animate-spin-slow' : ''} />
                     </button>
+                    {saving && <span style={{ fontSize: '0.75rem', color: 'var(--accent)', animation: 'pulse 2s infinite' }}>Saving...</span>}
                 </div>
 
                 <div className="glass-panel" style={{ display: 'flex', gap: '4px', padding: '4px' }}>
@@ -229,13 +244,22 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                                     {hideFinished ? <Check size={12} /> : null} {hideFinished ? 'Active' : 'Off'}
                                 </button>
                             </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Produce MP3</h4>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Required for older browsers</p>
+                                </div>
+                                <button onClick={handleToggleMP3} className={settings?.make_mp3 ? 'btn-primary' : 'btn-glass'} style={{ fontSize: '0.75rem', padding: '6px 12px' }}>
+                                    {settings?.make_mp3 ? <Check size={12} /> : null} {settings?.make_mp3 ? 'On' : 'Off'}
+                                </button>
+                            </div>
                         </div>
 
                         <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Reconcile Files</h4>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sync missing MP3 records</p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sync missing output records</p>
                                 </div>
                                 <button onClick={handleBackfill} className="btn-glass" style={{ fontSize: '0.75rem', padding: '6px 12px' }}>
                                     <RefreshCw size={12} /> Sync

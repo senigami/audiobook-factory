@@ -2,7 +2,7 @@ import shlex, subprocess, os, re, hashlib
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from .config import XTTS_ENV_ACTIVATE, MP3_QUALITY, BASE_DIR
+from .config import XTTS_ENV_ACTIVATE, MP3_QUALITY, BASE_DIR, AUDIOBOOK_BITRATE
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
 
 _active_processes = set()
@@ -177,8 +177,13 @@ def assemble_audiobook(
         for f in all_files:
             stem = Path(f).stem
             ext = Path(f).suffix.lower()
-            if stem not in chapters_found or ext == '.mp3':
+            # Priority: .wav > .mp3 > anything else
+            if stem not in chapters_found:
                 chapters_found[stem] = f
+            else:
+                current_ext = Path(chapters_found[stem]).suffix.lower()
+                if ext == '.wav' and current_ext != '.wav':
+                    chapters_found[stem] = f
 
         def extract_number(filename):
             match = re.search(r'(\d+)', filename)
@@ -242,7 +247,7 @@ def assemble_audiobook(
         cmd = (
             f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
             f"-i {shlex.quote(str(metadata_file))} -map_metadata 1 "
-            f"-c:a aac -b:a 32k -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
+            f"-c:a aac -b:a {shlex.quote(AUDIOBOOK_BITRATE)} -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
         )
         
         rc = run_cmd_stream(cmd, on_output, cancel_check)

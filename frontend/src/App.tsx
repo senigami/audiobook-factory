@@ -14,7 +14,7 @@ import type { Job } from './types';
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
   const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
-  const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library' | 'settings'>('synthesis');
+  const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library'>('synthesis');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
