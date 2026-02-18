@@ -18,7 +18,7 @@ describe('ChapterCard', () => {
     safe_mode: true
   }
 
-  it('shows "WAV ready (Needs MP3)" even if job state is stale but disk is empty', () => {
+  it('shows "WAV" and renders audio player if MP3 is missing but WAV exists', () => {
     const staleJob = { ...mockJob, output_mp3: 'Overview.mp3' } // Stale!
     render(
       <ChapterCard
@@ -30,13 +30,14 @@ describe('ChapterCard', () => {
           isPiperMp3: false,
           isPiperWav: false
         }}
+        makeMp3={false}
       />
     )
 
-    expect(screen.getAllByText(/WAV Ready/i).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('audio')).not.toBeInTheDocument()
-    // The audio element should NOT be in the DOM
-    expect(document.querySelector('audio')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/WAV/i).length).toBeGreaterThan(0)
+    // The audio element SHOULD be in the DOM now because we allow WAV fallback/priority
+    expect(document.querySelector('audio')).toBeInTheDocument()
+    expect(document.querySelector('audio')?.src).toContain('.wav')
   })
 
   it('renders audio player only when MP3 is present', () => {
@@ -87,5 +88,53 @@ describe('ChapterCard', () => {
     const card = container.firstChild as HTMLElement;
     expect(card.style.overflow).toBe('visible');
     expect(card.style.zIndex).toBe('100');
+  });
+
+  it('prioritizes MP3 when makeMp3 is true', () => {
+    const { container } = render(
+      <ChapterCard
+        filename="test.txt"
+        statusInfo={{ isXttsMp3: true, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        makeMp3={true}
+      />
+    );
+    const audio = container.querySelector('audio');
+    expect(audio?.src).toContain('.mp3');
+  });
+
+  it('prioritizes WAV when makeMp3 is false', () => {
+    const { container } = render(
+      <ChapterCard
+        filename="test.txt"
+        statusInfo={{ isXttsMp3: true, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        makeMp3={false}
+      />
+    );
+    const audio = container.querySelector('audio');
+    expect(audio?.src).toContain('.wav');
+  });
+
+  it('falls back to WAV if MP3 missing when makeMp3 is true', () => {
+    const { container } = render(
+      <ChapterCard
+        filename="test.txt"
+        statusInfo={{ isXttsMp3: false, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        makeMp3={true}
+      />
+    );
+    const audio = container.querySelector('audio');
+    expect(audio?.src).toContain('.wav');
+  });
+
+  it('falls back to MP3 if WAV missing when makeMp3 is false', () => {
+    const { container } = render(
+      <ChapterCard
+        filename="test.txt"
+        statusInfo={{ isXttsMp3: true, isXttsWav: false, isPiperMp3: false, isPiperWav: false }}
+        makeMp3={false}
+      />
+    );
+    const audio = container.querySelector('audio');
+    expect(audio?.src).toContain('.mp3');
   });
 })

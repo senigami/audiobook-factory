@@ -225,6 +225,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                        {/* Left Column */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
@@ -244,6 +245,10 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                                     {hideFinished ? <Check size={12} /> : null} {hideFinished ? 'Active' : 'Off'}
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Right Column */}
+                        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Produce MP3</h4>
@@ -253,18 +258,19 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                                     {settings?.make_mp3 ? <Check size={12} /> : null} {settings?.make_mp3 ? 'On' : 'Off'}
                                 </button>
                             </div>
-                        </div>
 
-                        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div>
-                                    <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Reconcile Files</h4>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sync missing output records</p>
+                            {settings?.make_mp3 && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '1.5rem', opacity: 0.9 }}>
+                                    <div>
+                                        <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Reconcile Files</h4>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sync missing output records</p>
+                                    </div>
+                                    <button onClick={handleBackfill} className="btn-glass" style={{ fontSize: '0.75rem', padding: '6px 12px' }}>
+                                        <RefreshCw size={12} /> Sync
+                                    </button>
                                 </div>
-                                <button onClick={handleBackfill} className="btn-glass" style={{ fontSize: '0.75rem', padding: '6px 12px' }}>
-                                    <RefreshCw size={12} /> Sync
-                                </button>
-                            </div>
+                            )}
+
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.85rem', marginBottom: '2px', color: 'var(--error)' }}>Reset History</h4>
@@ -289,6 +295,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                     onRefresh={onRefresh}
                     statusSets={statusSets}
                     onOpenPreview={onOpenPreview}
+                    makeMp3={settings?.make_mp3}
                 />
             </div>
         </div>

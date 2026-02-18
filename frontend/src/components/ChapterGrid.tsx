@@ -17,6 +17,7 @@ interface ChapterGridProps {
   };
   onRefresh?: () => void;
   onOpenPreview?: (filename: string) => void;
+  makeMp3?: boolean;
 }
 
 export const ChapterGrid: React.FC<ChapterGridProps> = ({
@@ -27,7 +28,8 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
   viewMode,
   statusSets,
   onRefresh,
-  onOpenPreview
+  onOpenPreview,
+  makeMp3
 }) => {
   return (
     <div style={{
@@ -51,6 +53,7 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
               isPiperMp3: statusSets.piperMp3.includes(filename),
               isPiperWav: statusSets.piperWav.includes(filename),
             }}
+            makeMp3={makeMp3}
           />
         ))}
       </AnimatePresence>

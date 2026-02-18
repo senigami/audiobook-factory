@@ -17,30 +17,25 @@ interface ChapterCardProps {
     isXttsWav: boolean;
     isPiperMp3: boolean;
     isPiperWav: boolean;
-  }
+  };
+  makeMp3?: boolean;
 }
 
 
 
-const getStatusConfig = (status: Status, statusInfo?: ChapterCardProps['statusInfo']) => {
+const getStatusConfig = (status: Status) => {
   const config = {
     queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
     running: { icon: Clock, color: 'var(--accent)', label: 'Processing' },
-    done: { icon: CheckCircle2, color: 'var(--success)', label: 'Finished' },
+    done: { icon: CheckCircle2, color: 'var(--success)', label: 'Ready' },
     failed: { icon: AlertCircle, color: 'var(--error)', label: 'Failed' },
     cancelled: { icon: AlertCircle, color: 'var(--text-muted)', label: 'Cancelled' },
-    wav: { icon: Music, color: 'var(--warning)', label: 'WAV Ready' },
   };
-
-  if (statusInfo) {
-    if (statusInfo.isXttsMp3 || statusInfo.isPiperMp3) return config.done;
-    if (statusInfo.isXttsWav || statusInfo.isPiperWav) return config.wav;
-  }
 
   return config[status] || config.queued;
 };
 
-export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo }) => {
+export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo, makeMp3 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [showMenu, setShowMenu] = useState(false);
@@ -72,24 +67,48 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-    if (statusInfo) {
-      if (statusInfo.isXttsMp3) return `/out/xtts/${stem}.mp3`;
-      if (statusInfo.isPiperMp3) return `/out/piper/${stem}.mp3`;
-      return null;
+    const engine = job?.engine || (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav ? 'xtts' : 'piper');
+    const prefix = engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+
+    if (makeMp3) {
+      // Prioritize MP3 when turned on
+      if (statusInfo?.isXttsMp3 || statusInfo?.isPiperMp3) return `${prefix}${stem}.mp3`;
+      if (statusInfo?.isXttsWav || statusInfo?.isPiperWav) return `${prefix}${stem}.wav`;
+    } else {
+      // Prioritize WAV when turned off
+      if (statusInfo?.isXttsWav || statusInfo?.isPiperWav) return `${prefix}${stem}.wav`;
+      if (statusInfo?.isXttsMp3 || statusInfo?.isPiperMp3) return `${prefix}${stem}.mp3`;
     }
-    if (job?.status === 'done' && job?.output_mp3) {
-      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
-      return `${prefix}${job.output_mp3}`;
-    }
-    if (job?.status === 'done' && job?.output_wav && !job.make_mp3) {
-      const prefix = job.engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
-      return `${prefix}${job.output_wav}`;
+
+    if (job?.status === 'done') {
+      if (makeMp3) {
+        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
+        if (job.output_wav) return `${prefix}${job.output_wav}`;
+      } else {
+        if (job.output_wav) return `${prefix}${job.output_wav}`;
+        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
+      }
     }
     return null;
   };
 
   const getDisplayConfig = () => {
-    const base = getStatusConfig(status, statusInfo);
+    // Determine effective status based on job and disk state
+    const isActuallyDone =
+      status === 'done' ||
+      statusInfo?.isXttsMp3 || statusInfo?.isXttsWav ||
+      statusInfo?.isPiperMp3 || statusInfo?.isPiperWav;
+
+    const base = getStatusConfig(isActuallyDone ? 'done' : status);
+
+    if (isActuallyDone) {
+      const audioSrc = getAudioSrc();
+      const isMp3 = audioSrc?.endsWith('.mp3');
+      const label = isMp3 ? 'MP3' : (audioSrc?.endsWith('.wav') ? 'WAV' : 'Done');
+      const icon = isMp3 ? CheckCircle2 : Music;
+      return { ...base, label, icon };
+    }
+
     if (status === 'running' && job?.progress && job.progress > 0.99) {
       return { ...base, label: 'Finishing...' };
     }
