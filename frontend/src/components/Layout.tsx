@@ -60,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 filter: 'blur(12px)'
               }} />
               <img
-                src="/logo.png"
+                src="/logo.svg"
                 alt="Audiobook Factory"
                 style={{
                   width: '100%',
