@@ -8,7 +8,7 @@ interface PreviewModalProps {
 }
 
 export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, filename }) => {
-    const [previewData, setPreviewData] = useState<{ text: string; error?: string } | null>(null);
+    const [previewData, setPreviewData] = useState<{ text: string; analysis?: string; error?: string } | null>(null);
     const [previewMode, setPreviewMode] = useState<'raw' | 'engine'>('raw');
     const [loading, setLoading] = useState(false);
 
@@ -26,10 +26,6 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
     }, [isOpen, filename, previewMode]);
 
     if (!isOpen) return null;
-
-    const runAnalysis = () => {
-        window.open(`/analyze/${encodeURIComponent(filename)}`, '_blank');
-    };
 
     return (
         <div style={{
@@ -93,12 +89,6 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                             Engine Processed
                         </button>
                     </div>
-                    <button
-                        onClick={runAnalysis}
-                        className="btn-glass"
-                    >
-                        <Search size={14} /> Run Analysis
-                    </button>
                 </div>
 
                 <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', background: 'var(--bg)' }}>
@@ -125,26 +115,54 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                                     {previewData?.text || 'No content found.'}
                                 </pre>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    {(previewData?.text || '').split('\n').filter(Boolean).map((chunk, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="engine-chunk"
-                                            data-index={`Chunk #${idx + 1}`}
-                                        >
-                                            <code>
-                                                {chunk}
-                                                <span style={{
-                                                    color: 'var(--accent)',
-                                                    opacity: 0.8,
-                                                    userSelect: 'none',
-                                                    marginLeft: '2px',
-                                                    fontWeight: 'bold'
-                                                }}>⎸</span>
-                                            </code>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    {previewData?.analysis && (
+                                        <div className="glass-panel" style={{
+                                            padding: '1.25rem',
+                                            background: 'rgba(139, 92, 246, 0.05)',
+                                            border: '1px solid rgba(139, 92, 246, 0.2)',
+                                            borderRadius: '12px'
+                                        }}>
+                                            <pre style={{
+                                                margin: 0,
+                                                fontSize: '0.85rem',
+                                                fontFamily: 'monospace',
+                                                lineHeight: '1.5',
+                                                color: 'var(--text-secondary)',
+                                                whiteSpace: 'pre-wrap'
+                                            }}>
+                                                {previewData.analysis}
+                                            </pre>
                                         </div>
-                                    ))}
-                                    {!previewData?.text && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No processing required for this text.</p>}
+                                    )}
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
+                                            <div style={{ height: '1px', flex: 1, background: 'var(--border)' }}></div>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>Processed Chunks</span>
+                                            <div style={{ height: '1px', flex: 1, background: 'var(--border)' }}></div>
+                                        </div>
+
+                                        {(previewData?.text || '').split('\n').filter(Boolean).map((chunk, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="engine-chunk"
+                                                data-index={`Chunk #${idx + 1}`}
+                                            >
+                                                <code>
+                                                    {chunk}
+                                                    <span style={{
+                                                        color: 'var(--accent)',
+                                                        opacity: 0.8,
+                                                        userSelect: 'none',
+                                                        marginLeft: '2px',
+                                                        fontWeight: 'bold'
+                                                    }}>⎸</span>
+                                                </code>
+                                            </div>
+                                        ))}
+                                        {!previewData?.text && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No processing required for this text.</p>}
+                                    </div>
                                 </div>
                             )
                         )

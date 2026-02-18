@@ -820,14 +820,10 @@ def enqueue_single(
     
     return JSONResponse({"status": "ok", "job_id": jid})
 
-@app.post("/analyze_long")
-def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
-    if not chapter_file:
-        return PlainTextResponse("Pick a chapter from the list first.", status_code=400)
-
+def _run_analysis(chapter_file: str):
     p = CHAPTER_DIR / chapter_file
     if not p.exists():
-        return PlainTextResponse("Chapter file not found.", status_code=404)
+        return None, "Chapter file not found."
 
     text = p.read_text(encoding="utf-8", errors="replace")
     
@@ -836,22 +832,6 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     word_count = len(text.split())
     # Rough sentence count based on punctuation
     sent_count = text.count('.') + text.count('?') + text.count('!')
-    
-    # Predict time (using XTTS constant for general reference, or make it dynamic later)
-    # Importing BASELINE_XTTS_CPS would be circular if not careful, but web.py imports nothing from jobs.py?
-    # Actually web.py imports from jobs.py (start_xtts_queue -> get_jobs). 
-    # But jobs.py imports web.py? No.
-    # Let's import the constants or just define them/import them from config if possible.
-    # jobs.py has them. Let's move constants to config.py or just use the value 25.0 for now to avoid circular import issues if they exist.
-    # Wait, web.py DOES NOT import jobs.py at top level?
-    # It imports `start_xtts_queue` logic? No, web.py *defines* the routes.
-    # It imports `enqueue` from `jobs`.
-    # Let's see imports in web.py...
-    
-    # Actually, simplistic approach: use the same 25.0 hardcoded or import if safe.
-    # Checking file outline... web.py imports:
-    # from .jobs import enqueue, cancel, paused, resume_queue, pause_queue, clear_job_queue
-    # So importing BASELINE_XTTS_CPS from jobs should be fine.
     
     from .jobs import BASELINE_XTTS_CPS
     from .config import SENT_CHAR_LIMIT
@@ -873,20 +853,24 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
     report_path = REPORT_DIR / f"long_sentences_{Path(chapter_file).stem}.txt"
 
     lines = [
-        f"Analysis Report: {chapter_file}",
-        f"--------------------------------------------------",
         f"Character Count   : {char_count:,}",
         f"Word Count        : {word_count:,}",
         f"Sentence Count    : {sent_count:,} (approx)",
         f"Predicted Time    : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
-        f"--------------------------------------------------",
-        f"Limit Threshold   : {SENT_CHAR_LIMIT} characters",
-        f"Raw Long Sentences: {len(raw_hits)}",
-        f"Auto-Fixable      : {auto_fixed} (handled by Safe Mode)",
-        f"Action Required   : {uncleanable} (STILL too long after split!)",
-        f"--------------------------------------------------",
-        ""
     ]
+    
+    if len(raw_hits) > 0:
+        lines.extend([
+            f"--------------------------------------------------",
+            f"Limit Threshold   : {SENT_CHAR_LIMIT} characters",
+            f"Raw Long Sentences: {len(raw_hits)}",
+            f"Auto-Fixable      : {auto_fixed} (handled by Safe Mode)",
+            f"Action Required   : {uncleanable} (STILL too long after split!)",
+            f"--------------------------------------------------",
+            ""
+        ])
+    else:
+        lines.append("")
     
     if uncleanable > 0:
         lines.append("!!! ACTION REQUIRED: The following sentences could not be auto-split !!!")
@@ -897,20 +881,10 @@ def analyze_long(chapter_file: str = Form(""), ajax: bool = Form(False)):
             lines.append("")
     elif len(raw_hits) > 0:
         lines.append("✓ All long sentences will be successfully handled by Safe Mode.")
-    else:
-        lines.append("✓ No long sentences found.")
 
     report_text = "\n".join(lines)
     report_path.write_text(report_text, encoding="utf-8")
-    
-    settings = get_settings()
-    is_safe = settings.get("safe_mode", True)
-
-    return JSONResponse({
-        "status": "success",
-        "report": report_text,
-        "report_url": f"/report/{report_path.name}"
-    })
+    return report_path, report_text
 
 
 @app.post("/queue/backfill_mp3")
@@ -1164,10 +1138,14 @@ def api_preview(chapter_file: str, processed: bool = False):
         return JSONResponse({"error": "not found"}, status_code=404)
     
     text = read_preview(p, max_chars=1000000)
+    analysis = None
     
     if processed:
         settings = get_settings()
         is_safe = settings.get("safe_mode", True)
+        
+        # Include analysis report
+        _, analysis = _run_analysis(chapter_file)
         
         if is_safe:
             # Mimic the engine processing pipeline (Safe Mode ON)
@@ -1180,4 +1158,4 @@ def api_preview(chapter_file: str, processed: bool = False):
             
         text = pack_text_to_limit(text, pad=True)
         
-    return JSONResponse({"text": text})
+    return JSONResponse({"text": text, "analysis": analysis})

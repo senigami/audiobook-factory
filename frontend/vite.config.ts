@@ -47,6 +47,10 @@ export default defineConfig({
       '/analyze_long': {
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
+      },
+      '/report': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
       }
     }
   }
