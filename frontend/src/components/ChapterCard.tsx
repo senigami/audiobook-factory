@@ -116,7 +116,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         gap: '0.75rem',
         border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
         boxShadow: isActive ? '0 0 20px var(--accent-glow)' : 'none',
-        zIndex: showMenu ? 50 : (isActive ? 10 : 1),
+        zIndex: showMenu ? 100 : (isActive ? 10 : 1),
+        overflow: 'visible',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>

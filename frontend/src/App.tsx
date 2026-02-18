@@ -93,7 +93,7 @@ function App() {
           flexDirection: 'column',
           gap: '2.5rem',
           minWidth: 0,
-          overflowX: 'hidden'
+          position: 'relative'
         }}>
           <main style={{ flex: 1 }}>
             {activeTab === 'voices' && (
@@ -122,8 +122,6 @@ function App() {
                 hideFinished={hideFinished}
                 onToggleHideFinished={() => setHideFinished(!hideFinished)}
                 onOpenPreview={setPreviewFilename}
-                showLogs={showLogs}
-                onToggleLogs={() => setShowLogs(!showLogs)}
               />
             )}
             {activeTab === 'library' && (
