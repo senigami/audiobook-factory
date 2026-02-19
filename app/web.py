@@ -1098,13 +1098,16 @@ def api_jobs():
         x_mp3 = (XTTS_OUT_DIR / f"{stem}.mp3")
         x_wav = (XTTS_OUT_DIR / f"{stem}.wav")
         
-        found_job = None
+        found_job = {}
         if x_mp3.exists():
-            found_job = {"status": "done", "engine": "xtts", "output_mp3": x_mp3.name, "log": "Job auto-discovered from existing files."}
-        elif x_wav.exists():
-            found_job = {"status": "wav", "engine": "xtts", "output_wav": x_wav.name, "log": "WAV file found. Waiting for MP3 conversion."}
-            
+            found_job.update({"status": "done", "engine": "xtts", "output_mp3": x_mp3.name})
+        if x_wav.exists():
+            found_job.update({"engine": "xtts", "output_wav": x_wav.name})
+            if not found_job.get("status"):
+                found_job["status"] = "done" # If only wav exists, it's still "done" in terms of generation
+        
         if found_job:
+            found_job["log"] = "Job auto-discovered from existing files."
             if existing:
                 existing.update(found_job)
             else:
