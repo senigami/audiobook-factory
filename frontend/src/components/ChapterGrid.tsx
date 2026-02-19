@@ -12,8 +12,6 @@ interface ChapterGridProps {
   statusSets: {
     xttsMp3: string[];
     xttsWav: string[];
-    piperMp3: string[];
-    piperWav: string[];
   };
   onRefresh?: () => void;
   onOpenPreview?: (filename: string) => void;
@@ -50,8 +48,6 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
             statusInfo={{
               isXttsMp3: statusSets.xttsMp3.includes(filename),
               isXttsWav: statusSets.xttsWav.includes(filename),
-              isPiperMp3: statusSets.piperMp3.includes(filename),
-              isPiperWav: statusSets.piperWav.includes(filename),
             }}
             makeMp3={makeMp3}
           />

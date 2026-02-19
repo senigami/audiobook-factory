@@ -363,7 +363,7 @@ def worker_loop(q: "queue.Queue[str]"):
                         update_job(jid, progress=prog)
                     return
                 
-                # 1. Filter out noisy lines provided by XTTS/Piper
+                # 1. Filter out noisy lines provided by XTTS
                 if s.startswith("> Text"): return
                 if s.startswith("> Processing sentence:"): return
                 if s.startswith("['") or s.startswith('["'): return

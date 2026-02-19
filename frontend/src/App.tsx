@@ -110,8 +110,6 @@ function App() {
                 statusSets={{
                   xttsMp3: initialData?.xtts_mp3 || [],
                   xttsWav: initialData?.xtts_wav_only || [],
-                  piperMp3: [],
-                  piperWav: [],
                 }}
                 onRefresh={handleRefresh}
                 speakerProfiles={initialData?.speaker_profiles || []}

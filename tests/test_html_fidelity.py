@@ -13,9 +13,8 @@ def test_start_button_fidelity():
     assert not xtts_form.has_attr('action'), "XTTS form should not have an 'action' attribute"
     assert not xtts_form.has_attr('method'), "XTTS form should not have a 'method' attribute"
     
-    # Check Piper form
-    piper_form = soup.find('form', id='startPiperForm')
-    assert piper_form is not None, "Form with id 'startPiperForm' not found"
+    # All XTTS elements should be present
+    assert soup.find('select', id='speakerProfileSelect') is not None
     
     # Check AJAX listeners
     assert "document.getElementById('startXttsForm')?.addEventListener('submit'" in content

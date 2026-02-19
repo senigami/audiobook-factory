@@ -15,12 +15,12 @@ BASE_DIR = Path(__file__).parent.resolve()
 CHAPTER_DIR = BASE_DIR / "chapters_out"
 REPORTS_DIR = BASE_DIR / "reports"
 XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
-PIPER_OUT_DIR = BASE_DIR / "piper_audio"
+XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
 VOICES_DIR = BASE_DIR / "voices"
 
 NARRATOR_WAV = BASE_DIR / "narrator_clean.wav"  # your reference voice for XTTS
 XTTS_ENV_ACTIVATE = Path.home() / "xtts-env" / "bin" / "activate"  # your existing env
-PIPER_ENV_ACTIVATE = Path.home() / "piper-env" / "bin" / "activate"  # optional; if piper installed there
+# XTTS “sentence too long” safety
 
 # XTTS “sentence too long” safety
 SENT_CHAR_LIMIT = 250
@@ -34,7 +34,7 @@ MP3_QUALITY = "2"  # ffmpeg -q:a 2 (good audiobook quality)
 # END CONFIG
 # =======================
 
-for p in [REPORTS_DIR, XTTS_OUT_DIR, PIPER_OUT_DIR, VOICES_DIR]:
+for p in [REPORTS_DIR, XTTS_OUT_DIR, VOICES_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 STATE_FILE = BASE_DIR / "state.json"
@@ -220,8 +220,6 @@ def output_exists(engine: str, chapter_file: str) -> bool:
     stem = Path(chapter_file).stem
     if engine == "xtts":
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
-    if engine == "piper":
-        return (PIPER_OUT_DIR / f"{stem}.mp3").exists() or (PIPER_OUT_DIR / f"{stem}.wav").exists()
     return False
 
 # -----------------
@@ -293,22 +291,6 @@ def xtts_generate(chapter_path: Path, out_wav: Path, safe_mode: bool, cancel_eve
         f"--language en "
         f"--repetition_penalty 2.0 "
         f"--out_path {shlex.quote(str(out_wav))}"
-    )
-    return run_cmd_capture(cmd, cancel_event)
-
-def piper_generate(chapter_path: Path, out_wav: Path, voice_model: Path, voice_config: Path, cancel_event: threading.Event) -> tuple[int, str]:
-    if not chapter_path.exists():
-        return 1, f"Missing chapter file: {chapter_path}"
-    if not voice_model.exists() or not voice_config.exists():
-        return 1, f"Missing Piper voice files: {voice_model} / {voice_config}"
-    # Piper can run from whatever env it's installed in. Prefer piper-env if exists; otherwise assume piper is on PATH.
-    prefix = f"source {shlex.quote(str(PIPER_ENV_ACTIVATE))} && " if PIPER_ENV_ACTIVATE.exists() else ""
-    cmd = (
-        prefix +
-        f'piper --model {shlex.quote(str(voice_model))} '
-        f'--config {shlex.quote(str(voice_config))} '
-        f'--input_file {shlex.quote(str(chapter_path))} '
-        f'--output_file {shlex.quote(str(out_wav))}'
     )
     return run_cmd_capture(cmd, cancel_event)
 
@@ -403,11 +385,9 @@ def worker_loop():
             rc, log = xtts_generate(chapter_path, out_wav, safe_mode=safe_mode, cancel_event=cancel_event)
             out_mp3 = XTTS_OUT_DIR / f"{stem}.mp3"
         else:
-            out_wav = PIPER_OUT_DIR / f"{stem}.wav"
-            voice_model = Path(j.get("piper_model", VOICES_DIR / "en_US-ryan-medium.onnx"))
-            voice_cfg = Path(j.get("piper_config", VOICES_DIR / "en_US-ryan-medium.onnx.json"))
-            rc, log = piper_generate(chapter_path, out_wav, voice_model, voice_cfg, cancel_event)
-            out_mp3 = PIPER_OUT_DIR / f"{stem}.mp3"
+            update_job(jid, status="failed", finished_at=time.time(), log="", error=f"Unknown engine: {j['engine']}")
+            job_queue.task_done()
+            continue
 
         if cancel_event.is_set():
             update_job(jid, status="cancelled", finished_at=time.time(), log=log, error="Cancelled by user.")
@@ -476,13 +456,7 @@ uvicorn app:app --reload --port 8123</div>
       </li>
       <li>Open: <span class="mono">http://127.0.0.1:8123</span></li>
       <li>Recommended: click <b>Analyze long sentences</b> before generating XTTS.</li>
-      <li>Outputs:
-        <ul>
-          <li>XTTS: <span class="mono">xtts_audio/</span></li>
-          <li>Piper: <span class="mono">piper_audio/</span></li>
-          <li>Reports: <span class="mono">reports/</span></li>
-        </ul>
-      </li>
+          <li>Outputs: <span class="mono">xtts_audio/</span></li>
     </ol>
     <p><b>Why Safe Mode?</b> XTTS may truncate “sentences” longer than {{ sent_limit }} chars. Safe Mode auto-splits long sentences before synthesis.</p>
   </div>
@@ -496,7 +470,6 @@ uvicorn app:app --reload --port 8123</div>
     <div class="btnrow">
       <form method="post" action="/analyze"><button type="submit">Analyze long sentences</button></form>
       <form method="post" action="/enqueue_missing"><button type="submit">Enqueue missing (XTTS)</button></form>
-      <form method="post" action="/enqueue_missing_piper"><button type="submit">Enqueue missing (Piper)</button></form>
       <form method="post" action="/enqueue_next"><button type="submit">Generate next chapter</button></form>
     </div>
 
@@ -521,18 +494,12 @@ uvicorn app:app --reload --port 8123</div>
         <td>
           {{ c }}
           {% if c in done_xtts %}<span class="tag ok">XTTS done</span>{% endif %}
-          {% if c in done_piper %}<span class="tag ok">Piper done</span>{% endif %}
         </td>
         <td>
           <form method="post" action="/enqueue" style="display:inline">
             <input type="hidden" name="chapter_file" value="{{ c }}"/>
             <input type="hidden" name="engine" value="xtts"/>
             <button type="submit">Enqueue XTTS</button>
-          </form>
-          <form method="post" action="/enqueue" style="display:inline">
-            <input type="hidden" name="chapter_file" value="{{ c }}"/>
-            <input type="hidden" name="engine" value="piper"/>
-            <button type="submit">Enqueue Piper</button>
           </form>
         </td>
       </tr>
@@ -636,10 +603,8 @@ def index():
     settings_obj = type("S", (), settings)
 
     done_xtts = set()
-    done_piper = set()
     for c in chapters:
         if output_exists("xtts", c): done_xtts.add(c)
-        if output_exists("piper", c): done_piper.add(c)
 
     latest_report = None
     reports = sorted(REPORTS_DIR.glob("long_sentence_report_*.txt"))
@@ -655,8 +620,7 @@ def index():
         latest_report=latest_report,
         settings=settings_obj,
         sent_limit=SENT_CHAR_LIMIT,
-        done_xtts=done_xtts,
-        done_piper=done_piper
+        done_xtts=done_xtts
     )
     return HTMLResponse(html)
 
@@ -683,12 +647,6 @@ def enqueue(chapter_file: str = Form(...), engine: str = Form(...)):
         "created_at": time.time(),
         "safe_mode": bool(settings.get("safe_mode", True)),
         "make_mp3": bool(settings.get("make_mp3", DEFAULT_MAKE_MP3)),
-        # Piper defaults (edit in UI later if you add more voices)
-        "piper_model": str(VOICES_DIR / "en_US-ryan-medium.onnx"),
-        "piper_config": str(VOICES_DIR / "en_US-ryan-medium.onnx.json"),
-        "log": "",
-        "error": None,
-        "output_wav": None,
         "output_mp3": None,
     }
     put_job(job)
@@ -707,26 +665,6 @@ def enqueue_missing():
             "id": jid, "chapter_file": p.name, "engine": "xtts", "status": "queued",
             "created_at": time.time(), "safe_mode": bool(settings.get("safe_mode", True)),
             "make_mp3": bool(settings.get("make_mp3", DEFAULT_MAKE_MP3)),
-            "piper_model": "", "piper_config": "",
-            "log": "", "error": None, "output_wav": None, "output_mp3": None,
-        })
-        stop_flags[jid] = threading.Event()
-        job_queue.put(jid)
-    return RedirectResponse("/", status_code=303)
-
-@app.post("/enqueue_missing_piper")
-def enqueue_missing_piper():
-    settings = get_settings()
-    for p in list_chapters():
-        if output_exists("piper", p.name):
-            continue
-        jid = uuid.uuid4().hex[:12]
-        put_job({
-            "id": jid, "chapter_file": p.name, "engine": "piper", "status": "queued",
-            "created_at": time.time(), "safe_mode": False,
-            "make_mp3": bool(settings.get("make_mp3", DEFAULT_MAKE_MP3)),
-            "piper_model": str(VOICES_DIR / "en_US-ryan-medium.onnx"),
-            "piper_config": str(VOICES_DIR / "en_US-ryan-medium.onnx.json"),
             "log": "", "error": None, "output_wav": None, "output_mp3": None,
         })
         stop_flags[jid] = threading.Event()
@@ -793,7 +731,6 @@ def state():
 
 # static mounts for output files
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
-app.mount("/out/piper", StaticFiles(directory=str(PIPER_OUT_DIR)), name="out_piper")
 
 # Start worker thread at import time
 worker_thread = threading.Thread(target=worker_loop, daemon=True)

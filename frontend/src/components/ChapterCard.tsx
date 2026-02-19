@@ -15,8 +15,6 @@ interface ChapterCardProps {
   statusInfo?: {
     isXttsMp3: boolean;
     isXttsWav: boolean;
-    isPiperMp3: boolean;
-    isPiperWav: boolean;
   };
   makeMp3?: boolean;
 }
@@ -67,17 +65,14 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-    const engine = job?.engine || (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav ? 'xtts' : 'piper');
-    const prefix = engine === 'xtts' ? '/out/xtts/' : '/out/piper/';
+    const prefix = '/out/xtts/';
 
     if (makeMp3) {
-      // Prioritize MP3 when turned on
-      if (statusInfo?.isXttsMp3 || statusInfo?.isPiperMp3) return `${prefix}${stem}.mp3`;
-      if (statusInfo?.isXttsWav || statusInfo?.isPiperWav) return `${prefix}${stem}.wav`;
+      if (statusInfo?.isXttsMp3) return `${prefix}${stem}.mp3`;
+      if (statusInfo?.isXttsWav) return `${prefix}${stem}.wav`;
     } else {
-      // Prioritize WAV when turned off
-      if (statusInfo?.isXttsWav || statusInfo?.isPiperWav) return `${prefix}${stem}.wav`;
-      if (statusInfo?.isXttsMp3 || statusInfo?.isPiperMp3) return `${prefix}${stem}.mp3`;
+      if (statusInfo?.isXttsWav) return `${prefix}${stem}.wav`;
+      if (statusInfo?.isXttsMp3) return `${prefix}${stem}.mp3`;
     }
 
     if (job?.status === 'done') {
@@ -96,8 +91,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     // Determine effective status based on job and disk state
     const isActuallyDone =
       status === 'done' ||
-      statusInfo?.isXttsMp3 || statusInfo?.isXttsWav ||
-      statusInfo?.isPiperMp3 || statusInfo?.isPiperWav;
+      statusInfo?.isXttsMp3 || statusInfo?.isXttsWav;
 
     const base = getStatusConfig(isActuallyDone ? 'done' : status);
 

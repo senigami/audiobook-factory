@@ -10,13 +10,9 @@ def client():
 
 def test_api_responses(client):
     """Verify that queue control endpoints return JSON 200, not 303 redirects."""
-    routes = ["/queue/start_xtts", "/queue/start_piper", "/queue/pause", "/queue/resume"]
+    routes = ["/queue/start_xtts", "/queue/pause", "/queue/resume"]
     for route in routes:
-        # Piper requires form data, but even without it, it should return 400 JSON or 200 JSON
-        if route == "/queue/start_piper":
-             response = client.post(route, data={"piper_voice": "en_US-lessac-medium"})
-        else:
-             response = client.post(route)
+        response = client.post(route)
         
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/json"

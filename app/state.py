@@ -26,13 +26,11 @@ def _default_state() -> Dict[str, Any]:
         "settings": {
             "safe_mode": True,
             "make_mp3": False,
-            "default_engine": "xtts",
-            "default_piper_voice": None
+            "default_engine": "xtts"
         },
         "performance_metrics": {
             "audiobook_speed_multiplier": 1.0,
-            "xtts_cps": 16.7,
-            "piper_cps": 220.0
+            "xtts_cps": 16.7
         }
     }
 

@@ -1,10 +1,15 @@
 ---
-name: Bug Report
-about: Create a report to help us improve
+name: 🐛 Bug Report
+about: Report a technical glitch or unexpected behavior in the Factory
 title: "[BUG] "
 labels: bug
 assignees: ""
 ---
+
+**Select your Synthesis Engine**
+
+- [ ] XTTS-v2 (Voice Cloning)
+- [ ] Other (Assembly / UI / Upload)
 
 **Describe the bug**
 A clear and concise description of what the bug is.
@@ -13,18 +18,26 @@ A clear and concise description of what the bug is.
 Steps to reproduce the behavior:
 
 1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+2. Select '...'
+3. Click on '....'
+4. See error in terminal or UI
 
 **Expected behavior**
-A clear and concise description of what you expected to happen.
+What did you expect to happen? (e.g., "The chapter should finish synthesis in 2 minutes")
 
-**Desktop (please complete the following information):**
+**System Environment (Critical for Local AI Performance)**
 
-- OS: [e.g. Windows 11, Ubuntu 22.04]
-- Python Version: [e.g. 3.11.x]
-- Graphics Card (if applicable): [e.g. NVIDIA RTX 3080]
+- **OS**: [e.g. macOS Sonoma, Windows 11]
+- **Processor**: [e.g. M2 Pro, Intel i9-13900K]
+- **GPU (if applicable)**: [e.g. RTX 4090, 16GB VRAM]
+- **Python Version**: `python --version`
+
+**Factory Logs**
+Please paste the relevant output from your terminal console or the integrated "System Console" in the dashboard.
+
+```yaml
+# Paste logs here
+```
 
 **Additional context**
-Add any other context about the problem here (e.g., logs from the terminal).
+Add any other context about the problem here (e.g., specific chapter text or character names that caused a crash).
