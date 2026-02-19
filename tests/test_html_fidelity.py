@@ -1,10 +1,15 @@
 import pytest
-from bs4 import BeautifulSoup
-from pathlib import Path
+from fastapi.testclient import TestClient
+from app.web import app
 
-def test_start_button_fidelity():
-    index_path = Path("templates/index.html")
-    content = index_path.read_text()
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+def test_start_button_fidelity(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    content = response.text
     soup = BeautifulSoup(content, 'html.parser')
     
     # Check XTTS form

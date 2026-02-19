@@ -8,7 +8,7 @@ describe('SynthesisTab', () => {
         jobs: {},
         selectedFile: null,
         onSelect: vi.fn(),
-        statusSets: { xttsMp3: [], xttsWav: [], piperMp3: [], piperWav: [] },
+        statusSets: { xttsMp3: [], xttsWav: [] },
         onRefresh: vi.fn(),
         speakerProfiles: [],
         paused: false,

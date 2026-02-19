@@ -5,23 +5,19 @@ def test_single_word_merge_next():
     text = "Wait. Come back."
     # sentences: ["Wait.", "Come back."]
     # "Wait" is 1 word, i < len-1, merges with "Come back."
-    expected = "Wait, Come back."
+    expected = "Wait; Come back."
     assert consolidate_single_word_sentences(text) == expected
 
 def test_single_word_merge_prev():
     text = "Ready. Now."
     # sentences: ["Ready.", "Now."]
-    # i=0: "Ready" (1 word), merges with NEXT -> "Ready, Now."
-    # i=2 (skipped i=1)
-    expected = "Ready, Now."
+    expected = "Ready; Now."
     assert consolidate_single_word_sentences(text) == expected
 
 def test_multiple_single_words():
     text = "Wait. No. Stop. Go."
-    # With the new integrated logic, it should merge them all:
-    # "Wait, No, Stop, Go."
     result = consolidate_single_word_sentences(text)
-    assert result == "Wait, No, Stop, Go."
+    assert result == "Wait; No; Stop; Go."
 
 def test_tailing_single_word():
     text = "The end is near. Goodbye."
@@ -29,5 +25,5 @@ def test_tailing_single_word():
     # i=0: "The end is near." (4 words) -> new_sentences = ["The end is near."]
     # i=1: "Goodbye." (1 word) -> i=1, not < len-1. merges with PREV.
     # pop "The end is near.", push "The end is near, Goodbye."
-    expected = "The end is near, Goodbye."
+    expected = "The end is near; Goodbye."
     assert consolidate_single_word_sentences(text) == expected

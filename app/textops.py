@@ -255,14 +255,14 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r'([!?])\1+', r'\1', text)
     
     # Consolidate short sentences (<= 2 words) (like "Wait!" or "No way!") with neighbors
-    text = consolidate_short_sentences(text.strip())
+    text = consolidate_single_word_sentences(text.strip())
     
     return text.strip()
 
-def consolidate_short_sentences(text: str) -> str:
+def consolidate_single_word_sentences(text: str) -> str:
     """
     TTS engines (especially XTTS) often fail on short sentences.
-    This merges them (<= 2 words) with neighbors using semicolons for a natural flow.
+    This merges them (<= 2 words) with neighbors using commas for a natural flow.
     """
     # Filter to only keep sentences that actually contain a word/number.
     # We also strip leading dots/ellipses from sentences here to prevent " . Or was it" issues.

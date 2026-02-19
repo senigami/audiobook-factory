@@ -26,9 +26,7 @@ describe('ChapterCard', () => {
         job={staleJob}
         statusInfo={{
           isXttsMp3: false, // Truth!
-          isXttsWav: true,
-          isPiperMp3: false,
-          isPiperWav: false
+          isXttsWav: true
         }}
         makeMp3={false}
       />
@@ -48,9 +46,7 @@ describe('ChapterCard', () => {
         job={jobWithMp3}
         statusInfo={{
           isXttsMp3: true,
-          isXttsWav: true,
-          isPiperMp3: false,
-          isPiperWav: false
+          isXttsWav: true
         }}
       />
     )
@@ -94,7 +90,7 @@ describe('ChapterCard', () => {
     const { container } = render(
       <ChapterCard
         filename="test.txt"
-        statusInfo={{ isXttsMp3: true, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        statusInfo={{ isXttsMp3: true, isXttsWav: true }}
         makeMp3={true}
       />
     );
@@ -106,7 +102,7 @@ describe('ChapterCard', () => {
     const { container } = render(
       <ChapterCard
         filename="test.txt"
-        statusInfo={{ isXttsMp3: true, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        statusInfo={{ isXttsMp3: true, isXttsWav: true }}
         makeMp3={false}
       />
     );
@@ -118,7 +114,7 @@ describe('ChapterCard', () => {
     const { container } = render(
       <ChapterCard
         filename="test.txt"
-        statusInfo={{ isXttsMp3: false, isXttsWav: true, isPiperMp3: false, isPiperWav: false }}
+        statusInfo={{ isXttsMp3: false, isXttsWav: true }}
         makeMp3={true}
       />
     );
@@ -130,7 +126,7 @@ describe('ChapterCard', () => {
     const { container } = render(
       <ChapterCard
         filename="test.txt"
-        statusInfo={{ isXttsMp3: true, isXttsWav: false, isPiperMp3: false, isPiperWav: false }}
+        statusInfo={{ isXttsMp3: true, isXttsWav: false }}
         makeMp3={false}
       />
     );

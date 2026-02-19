@@ -18,10 +18,11 @@ def test_api_responses(client):
         assert response.headers["content-type"] == "application/json"
         assert response.json()["status"] == "ok"
 
-def test_html_ajax_fidelity():
+def test_html_ajax_fidelity(client):
     """Verify the HTML structure supports AJAX (no action/method on forms)."""
-    index_path = Path("templates/index.html")
-    content = index_path.read_text()
+    response = client.get("/")
+    assert response.status_code == 200
+    content = response.text
     soup = BeautifulSoup(content, 'html.parser')
     
     # Check XTTS form

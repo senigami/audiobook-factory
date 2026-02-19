@@ -9,3 +9,4 @@ watchdog
 
 # XTTS requirements (Managed separately for compatibility)
 # See requirements-xtts.txt
+beautifulsoup4
