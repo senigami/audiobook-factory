@@ -71,8 +71,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     };
 
     const handleToggleAll = () => {
-        if (selectedFiles.size > 0) setSelectedFiles(new Set());
-        else setSelectedFiles(new Set(chapters.map(c => c.filename)));
+        if (selectedFiles.size === chapters.length && chapters.length > 0) {
+            setSelectedFiles(new Set());
+        } else {
+            setSelectedFiles(new Set(chapters.map(c => c.filename)));
+        }
     };
 
     const handleSortAlphabetical = () => {
@@ -258,7 +261,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                             >
                                 {coverPreview ? (
                                     <>
-                                        <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Cover Preview" />
+                                        <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="Cover Preview" />
                                         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0 }} className="hover-opacity-100">
                                             <ImageIcon size={24} />
                                         </div>
@@ -281,13 +284,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                         {/* Metadata Inputs */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Book Title</label>
+                                <label htmlFor="book-title" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Book Title</label>
                                 <input
+                                    id="book-title"
                                     required
                                     value={title}
                                     onChange={e => setTitle(e.target.value)}
                                     placeholder="Enter audiobook title"
-                                    className="glass-panel"
                                     style={{
                                         background: 'var(--surface)',
                                         border: '1px solid var(--border)',
@@ -303,40 +306,44 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    <label htmlFor="book-author" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
                                         <User size={12} style={{ marginRight: '4px' }} /> Author
                                     </label>
                                     <input
+                                        id="book-author"
                                         value={author}
                                         onChange={e => setAuthor(e.target.value)}
                                         placeholder="Optional"
-                                        className="glass-panel"
                                         style={{
                                             background: 'var(--surface)',
                                             border: '1px solid var(--border)',
+                                            color: 'var(--text-primary)',
                                             padding: '0.75rem 1rem',
                                             borderRadius: '8px',
                                             outline: 'none',
-                                            fontSize: '0.9rem'
+                                            fontSize: '0.9rem',
+                                            width: '100%'
                                         }}
                                     />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    <label htmlFor="book-narrator" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
                                         <Mic size={12} style={{ marginRight: '4px' }} /> Narrator
                                     </label>
                                     <input
+                                        id="book-narrator"
                                         value={narrator}
                                         onChange={e => setNarrator(e.target.value)}
                                         placeholder="Optional"
-                                        className="glass-panel"
                                         style={{
                                             background: 'var(--surface)',
                                             border: '1px solid var(--border)',
+                                            color: 'var(--text-primary)',
                                             padding: '0.75rem 1rem',
                                             borderRadius: '8px',
                                             outline: 'none',
-                                            fontSize: '0.9rem'
+                                            fontSize: '0.9rem',
+                                            width: '100%'
                                         }}
                                     />
                                 </div>
@@ -350,12 +357,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                             <h3 style={{ fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Generation List</h3>
                             <div style={{ display: 'flex', gap: '12px' }}>
                                 <button type="button" onClick={handleSortAlphabetical} className="btn-ghost" style={{ fontSize: '0.75rem', gap: '6px' }}>
-                                    <SortAsc size={14} /> Sort Alphabetically
+                                    <SortAsc size={14} /> Sort Chapters
                                 </button>
-                                <button type="button" onClick={handleToggleAll} className="btn-ghost" style={{ fontSize: '12px' }}>
-                                    {selectedFiles.size === chapters.length ? 'Deselect All' : 'Select All'}
-                                </button>
-                                <button type="button" onClick={loadPrepData} className="btn-ghost" style={{ fontSize: '12px' }}>
+                                <button type="button" onClick={loadPrepData} className="btn-ghost" style={{ fontSize: '0.75rem' }}>
                                     Refresh List
                                 </button>
                             </div>
@@ -372,7 +376,32 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                                 <p>No completed chapters found in outputs.</p>
                             </div>
                         ) : (
-                            <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                            <div style={{ maxHeight: '470px', overflowY: 'auto', paddingRight: '8px' }}>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '40px 30px 1fr 100px',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '0 10px 10px 10px',
+                                    borderBottom: '1px solid var(--border)',
+                                    marginBottom: '8px',
+                                    fontSize: '0.7rem',
+                                    color: 'var(--text-muted)',
+                                    textTransform: 'uppercase',
+                                    fontWeight: 700,
+                                    letterSpacing: '0.05em'
+                                }}>
+                                    <div />
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedFiles.size === chapters.length && chapters.length > 0}
+                                        onChange={handleToggleAll}
+                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                        title="Select/Deselect All"
+                                    />
+                                    <div>Chapter Metadata</div>
+                                    <div style={{ textAlign: 'right' }}>Duration</div>
+                                </div>
                                 <Reorder.Group axis="y" values={chapters} onReorder={setChapters} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {chapters.map((c) => (
                                         <Reorder.Item
