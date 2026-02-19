@@ -40,6 +40,12 @@ export interface Settings {
   default_speaker_profile?: string;
 }
 
+export interface Audiobook {
+  filename: string;
+  title: string;
+  cover_url: string | null;
+}
+
 export interface AssemblyChapter {
   filename: string;
   title: string;
@@ -56,7 +62,7 @@ export interface GlobalState {
   settings: Settings;
   paused: boolean;
   chapters: string[];
-  audiobooks: string[];
+  audiobooks: Audiobook[];
   xtts_mp3: string[];
   xtts_wav_only: string[];
   narrator_ok: boolean;

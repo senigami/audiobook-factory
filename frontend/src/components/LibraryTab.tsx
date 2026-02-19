@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Package, FileAudio, Trash2, Download, Image as ImageIcon, User, Mic, GripVertical, SortAsc, Info, Loader2 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
-import type { Job, AssemblyChapter, AssemblyPrep } from '../types';
+import type { Job, AssemblyChapter, AssemblyPrep, Audiobook } from '../types';
 
 interface LibraryTabProps {
-    audiobooks: string[];
+    audiobooks: Audiobook[];
     audiobookJob?: Job;
     onRefresh: () => void;
     progressHelper: (job: Job) => { remaining: number | null, progress: number };
@@ -139,9 +139,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
     const totalDurationSeconds = selectedData.reduce((acc: number, c: any) => acc + (c.duration || 0), 0);
 
     return (
-        <div className="animate-in" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '2rem', height: 'calc(100vh - 120px)', minHeight: '600px' }}>
+        <div className="animate-in library-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 320px) 1fr', gap: '2rem', minHeight: 'calc(100vh - 120px)' }}>
             {/* Left Sidebar: Library */}
-            <aside style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', borderRight: '1px solid var(--border)', paddingRight: '1.5rem', overflowY: 'auto' }}>
+            <aside className="library-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', borderRight: '1px solid var(--border)', paddingRight: '1.5rem', position: 'sticky', top: '0', height: 'calc(100vh - 120px)', overflowY: 'auto' }}>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>The Library</h3>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{audiobooks.length} Books</span>
@@ -156,24 +156,30 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                     ) : (
                         audiobooks.map(b => (
                             <motion.div
-                                key={b}
+                                key={b.filename}
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 className="glass-panel"
                                 style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="icon-circle" style={{ width: '32px', height: '32px', flexShrink: 0 }}>
-                                        <FileAudio size={16} />
-                                    </div>
+                                    {b.cover_url ? (
+                                        <div style={{ width: '40px', height: '40px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                            <img src={b.cover_url} alt={b.filename} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                        </div>
+                                    ) : (
+                                        <div className="icon-circle" style={{ width: '40px', height: '40px', flexShrink: 0 }}>
+                                            <FileAudio size={18} />
+                                        </div>
+                                    )}
                                     <div style={{ minWidth: 0, flex: 1 }}>
-                                        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b}>{b}</h4>
-                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>M4B Audiobook</p>
+                                        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.title}>{b.title}</h4>
+                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.filename}</p>
                                     </div>
                                     <button
                                         onClick={async () => {
-                                            if (confirm(`Delete ${b}?`)) {
-                                                await fetch(`/api/audiobook/${encodeURIComponent(b)}`, { method: 'DELETE' });
+                                            if (confirm(`Delete ${b.filename}?`)) {
+                                                await fetch(`/api/audiobook/${encodeURIComponent(b.filename)}`, { method: 'DELETE' });
                                                 onRefresh();
                                             }
                                         }}
@@ -184,7 +190,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                                     </button>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <a href={`/out/audiobook/${b}`} download className="btn-glass" style={{ flex: 1, textDecoration: 'none', fontSize: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '6px' }}>
+                                    <a href={`/out/audiobook/${b.filename}`} download className="btn-glass" style={{ flex: 1, textDecoration: 'none', fontSize: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '6px' }}>
                                         <Download size={14} /> Download
                                     </a>
                                 </div>
@@ -195,7 +201,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             </aside>
 
             {/* Main Content: Assembly Hub */}
-            <main style={{ display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', paddingRight: '0.5rem' }}>
+            <main style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minHeight: '100%' }}>
                 <header>
                     <h2 style={{ fontSize: '1.75rem', fontWeight: 600 }}>Audiobook Assembler</h2>
                     <p style={{ color: 'var(--text-muted)' }}>Combine your chapters into a single high-quality M4B file with metadata and cover art.</p>
@@ -471,7 +477,20 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                         )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid var(--border)' }}>
+                    <div style={{
+                        position: 'sticky',
+                        bottom: '0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '1.5rem',
+                        borderTop: '1px solid var(--border)',
+                        background: 'rgba(12, 12, 14, 0.8)',
+                        backdropFilter: 'blur(12px)',
+                        borderRadius: '0 0 12px 12px',
+                        margin: '0 -1.5rem -1.5rem -1.5rem',
+                        zIndex: 10
+                    }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <div className="icon-circle" style={{ width: '48px', height: '48px', background: 'var(--accent-glow)', border: '1px solid var(--accent)' }}>
                                 <Info color="var(--accent)" />
@@ -488,7 +507,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                         <button
                             disabled={submitting || selectedFiles.size === 0 || !title}
                             className="btn-primary"
-                            style={{ padding: '0.85rem 2.5rem', fontWeight: 600, fontSize: '1rem' }}
+                            style={{ padding: '0.85rem 2.5rem', fontWeight: 600, fontSize: '1rem', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}
                         >
                             {submitting ? (
                                 <><Loader2 className="animate-spin" size={18} /> Queuing...</>

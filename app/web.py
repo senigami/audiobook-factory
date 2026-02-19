@@ -201,7 +201,49 @@ def xtts_outputs_for(chapter_file: str):
 
 def list_audiobooks():
     if not AUDIOBOOK_DIR.exists(): return []
-    return sorted([p.name for p in AUDIOBOOK_DIR.glob("*.m4b")], reverse=True)
+    res = []
+    # Sort m4b files by modification time or name, here we use name reverse
+    m4b_files = sorted(AUDIOBOOK_DIR.glob("*.m4b"), reverse=True)
+    
+    import subprocess, shlex
+    for p in m4b_files:
+        item = {"filename": p.name, "title": p.name, "cover_url": None}
+        
+        # 1. Try to extract embedded title
+        try:
+            probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
+            title_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
+            extracted_title = title_res.stdout.strip()
+            if extracted_title:
+                item["title"] = extracted_title
+        except:
+            pass
+
+        # 2. Look for existing cover file
+        found_img = False
+        for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+            c_path = p.with_suffix(ext)
+            if c_path.exists():
+                item["cover_url"] = f"/out/audiobook/{p.stem}{ext}"
+                found_img = True
+                break
+        
+        # 2. If not found, try to extract it from the m4b metadata
+        if not found_img:
+            target_jpg = p.with_suffix(".jpg")
+            # This extracts the 'attached_pic' which is mapped as a video stream in m4b
+            cmd = f"ffmpeg -y -i {shlex.quote(str(p))} -map 0:v -c copy -frames:v 1 {shlex.quote(str(target_jpg))}"
+            try:
+                # Run quietly and with a short timeout
+                subprocess.run(shlex.split(cmd), capture_output=True, check=True, timeout=5)
+                if target_jpg.exists() and target_jpg.stat().st_size > 0:
+                    item["cover_url"] = f"/out/audiobook/{p.stem}.jpg"
+            except:
+                # If extraction fails (e.g. no embedded cover), just skip
+                pass
+                
+        res.append(item)
+    return res
 
 @app.get("/")
 def api_welcome():

@@ -262,6 +262,17 @@ def assemble_audiobook(
         
         rc = run_cmd_stream(cmd, on_output, cancel_check)
         
+        # 4. Copy cover art if successful so frontend can show it in the library
+        if rc == 0 and cover_path and Path(cover_path).exists():
+            try:
+                import shutil
+                cover_ext = Path(cover_path).suffix
+                cover_dest = output_m4b.with_suffix(cover_ext)
+                shutil.copy2(cover_path, cover_dest)
+                on_output(f"Saved cover preview to: {cover_dest.name}\n")
+            except Exception as e:
+                on_output(f"Warning: Failed to copy cover preview: {e}\n")
+
         return rc
     finally:
         # Cleanup
