@@ -306,3 +306,26 @@ button {
 .animate-in {
   animation: fadeInDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent) !important;
+  background: var(--glass-hover) !important;
+}
+
+.hover-opacity-100:hover {
+  opacity: 1 !important;
+}
+
+.icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.error-muted {
+  color: #ef4444aa;
+}

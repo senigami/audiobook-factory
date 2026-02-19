@@ -34,3 +34,4 @@ class Job:
     author_meta: Optional[str] = None
     narrator_meta: Optional[str] = None
     chapter_list: Optional[List[dict]] = None
+    cover_path: Optional[str] = None

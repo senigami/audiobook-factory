@@ -459,7 +459,8 @@ def worker_loop(q: "queue.Queue[str]"):
                     chapter_titles=chapter_titles,
                     author=j.author_meta,
                     narrator=j.narrator_meta,
-                    chapters=j.chapter_list
+                    chapters=j.chapter_list,
+                    cover_path=j.cover_path
                 )
                 
                 if rc == 0 and out_file.exists():

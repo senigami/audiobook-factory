@@ -8,6 +8,7 @@ REPORT_DIR = BASE_DIR / "reports"
 XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
 AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
 VOICES_DIR = BASE_DIR / "voices"
+COVER_DIR = BASE_DIR / "uploads" / "covers"
 
 
 # Your existing environments (adjust only if different)

@@ -163,7 +163,8 @@ def assemble_audiobook(
     chapter_titles: dict = None,
     author: str = None,
     narrator: str = None,
-    chapters: List[dict] = None # List of {filename, title}
+    chapters: List[dict] = None, # List of {filename, title}
+    cover_path: str = None
 ):
     # 1. Gather files
     if chapters:
@@ -244,9 +245,18 @@ def assemble_audiobook(
         on_output(f"Assembling audiobook: {book_title}\n")
         on_output(f"Combining {len(files)} files into {output_m4b.name}...\n")
         
+        cover_input = ""
+        cover_map = ""
+        if cover_path and Path(cover_path).exists():
+            on_output(f"Adding cover image: {cover_path}\n")
+            cover_input = f"-i {shlex.quote(str(cover_path))} "
+            # Map chapter 0 (concat audio) and chapter 1 (metadata) and chapter 2 (cover)
+            cover_map = "-map 2:v -c:v copy -disposition:v:0 attached_pic "
+        
         cmd = (
             f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
-            f"-i {shlex.quote(str(metadata_file))} -map_metadata 1 "
+            f"-i {shlex.quote(str(metadata_file))} {cover_input} "
+            f"-map 0:a {cover_map} -map_metadata 1 "
             f"-c:a aac -b:a {shlex.quote(AUDIOBOOK_BITRATE)} -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
         )
         

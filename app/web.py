@@ -9,7 +9,7 @@ from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR
+    XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR
 )
 from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
 from .models import Job
@@ -238,8 +238,10 @@ def api_home():
 
     for c in chapters:
         stem = Path(c).stem
-        if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): xtts_mp3.append(c)
-        elif (XTTS_OUT_DIR / f"{stem}.wav").exists(): xtts_wav_only.append(c)
+        if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): 
+            xtts_mp3.append(c)
+        if (XTTS_OUT_DIR / f"{stem}.wav").exists(): 
+            xtts_wav_only.append(c)
 
     return {
         "chapters": chapters,
@@ -415,18 +417,30 @@ def cancel_pending():
     return JSONResponse({"status": "ok", "message": "Pending jobs cancelled"})
 
 @app.post("/create_audiobook")
-def create_audiobook(
+async def create_audiobook(
     title: str = Form(...),
     author: str = Form(None),
     narrator: str = Form(None),
-    chapters: str = Form("[]") # JSON string of {filename, title}
+    chapters: str = Form("[]"), # JSON string of {filename, title}
+    cover: Optional[UploadFile] = File(None)
 ):
-    import json
+    import json, shutil
     try:
         chapter_list = json.loads(chapters)
     except:
         chapter_list = []
+        
+    COVER_DIR.mkdir(parents=True, exist_ok=True)
     AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    
+    cover_path = None
+    if cover:
+        ext = Path(cover.filename).suffix
+        cover_filename = f"{uuid.uuid4().hex}{ext}"
+        cover_path = str(COVER_DIR / cover_filename)
+        with open(cover_path, "wb") as f:
+            shutil.copyfileobj(cover.file, f)
+
     jid = uuid.uuid4().hex[:12]
     j = Job(
         id=jid,
@@ -438,7 +452,8 @@ def create_audiobook(
         make_mp3=False,
         author_meta=author,
         narrator_meta=narrator,
-        chapter_list=chapter_list
+        chapter_list=chapter_list,
+        cover_path=cover_path
     )
     enqueue(j)
     update_job(jid, status="queued")

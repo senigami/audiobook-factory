@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { Panel } from './components/Panel';
-import { AssemblyModal } from './components/AssemblyModal';
 import { PreviewModal } from './components/PreviewModal';
 import { VoicesTab } from './components/VoicesTab';
 import { SynthesisTab } from './components/SynthesisTab';
@@ -18,7 +17,6 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
-  const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -128,7 +126,6 @@ function App() {
               <LibraryTab
                 audiobooks={initialData?.audiobooks || []}
                 audiobookJob={audiobookJob}
-                onOpenAssembly={() => setIsAssemblyOpen(true)}
                 onRefresh={handleRefresh}
                 progressHelper={getRemainingAndProgress}
                 formatSeconds={formatSeconds}
@@ -152,30 +149,6 @@ function App() {
         </div>
       </Layout>
 
-      <AssemblyModal
-        isOpen={isAssemblyOpen}
-        onClose={() => setIsAssemblyOpen(false)}
-        onConfirm={async (data) => {
-          const formData = new FormData();
-          formData.append('title', data.title);
-          formData.append('author', data.author);
-          formData.append('narrator', data.narrator);
-          formData.append('chapters', JSON.stringify(data.chapters));
-
-          const resp = await fetch('/create_audiobook', {
-            method: 'POST',
-            body: formData
-          });
-
-          if (resp.ok) {
-            setActiveTab('library');
-            await Promise.all([refetchHome(), refreshJobs()]);
-          } else {
-            const err = await resp.json();
-            alert(`Failed to start assembly: ${err.message || resp.statusText}`);
-          }
-        }}
-      />
 
       <PreviewModal
         isOpen={!!previewFilename}
