@@ -131,8 +131,8 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
 
     return (
         <div className="tab-content animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'relative' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <div className="glass-panel" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <label className="btn-ghost" style={{ cursor: 'pointer', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
                             <Upload size={14} /> {isUploading ? 'Uploading...' : 'Upload Text'}
@@ -224,7 +224,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                         </button>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                    <div className="responsive-grid" style={{ gap: '2rem' }}>
                         {/* Left Column */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -248,7 +248,7 @@ export const SynthesisTab: React.FC<SynthesisTabProps> = ({
                         </div>
 
                         {/* Right Column */}
-                        <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div className="sidebar-divider-mobile" style={{ borderLeft: '1px solid var(--border)', paddingLeft: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
                                     <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Produce MP3</h4>

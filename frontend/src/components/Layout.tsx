@@ -18,7 +18,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw' }}>
-      <header className="glass-panel" style={{
+      <header className="glass-panel header-container" style={{
         height: 'var(--header-height, 72px)',
         width: '100%',
         position: 'fixed',
@@ -71,7 +71,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 }}
               />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="header-logo-text" style={{ display: 'flex', flexDirection: 'column' }}>
               <h1 style={{
                 fontSize: '1.1rem',
                 fontWeight: 900,
@@ -118,7 +118,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 }}
               >
                 <item.icon size={16} opacity={activeTab === item.id ? 1 : 0.6} />
-                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
+                <span className="nav-label" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
               </button>
             ))}
           </nav>
@@ -152,7 +152,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         </div>
       </header>
 
-      <main style={{
+      <main className="mobile-padding" style={{
         flex: 1,
         marginTop: 'var(--header-height, 72px)',
         width: '100%',

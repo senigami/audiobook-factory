@@ -334,6 +334,13 @@ button {
   color: var(--accent);
 }
 
+/* Responsive Grids & Layouts */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+}
+
 .error-muted {
   color: #ef4444aa;
 }
@@ -351,5 +358,65 @@ button {
     padding-right: 0 !important;
     padding-bottom: 2rem !important;
     top: 0 !important;
+  }
+
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .header-logo-text {
+    display: none;
+  }
+
+  .mobile-hide {
+    display: none !important;
+  }
+
+  .mobile-padding {
+    padding: 1rem !important;
+  }
+
+  .sidebar-divider-mobile {
+    border-left: none !important;
+    padding-left: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 64px;
+  }
+
+  .header-container {
+    padding: 0 1rem !important;
+  }
+}
+
+/* Burger Menu Utilities (if needed later) */
+.burger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: transparent;
+  border: none;
+}
+
+.burger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .burger {
+    display: flex;
   }
 }
