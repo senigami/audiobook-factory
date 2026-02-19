@@ -284,3 +284,36 @@ def assemble_audiobook(
         # Cleanup
         if list_file.exists(): list_file.unlink()
         if metadata_file.exists(): metadata_file.unlink()
+
+
+def generate_video_sample(
+    input_audio: Path,
+    output_video: Path,
+    logo_path: Path,
+    on_output,
+    cancel_check,
+    max_duration: int = 120
+) -> int:
+    """
+    Generates a video sample (MP4) from an audio file with a logo overlay.
+    Limited to max_duration seconds.
+    """
+    if not input_audio.exists():
+        on_output(f"[error] Input audio not found: {input_audio}\n")
+        return 1
+
+    logo_filter = ""
+    inputs = f"-f lavfi -i color=c=black:s=1280x720:d={max_duration} -i {shlex.quote(str(input_audio))}"
+    
+    if logo_path and logo_path.exists():
+        inputs += f" -i {shlex.quote(str(logo_path))}"
+        logo_filter = '-filter_complex "[0:v][2:v]overlay=W-w-20:H-h-20[outv]" -map "[outv]" '
+    else:
+        logo_filter = '-map 0:v '
+
+    cmd = (
+        f"ffmpeg -y {inputs} "
+        f"{logo_filter} -map 1:a -c:v libx264 -tune stillimage -c:a aac -b:a 192k "
+        f"-pix_fmt yuv420p -shortest -t {max_duration} {shlex.quote(str(output_video))}"
+    )
+    return run_cmd_stream(cmd, on_output, cancel_check)

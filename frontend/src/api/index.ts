@@ -50,6 +50,10 @@ export const api = {
     const res = await fetch('/api/queue/cancel_pending', { method: 'POST' });
     return res.json();
   },
+  exportSample: async (filename: string): Promise<{ url: string; status?: string; message?: string }> => {
+    const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}/export-sample`, { method: 'POST' });
+    return res.json();
+  },
   // Basic helper for home data (since the / route returns HTML, we might need a dedicated API endpoint for initial state)
   // For now, we'll mimic the SSR data by calling specific APIs.
 };

@@ -8,12 +8,13 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration
+from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
-    XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR
+    XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR,
+    SAMPLES_DIR, ASSETS_DIR
 )
 from .state import get_jobs, get_settings, update_settings, clear_all_jobs, update_job
 from .models import Job
@@ -29,6 +30,7 @@ app = FastAPI()
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
+app.mount("/out/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="out_samples")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -301,6 +303,30 @@ def save_settings(
 def set_default_speaker(name: str = Form(...)):
     update_settings(default_speaker_profile=name)
     return {"status": "success", "default_speaker_profile": name}
+
+@app.post("/api/chapter/{filename}/export-sample")
+async def export_sample(filename: str):
+    wav_path, mp3_path = xtts_outputs_for(filename)
+    source = mp3_path if mp3_path.exists() else wav_path
+    
+    if not source.exists():
+        return JSONResponse({"status": "error", "message": "Audio not found for this chapter. Generate it first."}, status_code=404)
+    
+    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+    out_video = SAMPLES_DIR / (Path(filename).stem + "_sample.mp4")
+    logo_path = ASSETS_DIR / "logo.png"
+    
+    # We run this in a background job or just synchronously for now if it's short
+    # Since it's only 2 minutes, it should be relatively quick
+    def on_output(line): print(line, end="")
+    def cancel_check(): return False
+    
+    rc = generate_video_sample(source, out_video, logo_path, on_output, cancel_check, max_duration=120)
+    
+    if rc == 0:
+        return {"status": "success", "url": f"/out/samples/{out_video.name}"}
+    else:
+        return JSONResponse({"status": "error", "message": "Video generation failed."}, status_code=500)
 
 def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = None) -> List[Path]:
     """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
