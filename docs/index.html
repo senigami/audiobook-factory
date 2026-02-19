@@ -87,14 +87,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 20px;
-            margin-bottom: 2.5rem;
+            gap: 32px;
+            margin-bottom: 3rem;
         }
 
         .logo-box {
             position: relative;
-            width: 64px;
-            height: 64px;
+            width: 96px;
+            height: 96px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -102,7 +102,7 @@
 
         .logo-glow {
             position: absolute;
-            inset: -12px;
+            inset: -16px;
             background: var(--accent);
             border-radius: 20px;
             opacity: 0.15;
@@ -125,7 +125,7 @@
         }
 
         .logo-h1 {
-            font-size: 2rem;
+            font-size: 3.2rem;
             font-weight: 900;
             letter-spacing: -0.03em;
             margin: 0;
@@ -138,13 +138,14 @@
         }
 
         .logo-span {
-            font-size: 1.45rem;
+            font-size: 2.35rem;
             font-weight: 800;
             color: var(--accent);
             letter-spacing: 0.6em;
             text-transform: uppercase;
             opacity: 0.8;
             margin-top: 4px;
+            line-height: 1;
         }
 
         .badge {
@@ -372,15 +373,44 @@
                 subscription, total control.</p>
         </header>
 
-        <div class="card fade-in" style="animation-delay: 0.2s;">
-            <div class="audio-section">
-                <h2 style="margin-bottom: 0.5rem; font-weight: 800; font-size: 1.75rem;">Audible Overview</h2>
-                <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-weight: 500;">Synthesized locally with
-                    XTTS-v2</p>
-                <audio controls>
-                    <source src="assets/Overview.mp3" type="audio/mpeg">
-                    Your browser does not support the audio element.
-                </audio>
+        <div class="card fade-in" style="animation-delay: 0.2s; padding: 0; overflow: hidden;">
+            <div style="display: grid; grid-template-columns: 1.2fr 1.8fr; align-items: stretch; min-height: 400px;">
+                <!-- Narrative Visual -->
+                <div
+                    style="position: relative; background: var(--surface-alt); border-right: 1px solid var(--border); overflow: hidden;">
+                    <img src="assets/narrator_studio_visual.jpg" alt="The Narrator"
+                        style="width: 100%; height: 100%; object-fit: cover; opacity: 0.6; filter: grayscale(20%) contrast(1.1);">
+                    <div
+                        style="position: absolute; inset: 0; background: linear-gradient(to right, transparent 60%, var(--surface));">
+                    </div>
+                </div>
+
+                <!-- Narrative Copy -->
+                <div
+                    style="padding: 3.5rem; display: flex; flex-direction: column; justify-content: center; text-align: left;">
+                    <span class="badge" style="margin-bottom: 1rem; width: fit-content; font-size: 0.75rem;">A Living
+                        Tech Demo</span>
+                    <h2 style="margin-bottom: 1.5rem; font-weight: 900; font-size: 2.2rem; letter-spacing: -0.02em;">
+                        Hear the Factory in Action</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 1.15rem; line-height: 1.7;">
+                        This isn't just a static recording—it's a live demonstration of the system's power. Listen as
+                        the <strong>Audiobook Factory</strong> narrates its own story, walking you through its local AI
+                        architecture and mission of total creative control. Every word you hear was synthesized right
+                        here, showcasing the high-fidelity <strong>XTTS-v2</strong> engine bringing our documentation to
+                        life with professional-grade nuance.
+                    </p>
+
+                    <div class="audio-container"
+                        style="background: var(--glass); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--border);">
+                        <p
+                            style="color: var(--text-muted); margin-bottom: 0.75rem; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;">
+                            Chapter Preview: "The Soul of the Machine"</p>
+                        <audio controls style="width: 100%;">
+                            <source src="assets/Overview.mp3" type="audio/mpeg">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                </div>
             </div>
         </div>
 
