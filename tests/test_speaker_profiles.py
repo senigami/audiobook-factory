@@ -1,14 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
-from pathlib import Path
-import shutil
 import json
-import os
 from unittest.mock import patch, MagicMock
 
 # Import the app
 from app.web import app
-from app.config import VOICES_DIR, XTTS_OUT_DIR
 
 client = TestClient(app)
 
@@ -41,12 +37,12 @@ def test_build_profile(clean_voices):
         files=files
     )
     assert response.status_code == 200
-    
+
     profile_dir = clean_voices / "TestSpeaker"
     assert profile_dir.exists()
     assert (profile_dir / "test1.wav").exists()
     assert (profile_dir / "test2.wav").exists()
-    
+
     # Check listing now
     response = client.get("/api/speaker-profiles")
     assert len(response.json()) == 1
@@ -59,20 +55,20 @@ def test_update_speed(clean_voices):
     profile_dir = clean_voices / "Speedy"
     profile_dir.mkdir(parents=True, exist_ok=True)
     (profile_dir / "sample.wav").write_text("audio")
-    
+
     response = client.post(
         "/api/speaker-profiles/Speedy/speed",
         data={"speed": 1.45}
     )
     assert response.status_code == 200
     assert response.json()["speed"] == 1.45
-    
+
     # Verify persistence
     meta_path = profile_dir / "profile.json"
     assert meta_path.exists()
     meta = json.loads(meta_path.read_text())
     assert meta["speed"] == 1.45
-    
+
     # Check listing includes speed
     response = client.get("/api/speaker-profiles")
     assert response.json()[0]["speed"] == 1.45
@@ -85,23 +81,23 @@ def test_speaker_profile_test_endpoint(mock_xtts, clean_voices):
     profile_dir.mkdir(parents=True, exist_ok=True)
     wav_path = profile_dir / "sample.wav"
     wav_path.write_text("audio")
-    
+
     # Mock successful generation
     mock_xtts.return_value = 0
-    
+
     # We need to make sure the expected output file exists or the endpoint will return 500
     test_out = clean_voices / name / "sample.wav"
     test_out.parent.mkdir(parents=True, exist_ok=True)
     test_out.write_text("output audio")
-    
+
     response = client.post(
         "/api/speaker-profiles/test",
         data={"name": name}
     )
-    
+
     assert response.status_code == 200
     assert response.json()["audio_url"] == f"/out/voices/{name}/sample.wav"
-    
+
     # Cleanup test output
     if test_out.exists():
         test_out.unlink()
@@ -111,7 +107,7 @@ def test_delete_profile(clean_voices):
     profile_dir = clean_voices / name
     profile_dir.mkdir(parents=True, exist_ok=True)
     (profile_dir / "sample.wav").write_text("audio")
-    
+
     response = client.delete(f"/api/speaker-profiles/{name}")
     assert response.status_code == 200
     assert not profile_dir.exists()
@@ -123,48 +119,48 @@ def test_rename_profile(clean_voices):
     profile_dir = clean_voices / name
     profile_dir.mkdir(parents=True, exist_ok=True)
     (profile_dir / "sample.wav").write_text("audio")
-    
+
     # Set as default to test settings update
     update_settings(default_speaker_profile=name)
-    
+
     response = client.post(f"/api/speaker-profiles/{name}/rename", data={"new_name": new_name})
     assert response.status_code == 200
     assert response.json()["new_name"] == new_name
-    
+
     assert not (clean_voices / name).exists()
     assert (clean_voices / new_name).exists()
     assert (clean_voices / new_name / "sample.wav").exists()
-    
+
     # Verify settings updated
     assert get_settings()["default_speaker_profile"] == new_name
 
 def test_get_speaker_settings(clean_voices):
     from app.jobs import get_speaker_settings
     from app.state import update_settings
-    
+
     # 1. Test global fallback
     update_settings(xtts_speed=1.23)
     settings = get_speaker_settings("NonExistent")
     assert settings["speed"] == 1.23
-    
+
     # 2. Test per-narrator override
     name = "FastTalker"
     profile_dir = clean_voices / name
     profile_dir.mkdir(parents=True, exist_ok=True)
     meta_path = profile_dir / "profile.json"
     meta_path.write_text(json.dumps({"speed": 1.75}))
-    
+
     settings = get_speaker_settings(name)
     assert settings["speed"] == 1.75
 
 def test_latent_cache_path():
     from app.engines import get_speaker_latent_path
-    
+
     # Single wav
     path = get_speaker_latent_path("/path/to/test.wav")
     assert str(path).endswith(".pth")
     assert ".cache/audiobook-factory/voices" in str(path)
-    
+
     # Comma separated
     path2 = get_speaker_latent_path("/path/1.wav, /path/2.wav")
     assert path2 != path

@@ -1,4 +1,3 @@
-import pytest
 from app.textops import consolidate_single_word_sentences
 
 def test_single_word_merge_next():

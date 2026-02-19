@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, Search, Loader2 } from 'lucide-react';
+import { X, FileText, Loader2 } from 'lucide-react';
 
 interface PreviewModalProps {
     isOpen: boolean;

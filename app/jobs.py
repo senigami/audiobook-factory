@@ -1,4 +1,9 @@
-import queue, threading, time, traceback, os, re
+import queue
+import threading
+import time
+import traceback
+import os
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -32,7 +37,7 @@ def requeue(job_id: str):
         assembly_queue.put(job_id)
     else:
         job_queue.put(job_id)
-    
+
 def cancel(job_id: str):
     ev = cancel_flags.get(job_id)
     if ev:
@@ -83,7 +88,7 @@ def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> boo
     stem = Path(chapter_file).stem
     if engine == "audiobook":
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
-    
+
     if engine == "xtts":
         mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
         wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
@@ -108,7 +113,7 @@ def cleanup_and_reconcile():
     """
     from .state import delete_jobs
     all_jobs = get_jobs()
-    
+
     # 1. Prune missing text files & missing audiobooks
     chapters_disk = {p.name for p in (CHAPTER_DIR.glob("*.txt"))}
     stale_ids = []
@@ -121,7 +126,7 @@ def cleanup_and_reconcile():
             # Do NOT prune queued or running jobs just because the file isn't there yet!
             if j.status == "done" and not (AUDIOBOOK_DIR / f"{j.chapter_file}.m4b").exists():
                 stale_ids.append(jid)
-    
+
     if stale_ids:
         delete_jobs(stale_ids)
         # Refresh local map for the next step
@@ -133,18 +138,18 @@ def cleanup_and_reconcile():
         if j.status == "done":
             if j.engine == "audiobook":
                 continue # Audiobook pruning is handled in Part 1
-            
+
             # Check if ANY output exists (WAV or MP3)
             # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
             has_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
             has_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
-            
+
             if j.make_mp3:
                 if not has_mp3.exists() and not has_wav.exists():
                     # Both gone! Must re-run.
-                    update_job(jid, 
-                               status="queued", 
-                               output_mp3=None, 
+                    update_job(jid,
+                               status="queued",
+                               output_mp3=None,
                                output_wav=None,
                                progress=0.0,
                                started_at=None,
@@ -155,15 +160,15 @@ def cleanup_and_reconcile():
                                warning_count=0)
                     reset_ids.append(jid)
                 elif not has_mp3.exists() and has_wav.exists():
-                    # WAV exists, MP3 missing. 
+                    # WAV exists, MP3 missing.
                     # Clear output_mp3 so UI knows it's gone, but keep status=done/wav
                     # so backfill can catch it.
                     update_job(jid, output_mp3=None)
             else:
                 if not has_wav.exists():
-                    update_job(jid, 
-                               status="queued", 
-                               output_mp3=None, 
+                    update_job(jid,
+                               status="queued",
+                               output_mp3=None,
                                output_wav=None,
                                progress=0.0,
                                started_at=None,
@@ -173,38 +178,37 @@ def cleanup_and_reconcile():
                                error=None,
                                warning_count=0)
                     reset_ids.append(jid)
-    
+
     # 3. Requeue the reset jobs so the worker picks them up
     for rid in reset_ids:
         requeue(rid)
-    
+
     return reset_ids
 
 
 def get_speaker_wavs(profile_name: str) -> Optional[str]:
     """Returns a comma-separated string of absolute paths for the given profile."""
     from .config import VOICES_DIR
-    
+
     # User choice or system default
     target_profile = profile_name if profile_name else "Default"
     p = VOICES_DIR / target_profile
-    
+
     if not p.exists() or not p.is_dir():
         return None
-    
+
     wavs = sorted(p.glob("*.wav"))
     if not wavs:
         return None
-        
+
     return ",".join([str(w.absolute()) for w in wavs])
 
 
 def get_speaker_settings(profile_name: str) -> dict:
     """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
     from .config import VOICES_DIR
-    from .state import get_settings
     import json
-    
+
     defaults = get_settings()
     default_test_text = (
         "The mysterious traveler, bathed in the soft glow of the azure twilight, "
@@ -214,16 +218,16 @@ def get_speaker_settings(profile_name: str) -> dict:
         "Around them, the vibrant forest hummed with rhythmic sounds while a "
         "cold breeze carried the scent of wet earth and weathered stone."
     )
-    
+
     res = {
         "speed": float(defaults.get("xtts_speed", 1.0)),
         "test_text": default_test_text
     }
-    
+
     # User choice or system default
     target_profile = profile_name if profile_name else "Default"
     p = VOICES_DIR / target_profile
-    
+
     meta_path = p / "profile.json"
     if meta_path.exists():
         try:
@@ -233,7 +237,7 @@ def get_speaker_settings(profile_name: str) -> dict:
             if "test_text" in meta:
                 res["test_text"] = meta["test_text"]
         except: pass
-        
+
     return res
 
 def worker_loop(q: "queue.Queue[str]"):
@@ -252,12 +256,12 @@ def worker_loop(q: "queue.Queue[str]"):
             cancel_flags[jid] = cancel_ev
 
             start_dt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
-            
+
             # Prepare initial identity and ETA for immediate UI sync
             chars = 0
             eta = 0
             header = []
-            
+
             if j.engine != "audiobook":
                 chapter_path = CHAPTER_DIR / j.chapter_file
                 if chapter_path.exists():
@@ -266,7 +270,7 @@ def worker_loop(q: "queue.Queue[str]"):
                     perf = get_performance_metrics()
                     cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
                     eta = _estimate_seconds(chars, cps)
-                
+
                 header = [
                     f"Job Started: {j.chapter_file}\n",
                     f"Started At:  {start_dt}\n",
@@ -279,24 +283,24 @@ def worker_loop(q: "queue.Queue[str]"):
             else:
                 # Audiobook identity
                 src_dir = XTTS_OUT_DIR
-                
+
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
                 else:
                     audio_files = [f for f in os.listdir(src_dir) if f.endswith(('.wav', '.mp3'))] if src_dir.exists() else []
-                
+
                 num_files = len(audio_files)
                 total_size_mb = sum((src_dir / f).stat().st_size for f in audio_files if (src_dir / f).exists()) / (1024 * 1024) if src_dir.exists() else 0
-                
+
                 perf = get_performance_metrics()
                 mult = perf.get("audiobook_speed_multiplier", 1.0)
                 base_eta = (num_files * 0.02) + (total_size_mb / 10)
                 eta = max(15, int(base_eta * mult))
-                
+
                 header = [
                     f"Job Started: Audiobook {j.chapter_file}\n",
                     f"Started At:  {start_dt}\n",
-                    f"Engine: AUDIOBOOK ASSEMBLY\n",
+                    "Engine: AUDIOBOOK ASSEMBLY\n",
                     f"Chapter Files: {num_files}\n",
                     f"Total Source Size: {total_size_mb:.1f} MB\n",
                     f"Predicted Duration: {format_seconds(eta)}\n",
@@ -305,16 +309,16 @@ def worker_loop(q: "queue.Queue[str]"):
                 ]
 
             # Trigger immediate UI update with status, ETA, and Log Header
-            update_job(jid, 
-                       status="running", 
-                       started_at=time.time(), 
+            update_job(jid,
+                       status="running",
+                       started_at=time.time(),
                        finished_at=None,
-                       progress=0.0, 
+                       progress=0.0,
                        error=None,
                        eta_seconds=eta,
                        log="".join(header))
-            
-            # CRITICAL: Synchronize the local 'j' object properties so the on_output 
+
+            # CRITICAL: Synchronize the local 'j' object properties so the on_output
             # closure uses the fresh start state instead of stale data from a previous session.
             j.status = "running"
             j.progress = 0.0
@@ -341,19 +345,19 @@ def worker_loop(q: "queue.Queue[str]"):
                 s = line.strip()
                 now = time.time()
                 elapsed = now - start
-                
+
                 # We'll use these to track if we need to broadcast an update
                 new_progress = None
                 new_log = None
-                
+
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
                     current_p = getattr(j, 'progress', 0.0)
                     prog = min(0.98, max(current_p, elapsed / max(1, eta)))
-                    
+
                     last_b = getattr(j, '_last_broadcast_time', 0)
                     last_p = getattr(j, '_last_broadcast_p', 0.0)
-                    
+
                     # Only broadcast heartbeat if it's a meaningful jump or enough time has passed
                     if (prog - last_p >= 0.01) or (now - last_b >= 30.0):
                         prog = round(prog, 2)
@@ -362,7 +366,7 @@ def worker_loop(q: "queue.Queue[str]"):
                         j._last_broadcast_p = prog
                         update_job(jid, progress=prog)
                     return
-                
+
                 # 1. Filter out noisy lines provided by XTTS
                 if s.startswith("> Text"): return
                 if s.startswith("> Processing sentence:"): return
@@ -378,7 +382,7 @@ def worker_loop(q: "queue.Queue[str]"):
                 if "tensorboard" in s.lower(): return
                 if "processing time" in s.lower(): return
                 if "real-time factor" in s.lower(): return
-                
+
                 # 2. Extract Progress from tqdm if present
                 progress_match = re.search(r'(\d+)%', s)
                 is_progress_line = progress_match and "|" in s
@@ -391,7 +395,7 @@ def worker_loop(q: "queue.Queue[str]"):
                             new_progress = p_val
                     except:
                         pass
-                
+
                 # 3. Handle logs (only if not strictly progress, or if desired in logs)
                 # If it's a progress line, we skip adding it to terminal logs to keep them clean
                 # unless it contains other useful info (rare for tqdm).
@@ -416,13 +420,13 @@ def worker_loop(q: "queue.Queue[str]"):
                 # 4. Consolidated Broadcast
                 # Decide if we SHOULD include progress in this update
                 broadcast_p = getattr(j, '_last_broadcast_p', 0.0)
-                
+
                 # Update calculation for prediction (prediction floor)
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
                     new_val = min(0.98, max(current_p, elapsed / max(1, eta)))
                     new_progress = round(new_val, 2)
-                
+
                 # Check threshold against last broadcast
                 include_progress = (abs(new_progress - broadcast_p) >= 0.01) or (broadcast_p == 0 and new_progress > 0)
 
@@ -431,10 +435,10 @@ def worker_loop(q: "queue.Queue[str]"):
                     args = {}
                     if include_progress:
                         # Ensure internal state matches broadcasted value exactly
-                        j.progress = new_progress 
+                        j.progress = new_progress
                         j._last_broadcast_p = new_progress
                         args['progress'] = new_progress
-                    if new_log is not None: 
+                    if new_log is not None:
                         args['log'] = new_log
                     update_job(jid, **args)
 
@@ -446,35 +450,35 @@ def worker_loop(q: "queue.Queue[str]"):
                 src_dir = XTTS_OUT_DIR
                 title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
                 out_file = AUDIOBOOK_DIR / f"{title}.m4b"
-                
+
                 # Collect custom titles from all jobs
                 chapter_titles = {
-                    val.chapter_file: val.custom_title 
-                    for val in get_jobs().values() 
+                    val.chapter_file: val.custom_title
+                    for val in get_jobs().values()
                     if val.custom_title
                 }
-                
+
                 rc = assemble_audiobook(
-                    src_dir, title, out_file, on_output, cancel_check, 
+                    src_dir, title, out_file, on_output, cancel_check,
                     chapter_titles=chapter_titles,
                     author=j.author_meta,
                     narrator=j.narrator_meta,
                     chapters=j.chapter_list,
                     cover_path=j.cover_path
                 )
-                
+
                 if rc == 0 and out_file.exists():
                     # --- Auto-tuning feedback ---
                     actual_dur = time.time() - start
                     # Calculate multiplier relative to 'base' prediction (0.1s/file + 0.5s/MB)
                     # We use the same base_eta variables defined in the prediction section
                     learned_mult = actual_dur / max(1.0, base_eta)
-                    
+
                     old_mult = perf.get("audiobook_speed_multiplier", 1.0)
                     # Weighted moving average (60% old, 40% new)
                     updated_mult = (old_mult * 0.6) + (learned_mult * 0.4)
                     update_performance_metrics(audiobook_speed_multiplier=updated_mult)
-                    
+
                     on_output(f"\n[performance] Tuned Audiobook multiplier: {old_mult:.2f} -> {updated_mult:.2f}\n")
                     update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_mp3=out_file.name, log="".join(logs))
                 else:
@@ -484,17 +488,17 @@ def worker_loop(q: "queue.Queue[str]"):
             elif j.engine == "xtts":
                 out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-                
+
                 # Resolve speaker WAVs and settings from profile
                 sw = get_speaker_wavs(j.speaker_profile)
                 spk_settings = get_speaker_settings(j.speaker_profile)
                 speed = spk_settings["speed"]
-                
+
                 rc = xtts_generate(
-                    text=text, 
-                    out_wav=out_wav, 
-                    safe_mode=j.safe_mode, 
-                    on_output=on_output, 
+                    text=text,
+                    out_wav=out_wav,
+                    safe_mode=j.safe_mode,
+                    on_output=on_output,
                     cancel_check=cancel_check,
                     speaker_wav=sw,
                     speed=speed

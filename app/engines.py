@@ -1,6 +1,10 @@
-import shlex, subprocess, os, re, hashlib
+import shlex
+import subprocess
+import os
+import re
+import hashlib
 from pathlib import Path
-from typing import Tuple, List, Optional
+from typing import List, Optional
 
 from .config import XTTS_ENV_ACTIVATE, MP3_QUALITY, BASE_DIR, AUDIOBOOK_BITRATE
 from .textops import safe_split_long_sentences, sanitize_for_xtts, pack_text_to_limit
@@ -20,22 +24,23 @@ def terminate_all_subprocesses():
     _active_processes.clear()
 
 def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
-    import time, selectors
+    import time
+    import selectors
     proc = subprocess.Popen(
-        cmd, shell=True, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.STDOUT, 
+        cmd, shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         bufsize=0 # Unbuffered
     )
     _active_processes.add(proc)
-    
+
     sel = selectors.DefaultSelector()
     sel.register(proc.stdout, selectors.EVENT_READ)
-    
+
     buffer = ""
     last_heartbeat = time.time()
-    
+
     try:
         while True:
             if cancel_check():
@@ -65,19 +70,19 @@ def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
                 if time.time() - last_heartbeat >= 1.0:
                     on_output("") # Send empty tick to run_cmd_stream caller
                     last_heartbeat = time.time()
-                
+
                 if proc.poll() is not None:
                     break
-        
+
         # Final flush
         if buffer:
             on_output(buffer)
-        
+
         # Consume any remaining output
         rest = proc.stdout.read()
         if rest:
             on_output(rest)
-            
+
         return proc.returncode or 0
     finally:
         sel.close()
@@ -87,7 +92,8 @@ def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
 def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -> int:
     def noop(*args): pass
     if on_output is None: on_output = noop
-    if cancel_check is None: cancel_check = lambda: False
+    def never_cancel(): return False
+    if cancel_check is None: cancel_check = never_cancel
 
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
@@ -96,12 +102,12 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
         return 1
-    
+
     # Use provided speaker_wav
     sw = speaker_wav
-    
+
     if not sw:
-        on_output(f"[error] No speaker profile or reference WAV provided\n")
+        on_output("[error] No speaker profile or reference WAV provided\n")
         return 1
 
     if safe_mode:
@@ -111,7 +117,7 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         # Raw mode: Absolute bare minimum to prevent speech engine crashes
         text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
         text = text.strip()
-    
+
     text = pack_text_to_limit(text, pad=True)
 
     cmd = (
@@ -143,23 +149,23 @@ def get_speaker_latent_path(speaker_wavs_str: str) -> Optional[Path]:
     """Computes the same latent path as xtts_inference.py."""
     if not speaker_wavs_str:
         return None
-        
+
     if "," in speaker_wavs_str:
         wavs = [s.strip() for s in speaker_wavs_str.split(",") if s.strip()]
         combined_paths = "|".join(sorted([os.path.abspath(p) for p in wavs]))
     else:
         combined_paths = os.path.abspath(speaker_wavs_str)
-        
+
     speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
     voice_dir = Path(os.path.expanduser("~/.cache/audiobook-factory/voices"))
     return voice_dir / f"{speaker_id}.pth"
 
 def assemble_audiobook(
-    input_folder: Path, 
-    book_title: str, 
-    output_m4b: Path, 
-    on_output, 
-    cancel_check, 
+    input_folder: Path,
+    book_title: str,
+    output_m4b: Path,
+    on_output,
+    cancel_check,
     chapter_titles: dict = None,
     author: str = None,
     narrator: str = None,
@@ -201,7 +207,7 @@ def assemble_audiobook(
     # 2. Build Metadata and Concat List
     metadata_file = output_m4b.with_suffix(".metadata.txt")
     list_file = output_m4b.with_suffix(".list.txt")
-    
+
     metadata = ";FFMETADATA1\n"
     metadata += f"title={book_title}\n"
     if author:
@@ -209,20 +215,20 @@ def assemble_audiobook(
     if narrator:
         metadata += f"comment={narrator}\n"
     metadata += "\n"
-    
+
     current_offset = 0.0
-    
+
     try:
         with open(list_file, 'w') as lf:
             for f in files:
                 file_path = input_folder / f
                 duration = get_audio_duration(file_path)
-                
+
                 lf.write(f"file '{file_path}'\n")
-                
+
                 start_ms = int(current_offset * 1000)
                 end_ms = int((current_offset + duration) * 1000)
-                
+
                 # Use custom title if provided, else use stem
                 stem = Path(f).stem
                 if f in final_titles:
@@ -236,7 +242,7 @@ def assemble_audiobook(
                 metadata += f"START={start_ms}\n"
                 metadata += f"END={end_ms}\n"
                 metadata += f"title={display_name}\n\n"
-                
+
                 current_offset += duration
 
         metadata_file.write_text(metadata, encoding="utf-8")
@@ -244,7 +250,7 @@ def assemble_audiobook(
         # 3. Run FFmpeg
         on_output(f"Assembling audiobook: {book_title}\n")
         on_output(f"Combining {len(files)} files into {output_m4b.name}...\n")
-        
+
         cover_input = ""
         cover_map = ""
         if cover_path and Path(cover_path).exists():
@@ -252,16 +258,16 @@ def assemble_audiobook(
             cover_input = f"-i {shlex.quote(str(cover_path))} "
             # Map chapter 0 (concat audio) and chapter 1 (metadata) and chapter 2 (cover)
             cover_map = "-map 2:v -c:v copy -disposition:v:0 attached_pic "
-        
+
         cmd = (
             f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
             f"-i {shlex.quote(str(metadata_file))} {cover_input} "
             f"-map 0:a {cover_map} -map_metadata 1 "
             f"-c:a aac -b:a {shlex.quote(AUDIOBOOK_BITRATE)} -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
         )
-        
+
         rc = run_cmd_stream(cmd, on_output, cancel_check)
-        
+
         # 4. Copy cover art if successful so frontend can show it in the library
         if rc == 0 and cover_path and Path(cover_path).exists():
             try:

@@ -1,8 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 from pathlib import Path
-import os
-import json
 
 # Import the app from app.web
 from app.web import app
@@ -57,12 +55,12 @@ def test_backfill_surgical_logic(temp_chapter):
     from app.state import put_job, get_jobs, delete_jobs
     from app.models import Job
     import time
-    
+
     # 1. Force a job into state for our temp chapter
     jid = "test_backfill_jid"
     # Cleanup any previous test run
     delete_jobs([jid])
-    
+
     job = Job(
         id=jid,
         engine="xtts",
@@ -72,7 +70,7 @@ def test_backfill_surgical_logic(temp_chapter):
         created_at=time.time()
     )
     put_job(job)
-    
+
     # 2. Create only the WAV file
     stem = Path(temp_chapter).stem
     wav_path = XTTS_OUT_DIR / f"{stem}.wav"
@@ -80,18 +78,18 @@ def test_backfill_surgical_logic(temp_chapter):
     XTTS_OUT_DIR.mkdir(parents=True, exist_ok=True)
     wav_path.write_text("fake wav content", encoding="utf-8")
     if mp3_path.exists(): mp3_path.unlink()
-    
+
     # 3. Call backfill endpoint
-    # Note: we might need to mock wav_to_mp3 if we don't want real ffmpeg in CI, 
+    # Note: we might need to mock wav_to_mp3 if we don't want real ffmpeg in CI,
     # but for local dev it's better to test it really works if ffmpeg is there.
     response = client.post("/queue/backfill_mp3")
     assert response.status_code == 200
     data = response.json()
-    
-    # If ffmpeg is present, 'converted' should be 1. 
+
+    # If ffmpeg is present, 'converted' should be 1.
     # If not, it might be 0 but we can check if it attempted.
     assert "converted" in data
-    
+
     # 4. Check that the job status is 'done' and not 'queued'
     job = get_jobs().get(jid)
     assert job is not None
@@ -99,7 +97,7 @@ def test_backfill_surgical_logic(temp_chapter):
     # If it failed surgical and went to reconciliation, it might be 'queued'
     # but the goal of the fix is to make it 'done'
     assert job.status == "done"
-    
+
     # Cleanup files
     if wav_path.exists(): wav_path.unlink()
     if mp3_path.exists(): mp3_path.unlink()

@@ -25,15 +25,15 @@ def throttled_summarizer(names, urls, content_id):
             try:
                 print(f"[{i+1}/{len(urls)}] Requesting: {url}")
                 response = scraper.get(url, timeout=20)
-                
+
                 if response.status_code == 404:
-                    print(f"   ! 404 Error: Check URL structure.")
-                    break 
-                
+                    print("   ! 404 Error: Check URL structure.")
+                    break
+
                 response.raise_for_status()
                 soup = BeautifulSoup(response.text, 'html.parser')
                 content_element = soup.find(id=content_id)
-                
+
                 if not content_element:
                     print(f"   ! ID '{content_id}' not found.")
                     break
@@ -56,15 +56,15 @@ def throttled_summarizer(names, urls, content_id):
                 # 3. Save the formatted text
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(formatted_text)
-                
+
                 print(f"   ✓ Saved {name} (Formatted)")
                 time.sleep(random.uniform(5.0, 8.0))
-                break 
+                break
 
             except Exception as e:
                 print(f"   ! Attempt {attempt + 1} failed: {e}")
                 time.sleep(10)
 
 if __name__ == "__main__":
-    TARGET_ID = "chr-content" 
+    TARGET_ID = "chr-content"
     throttled_summarizer(RAW_PATHS, CHAPTER_URLS, TARGET_ID)

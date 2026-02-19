@@ -78,14 +78,14 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
 
     parts = []
     part_num = start_index
-    
+
     remaining_text = text.strip()
-    
+
     while remaining_text:
         if len(remaining_text) <= max_chars:
             parts.append((part_num, f"Part {part_num}", remaining_text))
             break
-            
+
         split_point = -1
         chunk = remaining_text[:max_chars]
         p_break = chunk.rfind("\n\n")
@@ -100,7 +100,7 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
                 sent_match = None
                 for m in re.finditer(r'[.!?](\s+|$)', chunk[search_start:]):
                     sent_match = m
-                
+
                 if sent_match:
                     split_point = search_start + sent_match.end()
                 else:
@@ -109,11 +109,11 @@ def split_into_parts(text: str, max_chars: int = 30000, start_index: int = 1) ->
                         split_point = space_break + 1
                     else:
                         split_point = max_chars
-        
+
         parts.append((part_num, f"Part {part_num}", remaining_text[:split_point].strip()))
         remaining_text = remaining_text[split_point:].strip()
         part_num += 1
-        
+
     return parts
 
 def safe_filename(s: str, max_len: int = 80) -> str:
@@ -132,7 +132,7 @@ def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter", i
             # Clean part naming: [OriginalFilename]_[num].txt
             # Using 3 digits as requested (001)
             fname = out_dir / f"{prefix}_{chap_num:03}.txt"
-            
+
         fname.write_text(body + "\n", encoding="utf-8")
         written.append(fname)
     return written
@@ -144,7 +144,7 @@ def split_sentences(text: str):
         if s:
             yield s, m.start(1), m.end(1)
         last_end = m.end()
-    
+
     remainder = text[last_end:].strip()
     if remainder:
         yield remainder, last_end, len(text)
@@ -218,28 +218,28 @@ def clean_text_for_tts(text: str) -> str:
     """Normalize punctuation and characters to avoid TTS speech artifacts."""
     # Remove unspoken formatting characters at the absolute start
     text = preprocess_text(text)
-    
+
     # Handle smart quotes and then strip all quotes (standard and normalized)
     text = text.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
     text = text.replace('"', '')
-    
+
     # Normalize acronyms/initials: A.B. if 2 or more. A. alone is a period.
     # This ensures "A.B.C." isn't split into 4 sentences but "It is I." is handled.
     pattern = r'\b(?:[A-Za-z]\.){2,}'
     text = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), text)
-    
+
     # Normalize fractions (444/7000 -> 444 out of 7000)
     text = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', text)
-    
+
     # Strip leading dots/ellipses/punctuation that often cause hallucinations at the start of blocks
     text = text.lstrip(" .…!?,")
     # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
     text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
-    
+
     # Common redundant punctuation artifacts
     text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
     text = text.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
-    
+
     # Normalize spaces after punctuation (if missing)
     text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
     # Collapse multiple spaces
@@ -253,10 +253,10 @@ def clean_text_for_tts(text: str) -> str:
     text = text.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
     # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
     text = re.sub(r'([!?])\1+', r'\1', text)
-    
+
     # Consolidate short sentences (<= 2 words) (like "Wait!" or "No way!") with neighbors
     text = consolidate_single_word_sentences(text.strip())
-    
+
     return text.strip()
 
 def consolidate_single_word_sentences(text: str) -> str:
@@ -272,7 +272,7 @@ def consolidate_single_word_sentences(text: str) -> str:
         cleaned = s.lstrip(" .…!?,")
         if re.search(r'\w', cleaned):
             sentences.append(cleaned)
-    
+
     if len(sentences) <= 1:
         return text
 
@@ -280,7 +280,7 @@ def consolidate_single_word_sentences(text: str) -> str:
     for i, curr in enumerate(sentences):
         # Count actual words (containing at least one alphanumeric)
         word_count = len([w for w in curr.split() if re.search(r'\w', w)])
-        
+
         if word_count <= 2:
             if i < len(sentences) - 1:
                 # Merge with NEXT (favored)
@@ -296,7 +296,7 @@ def consolidate_single_word_sentences(text: str) -> str:
                 new_sentences.append(curr)
         else:
             new_sentences.append(curr)
-        
+
     return " ".join(new_sentences)
 
 def sanitize_for_xtts(text: str) -> str:
@@ -308,15 +308,15 @@ def sanitize_for_xtts(text: str) -> str:
     text = clean_text_for_tts(text)
 
     # 2. Remove any remaining non-ASCII characters that might cause hallucinations
-    text = re.sub(r'[^\x00-\x7F]+', '', text) 
+    text = re.sub(r'[^\x00-\x7F]+', '', text)
     # Collapse multiple spaces (but preserve newlines) and trim
     text = re.sub(r'[^\S\r\n]+', ' ', text).strip()
-    
+
     # 3. Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
     # Use regex to check for end-of-sentence punctuation even if followed by quotes/parens
     if text and not re.search(r'[.!?]["\')\]\s]*$', text):
         text += "."
-        
+
     return text
 
 def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = False) -> str:
@@ -325,13 +325,13 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
     This gives XTTS the maximum context and prevents choppiness from short lines.
     If pad is True, each chunk is padded with spaces up to the limit.
     """
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
     if not lines:
         return ""
-        
+
     packed = []
     current_chunk = ""
-    
+
     for line in lines:
         if current_chunk and len(current_chunk) + 1 + len(line) <= limit:
             connector = "" if line[0] in ",;:" else " "
@@ -344,10 +344,10 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
                     current_chunk = current_chunk.ljust(limit)
                 packed.append(current_chunk)
             current_chunk = line
-            
+
     if current_chunk:
         if pad:
             current_chunk = current_chunk.ljust(limit)
         packed.append(current_chunk)
-        
+
     return '\n'.join(packed)

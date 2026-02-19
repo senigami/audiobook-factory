@@ -1,6 +1,12 @@
-import os, re, json, time, uuid, queue, shlex, threading, subprocess
+import re
+import json
+import time
+import uuid
+import queue
+import shlex
+import threading
+import subprocess
 from pathlib import Path
-from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 
 from fastapi import FastAPI, Form
@@ -175,7 +181,7 @@ def sanitize_for_xtts(text: str) -> str:
     # Replace ellipses with a comma for better natural pauses without breaking the thought
     text = text.replace('...', ', ')
     # Remove any non-standard characters/emojis
-    text = re.sub(r'[^\x00-\x7F]+', '', text) 
+    text = re.sub(r'[^\x00-\x7F]+', '', text)
     # Collapse multiple spaces and trim
     text = re.sub(r'\s+', ' ', text).strip()
     return text
@@ -185,13 +191,13 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
     Greedily packs sentences into larger chunks as close to the limit as possible.
     This gives XTTS the maximum context and prevents choppiness from short lines.
     """
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
     if not lines:
         return ""
-        
+
     packed = []
     current_chunk = ""
-    
+
     for line in lines:
         # Check if adding this line (plus a space) exceeds the limit
         # We use a small buffer (5 chars) for safety
@@ -204,10 +210,10 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
             if current_chunk:
                 packed.append(current_chunk)
             current_chunk = line
-            
+
     if current_chunk:
         packed.append(current_chunk)
-        
+
     return '\n'.join(packed)
 
 # ----------------
@@ -276,10 +282,10 @@ def xtts_generate(chapter_path: Path, out_wav: Path, safe_mode: bool, cancel_eve
     text = chapter_path.read_text(encoding="utf-8", errors="replace").strip()
     if safe_mode:
         text = safe_split_long_sentences(text)
-    
+
     # Apply advanced sanitization for XTTS stability
     text = sanitize_for_xtts(text)
-    
+
     # Pack sentences to the limit to maximize context and stability
     text = pack_text_to_limit(text)
 

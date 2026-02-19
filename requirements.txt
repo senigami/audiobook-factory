@@ -6,6 +6,7 @@ python-multipart
 httpx
 pytest
 watchdog
+ruff
 
 # XTTS requirements (Managed separately for compatibility)
 # See requirements-xtts.txt

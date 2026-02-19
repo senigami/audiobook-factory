@@ -1,10 +1,7 @@
 import pytest
-import asyncio
-import json
 from fastapi.testclient import TestClient
-from app.web import app, manager
+from app.web import app
 from app.state import update_job
-from app.models import Job
 
 def test_websocket_broadcast():
     client = TestClient(app)
@@ -12,7 +9,7 @@ def test_websocket_broadcast():
         # Manually trigger a job update to test broadcast
         # Since state.py calls listeners, and web.py registers the bridge
         update_job("test_job", status="running", progress=0.1)
-        
+
         # In a real environment, the bridge runs on the main loop.
         # In TestClient, it typically runs synchronously or we might need to wait.
         # But our bridge uses asyncio.run_coroutine_threadsafe.
@@ -20,7 +17,7 @@ def test_websocket_broadcast():
 
         # Let's see if we can catch the message
         try:
-            data = websocket.receive_json()
+            data = websocket.receive_json(timeout=5)
             assert data["type"] == "job_updated"
             assert data["job_id"] == "test_job"
             assert data["updates"]["status"] == "running"

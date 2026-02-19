@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E701", # multiple statements on one line (colon)
+    "F841", # local variable assigned but never used
+    "F401", # unused import
+    "E711", # comparison to None (often used in this codebase)
+    "E501", # line too long
+    "E722", # bare except
+    "W291", # trailing whitespace
+]

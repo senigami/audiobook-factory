@@ -1,8 +1,5 @@
-import pytest
 from fastapi.testclient import TestClient
 from app.web import app
-from pathlib import Path
-import os
 import json
 
 client = TestClient(app)
@@ -28,7 +25,7 @@ def test_create_audiobook_with_labels():
     )
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
-    
+
     # Check if job was created with correct labels
     from app.state import get_jobs
     jobs = get_jobs()

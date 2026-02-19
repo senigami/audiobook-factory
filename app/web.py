@@ -1,5 +1,9 @@
-import time, uuid, re, os, sys
-from typing import Optional, List, Tuple
+import time
+import uuid
+import re
+import os
+import sys
+from typing import Optional, List
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -11,11 +15,11 @@ from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
     XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR
 )
-from .state import get_jobs, get_settings, update_settings, load_state, save_state, clear_all_jobs, update_job
+from .state import get_jobs, get_settings, update_settings, clear_all_jobs, update_job
 from .models import Job
-from .jobs import enqueue, cancel as cancel_job, toggle_pause, paused, requeue, clear_job_queue
+from .jobs import enqueue, cancel as cancel_job, paused, requeue, clear_job_queue
 from .textops import (
-    split_by_chapter_markers, write_chapters_to_folder, 
+    split_by_chapter_markers, write_chapters_to_folder,
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
     split_into_parts, sanitize_for_xtts, pack_text_to_limit
 )
@@ -50,7 +54,7 @@ class ConnectionManager:
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
-            except Exception as e:
+            except Exception:
                 # print(f"DEBUG: Broadcast failed for a connection: {e}")
                 if connection in self.active_connections:
                     self.active_connections.remove(connection)
@@ -70,26 +74,6 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"WS error: {e}")
         manager.disconnect(websocket)
 
-@app.on_event("startup")
-def startup_event():
-    # Re-populate in-memory queue from state on restart
-    existing = get_jobs()
-    count = 0
-    for jid, j in existing.items():
-        if j.status == "queued" or j.status == "running":
-            # Reset stale jobs to 'cancelled' on startup to prevent auto-start
-            update_job(jid,
-                       status="cancelled",
-                       progress=0.0,
-                       started_at=None,
-                       log="Reset on startup.",
-                       finished_at=None,
-                       eta_seconds=None,
-                       error="Restarted",
-                       warning_count=0)
-            count += 1
-    if count > 0:
-        print(f"recovered {count} jobs from state")
 
 # We'll use a globally accessible loop variable for the bridge
 _main_loop = [None]
@@ -134,7 +118,7 @@ def startup_event():
     def job_update_bridge(job_id, updates):
         # We need to bridge from the sync world of state.py to async WebSocket
         loop = _main_loop[0]
-        
+
         if not loop or not loop.is_running():
             try:
                 # If we're called from the main thread but loop not set, capture it
@@ -204,11 +188,12 @@ def list_audiobooks():
     res = []
     # Sort m4b files by modification time or name, here we use name reverse
     m4b_files = sorted(AUDIOBOOK_DIR.glob("*.m4b"), reverse=True)
-    
-    import subprocess, shlex
+
+    import subprocess
+    import shlex
     for p in m4b_files:
         item = {"filename": p.name, "title": p.name, "cover_url": None}
-        
+
         # 1. Try to extract embedded title
         try:
             probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
@@ -227,7 +212,7 @@ def list_audiobooks():
                 item["cover_url"] = f"/out/audiobook/{p.stem}{ext}"
                 found_img = True
                 break
-        
+
         # 2. If not found, try to extract it from the m4b metadata
         if not found_img:
             target_jpg = p.with_suffix(".jpg")
@@ -241,7 +226,7 @@ def list_audiobooks():
             except:
                 # If extraction fails (e.g. no embedded cover), just skip
                 pass
-                
+
         res.append(item)
     return res
 
@@ -264,25 +249,25 @@ def api_home():
     """Returns initial data for the React SPA."""
     from .jobs import cleanup_and_reconcile
     cleanup_and_reconcile()
-    
+
     # 1. Get profiles first (this auto-sets default_speaker_profile if needed)
     profiles = list_speaker_profiles()
-    
+
     # 2. Re-fetch settings so they include the potential new default
     settings = get_settings()
-    
+
     chapters = [p.name for p in list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
-    
+
     # status sets logic
     xtts_wav_only = []
     xtts_mp3 = []
 
     for c in chapters:
         stem = Path(c).stem
-        if (XTTS_OUT_DIR / f"{stem}.mp3").exists(): 
+        if (XTTS_OUT_DIR / f"{stem}.mp3").exists():
             xtts_mp3.append(c)
-        if (XTTS_OUT_DIR / f"{stem}.wav").exists(): 
+        if (XTTS_OUT_DIR / f"{stem}.wav").exists():
             xtts_wav_only.append(c)
 
     return {
@@ -305,7 +290,7 @@ def save_settings(
     curr = get_settings()
     new_safe = safe_mode if safe_mode is not None else curr.get("safe_mode", True)
     new_mp3 = make_mp3 if make_mp3 is not None else curr.get("make_mp3", False)
-    
+
     update_settings(
         safe_mode=new_safe,
         make_mp3=new_mp3
@@ -321,19 +306,19 @@ def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = 
     """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
     if max_chars is None:
         max_chars = PART_CHAR_LIMIT
-    
+
     path = UPLOAD_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Upload not found: {filename}")
 
     full_text = path.read_text(encoding="utf-8", errors="replace")
-    
+
     # Normalize mode for comparison
     mode_clean = str(mode).strip().lower()
     print(f"DEBUG: process_and_split_file mode='{mode}' (clean='{mode_clean}') file='{filename}'")
 
     if mode_clean == "chapter":
-        print(f"DEBUG: Splitting by chapter markers")
+        print("DEBUG: Splitting by chapter markers")
         chapters = split_by_chapter_markers(full_text)
         if not chapters:
             raise ValueError("No chapter markers found. Expected: Chapter 1: Title")
@@ -342,26 +327,26 @@ def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = 
         # Default to parts for anything else
         stem = Path(filename).stem
         print(f"DEBUG: Defaulting to part splitting (current mode='{mode_clean}') for '{stem}'")
-        
+
         chapters = split_into_parts(full_text, max_chars, start_index=1)
         return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=stem, include_heading=False)
 
 @app.post("/upload")
 async def upload(
-    file: UploadFile = File(...), 
-    mode: str = "parts", 
+    file: UploadFile = File(...),
+    mode: str = "parts",
     max_chars: Optional[int] = None
 ):
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / file.filename
     content = await file.read()
     dest.write_bytes(content)
-    
+
     try:
         written = process_and_split_file(file.filename, mode=mode, max_chars=max_chars)
         return JSONResponse({
-            "status": "success", 
-            "filename": file.filename, 
+            "status": "success",
+            "filename": file.filename,
             "chapters": [p.name for p in written]
         })
     except Exception as e:
@@ -394,14 +379,14 @@ def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
                         existing_queued_id = jid
                     else:
                         to_del.append(jid)
-        
+
         if to_del:
             from .state import delete_jobs
             delete_jobs(to_del)
-        
+
         if existing_queued_id:
-            update_job(existing_queued_id, 
-                       progress=0.0, 
+            update_job(existing_queued_id,
+                       progress=0.0,
                        started_at=None,
                        finished_at=None,
                        eta_seconds=None,
@@ -427,7 +412,7 @@ def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
         enqueue(j)
         update_job(jid, status="queued") # trigger bridge
     return JSONResponse({"status": "ok", "message": "XTTS queue started"})
-    
+
 @app.get("/queue/start_xtts")
 def start_xtts_queue_get():
     # Fallback if something triggers GET (e.g., link click or manual navigation)
@@ -466,15 +451,16 @@ async def create_audiobook(
     chapters: str = Form("[]"), # JSON string of {filename, title}
     cover: Optional[UploadFile] = File(None)
 ):
-    import json, shutil
+    import json
+    import shutil
     try:
         chapter_list = json.loads(chapters)
     except:
         chapter_list = []
-        
+
     COVER_DIR.mkdir(parents=True, exist_ok=True)
     AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     cover_path = None
     if cover:
         ext = Path(cover.filename).suffix
@@ -505,9 +491,9 @@ async def create_audiobook(
 def prepare_audiobook():
     """Scans folders and returns a preview of chapters/durations for the modal."""
     from .config import XTTS_OUT_DIR
-    
+
     src_dir = XTTS_OUT_DIR
-        
+
     if not src_dir.exists():
         return JSONResponse({"title": "", "chapters": []})
 
@@ -516,7 +502,7 @@ def prepare_audiobook():
     for f in all_files:
         stem = Path(f).stem
         ext = Path(f).suffix.lower()
-        if stem not in chapters_found or ext == '.mp3': 
+        if stem not in chapters_found or ext == '.mp3':
              chapters_found[stem] = f
 
     def extract_number(filename):
@@ -524,7 +510,7 @@ def prepare_audiobook():
         return int(match.group(1)) if match else 0
 
     sorted_stems = sorted(chapters_found.keys(), key=lambda x: extract_number(x))
-    
+
     preview = []
     total_sec = 0.0
     existing_jobs = get_jobs()
@@ -533,7 +519,7 @@ def prepare_audiobook():
     for stem in sorted_stems:
         fname = chapters_found[stem]
         dur = get_audio_duration(src_dir / fname)
-        
+
         display_name = job_titles.get(stem + ".txt") or job_titles.get(stem) or stem
         preview.append({
             "filename": fname,
@@ -552,7 +538,7 @@ def prepare_audiobook():
 def list_speaker_profiles():
     if not VOICES_DIR.exists():
         return []
-    
+
     dirs = sorted([d for d in VOICES_DIR.iterdir() if d.is_dir()], key=lambda x: x.name)
     settings = get_settings()
     default_speaker = settings.get("default_speaker_profile")
@@ -571,16 +557,15 @@ def list_speaker_profiles():
     profiles = []
     for d in dirs:
         wav_count = len(list(d.glob("*.wav")))
-        
+
         # Load metadata if exists
-        import json
         from .jobs import get_speaker_settings
         spk_settings = get_speaker_settings(d.name)
         speed = spk_settings["speed"]
         test_text = spk_settings["test_text"]
-            
+
         test_wav = VOICES_DIR / d.name / "sample.wav"
-        
+
         profiles.append({
             "name": d.name,
             "is_default": d.name == default_speaker,
@@ -597,14 +582,14 @@ def update_speaker_test_text(name: str, text: str = Form(...)):
     profile_dir = VOICES_DIR / name
     if not profile_dir.exists():
         return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
-    
+
     meta_path = profile_dir / "profile.json"
     meta = {}
     if meta_path.exists():
         try:
             meta = json.loads(meta_path.read_text())
         except: pass
-        
+
     meta["test_text"] = text
     meta_path.write_text(json.dumps(meta, indent=2))
     return {"status": "success", "test_text": text}
@@ -615,7 +600,7 @@ def reset_speaker_test_text(name: str):
     profile_dir = VOICES_DIR / name
     if not profile_dir.exists():
         return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
-    
+
     meta_path = profile_dir / "profile.json"
     if meta_path.exists():
         try:
@@ -624,7 +609,7 @@ def reset_speaker_test_text(name: str):
                 del meta["test_text"]
                 meta_path.write_text(json.dumps(meta, indent=2))
         except: pass
-        
+
     from .jobs import get_speaker_settings
     new_settings = get_speaker_settings(name)
     return {"status": "success", "test_text": new_settings["test_text"]}
@@ -634,7 +619,7 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
     profile_dir = VOICES_DIR / name
     if not profile_dir.exists():
         return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
-    
+
     meta_path = profile_dir / "profile.json"
     import json
     meta = {}
@@ -642,7 +627,7 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
         try:
             meta = json.loads(meta_path.read_text())
         except: pass
-    
+
     meta["speed"] = speed
     meta_path.write_text(json.dumps(meta, indent=2))
     return {"status": "success", "speed": speed}
@@ -655,10 +640,10 @@ async def build_speaker_profile(
     try:
         if not name or not name.strip():
             return JSONResponse({"status": "error", "message": "Invalid profile name"}, status_code=400)
-            
+
         VOICES_DIR.mkdir(parents=True, exist_ok=True)
         profile_dir = VOICES_DIR / name
-        
+
         # Security check to prevent path traversal
         if not str(profile_dir.resolve()).startswith(str(VOICES_DIR.resolve())):
              return JSONResponse({"status": "error", "message": "Invalid profile name (path traversal)"}, status_code=400)
@@ -682,22 +667,22 @@ async def build_speaker_profile(
             else:
                 profile_dir.unlink()
         profile_dir.mkdir()
-        
+
         saved_count = 0
         for f in files:
             if not f.filename or not f.filename.lower().endswith(".wav"):
                 continue
-            
+
             # Use only the basename to prevent sub-directory creation/traversal
             basename = os.path.basename(f.filename)
             dest = profile_dir / basename
             content = await f.read()
             dest.write_bytes(content)
             saved_count += 1
-        
+
         if saved_count == 0:
             return JSONResponse({"status": "error", "message": "No valid .wav files were uploaded"}, status_code=400)
-            
+
         return {"status": "success", "profile": name, "files_saved": saved_count}
     except Exception as e:
         import traceback
@@ -711,15 +696,15 @@ def rename_speaker_profile(name: str, new_name: str = Form(...)):
     from .jobs import get_speaker_wavs
     from .engines import get_speaker_latent_path
     import shutil
-    
+
     old_dir = VOICES_DIR / name
     new_dir = VOICES_DIR / new_name
-    
+
     if not old_dir.exists():
         return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
     if new_dir.exists():
         return JSONResponse({"status": "error", "message": f"Profile '{new_name}' already exists"}, status_code=400)
-    
+
     # 1. Cleanup old latent cache for the old path
     try:
         sw = get_speaker_wavs(name)
@@ -736,19 +721,19 @@ def rename_speaker_profile(name: str, new_name: str = Form(...)):
         shutil.move(str(old_dir), str(new_dir))
     except Exception as e:
         return JSONResponse({"status": "error", "message": f"Move failed: {str(e)}"}, status_code=500)
-    
+
     # 3. Update global settings if this was the default
     settings = get_settings()
     if settings.get("default_speaker_profile") == name:
         update_settings(default_speaker_profile=new_name)
-        
+
     return {"status": "success", "new_name": new_name}
 
 @app.delete("/api/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):
     from .jobs import get_speaker_wavs
     from .engines import get_speaker_latent_path
-    
+
     # 1. Try to find and delete cached latents first
     try:
         sw = get_speaker_wavs(name)
@@ -775,13 +760,13 @@ def test_speaker_profile(name: str = Form(...)):
     sw = get_speaker_wavs(name)
     if not sw:
         return JSONResponse({"status": "error", "message": "No WAVs found for profile"}, status_code=400)
-    
+
     test_out = VOICES_DIR / name / "sample.wav"
     from .jobs import get_speaker_settings
     spk_settings = get_speaker_settings(name)
     test_text = spk_settings["test_text"]
     speed = spk_settings["speed"]
-    
+
     # We run it synchronously for the test
     from .jobs import get_speaker_settings
     settings = get_settings() # Added to get safe_mode setting
@@ -809,13 +794,13 @@ def test_speaker_profile(name: str = Form(...)):
         speaker_wav=sw,
         speed=speed
     )
-    
+
     # Final 100% signal
     if rc == 0:
         broadcast_test_progress(name, 1.0)
     else:
         broadcast_test_progress(name, 0.0)
-    
+
     if rc == 0 and test_out.exists():
         return {"status": "success", "audio_url": f"/out/voices/{name}/sample.wav"}
     return JSONResponse({"status": "error", "message": f"Test generation failed (rc={rc})"}, status_code=500)
@@ -837,12 +822,12 @@ def delete_audiobook(filename: str):
 def reset_chapter(chapter_file: str = Form(...)):
     existing = get_jobs()
     stem = Path(chapter_file).stem
-    
+
     # 1. Stop any running jobs and delete files
     for jid, j in existing.items():
         if j.chapter_file == chapter_file:
             cancel_job(jid)
-            
+
     # 2. Delete files on disk
     count = 0
     for d in [XTTS_OUT_DIR]:
@@ -851,34 +836,34 @@ def reset_chapter(chapter_file: str = Form(...)):
             if f.exists():
                 f.unlink()
                 count += 1
-                
+
     # 3. Update job records to 'cancelled' so they don't auto-start
     # but preserve custom titles etc.
     for jid, j in existing.items():
         if j.chapter_file == chapter_file:
-            update_job(jid, 
-                       status="cancelled", 
-                       progress=0.0, 
-                       output_wav=None, 
+            update_job(jid,
+                       status="cancelled",
+                       progress=0.0,
+                       output_wav=None,
                        output_mp3=None,
                        log="Audio reset by user.",
                        error=None,
                        warning_count=0)
-                       
+
     return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
 
 @app.delete("/api/chapter/{filename}")
 def delete_chapter(filename: str):
     path = CHAPTER_DIR / filename
     stem = path.stem
-    
+
     # 1. Delete audio files
     for d in [XTTS_OUT_DIR]:
         for ext in [".wav", ".mp3"]:
             f = d / f"{stem}{ext}"
             if f.exists():
                 f.unlink()
-                
+
     # 2. Delete job records
     existing = get_jobs()
     to_del = []
@@ -886,16 +871,16 @@ def delete_chapter(filename: str):
         if j.chapter_file == filename:
             cancel_job(jid)
             to_del.append(jid)
-    
+
     if to_del:
         from .state import delete_jobs
         delete_jobs(to_del)
-        
+
     # 3. Delete text file
     if path.exists():
         path.unlink()
         return JSONResponse({"status": "ok", "message": f"Deleted chapter {filename}"})
-        
+
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
 
 @app.post("/api/queue/single")
@@ -905,7 +890,7 @@ def enqueue_single(
 ):
     settings = get_settings()
     existing = get_jobs()
-    
+
     # 1. Prune old records for this chapter
     to_del = []
     existing_title = None
@@ -917,11 +902,11 @@ def enqueue_single(
                 if j.status == "running":
                     return JSONResponse({"status": "error", "message": "Chapter already running"}, status_code=400)
                 to_del.append(jid)
-    
+
     if to_del:
         from .state import delete_jobs
         delete_jobs(to_del)
-    
+
     # 2. Create and enqueue
     jid = uuid.uuid4().hex[:12]
     j = Job(
@@ -937,7 +922,7 @@ def enqueue_single(
     )
     enqueue(j)
     update_job(jid, status="queued") # trigger bridge
-    
+
     return JSONResponse({"status": "ok", "job_id": jid})
 
 def _run_analysis(chapter_file: str):
@@ -946,26 +931,26 @@ def _run_analysis(chapter_file: str):
         return None, "Chapter file not found."
 
     text = p.read_text(encoding="utf-8", errors="replace")
-    
+
     # Stats
     char_count = len(text)
     word_count = len(text.split())
     # Rough sentence count based on punctuation
     sent_count = text.count('.') + text.count('?') + text.count('!')
-    
+
     from .jobs import BASELINE_XTTS_CPS
     from .config import SENT_CHAR_LIMIT
 
     pred_seconds = int(char_count / BASELINE_XTTS_CPS)
-    
+
     # Analysis logic
     raw_hits = find_long_sentences(text)
-    
+
     # Processed text analysis
     cleaned_text = clean_text_for_tts(text)
     split_text = safe_split_long_sentences(cleaned_text)
     cleaned_hits = find_long_sentences(split_text)
-    
+
     uncleanable = len(cleaned_hits)
     auto_fixed = len(raw_hits) - uncleanable
 
@@ -978,20 +963,20 @@ def _run_analysis(chapter_file: str):
         f"Sentence Count    : {sent_count:,} (approx)",
         f"Predicted Time    : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
     ]
-    
+
     if len(raw_hits) > 0:
         lines.extend([
-            f"--------------------------------------------------",
+            "--------------------------------------------------",
             f"Limit Threshold   : {SENT_CHAR_LIMIT} characters",
             f"Raw Long Sentences: {len(raw_hits)}",
             f"Auto-Fixable      : {auto_fixed} (handled by Safe Mode)",
             f"Action Required   : {uncleanable} (STILL too long after split!)",
-            f"--------------------------------------------------",
+            "--------------------------------------------------",
             ""
         ])
     else:
         lines.append("")
-    
+
     if uncleanable > 0:
         lines.append("!!! ACTION REQUIRED: The following sentences could not be auto-split !!!")
         lines.append("")
@@ -1013,15 +998,15 @@ def backfill_mp3_queue():
     from .jobs import cleanup_and_reconcile, requeue
     from .engines import wav_to_mp3
     from .state import update_job, get_jobs
-    
+
     print("DEBUG: Starting backfill_mp3_queue")
     # 1. Reconcile state
     reset_ids = cleanup_and_reconcile()
     print(f"DEBUG: cleanup_and_reconcile reset {len(reset_ids)} jobs: {reset_ids}")
-    
+
     converted = 0
     failed = 0
-    
+
     # 2. Identify orphaned WAVs and convert surgically
     all_jobs = get_jobs()
     for d_path in [XTTS_OUT_DIR]:
@@ -1030,11 +1015,11 @@ def backfill_mp3_queue():
             mp3 = wav.with_suffix(".mp3")
             if mp3.exists():
                 continue
-            
+
             # Found a WAV without an MP3
             stem = wav.stem
             print(f"DEBUG: Found orphaned WAV: {wav} (stem: {stem})")
-            
+
             jid = None
             job_obj = None
             for _jid, _j in all_jobs.items():
@@ -1042,7 +1027,7 @@ def backfill_mp3_queue():
                     jid = _jid
                     job_obj = _j
                     break
-            
+
             if job_obj:
                 print(f"DEBUG: Matching job found: {jid} for {job_obj.chapter_file}. make_mp3={job_obj.make_mp3}")
                 if job_obj.make_mp3:
@@ -1066,8 +1051,8 @@ def backfill_mp3_queue():
         requeue(rid)
 
     return JSONResponse({
-        "status": "success", 
-        "converted": converted, 
+        "status": "success",
+        "converted": converted,
         "failed": failed,
         "reconciled_and_requeued": len(reset_ids)
     })
@@ -1108,17 +1093,17 @@ def api_jobs():
     from .state import get_jobs
     from .jobs import cleanup_and_reconcile
     cleanup_and_reconcile()
-    
+
     all_jobs = get_jobs()
-    
+
     # Group by chapter_file, prioritizing running/queued over others
     # Sort by created_at so that for the same status, newer ones win.
     sorted_jobs = sorted(all_jobs.values(), key=lambda j: (1 if j.status in ["running", "queued"] else 0, j.created_at))
-    
+
     jobs_dict = {}
     for j in sorted_jobs:
         jobs_dict[j.chapter_file] = asdict(j)
-    
+
     # Dynamic progress update based on time
     now = time.time()
     for j in jobs_dict.values():
@@ -1135,11 +1120,11 @@ def api_jobs():
         existing = jobs_dict.get(c)
         if existing and existing['status'] == 'done' and (existing.get('output_mp3') or existing.get('output_wav')):
             continue
-            
+
         stem = Path(c).stem
         x_mp3 = (XTTS_OUT_DIR / f"{stem}.mp3")
         x_wav = (XTTS_OUT_DIR / f"{stem}.wav")
-        
+
         found_job = {}
         if x_mp3.exists():
             found_job.update({"status": "done", "engine": "xtts", "output_mp3": x_mp3.name})
@@ -1147,7 +1132,7 @@ def api_jobs():
             found_job.update({"engine": "xtts", "output_wav": x_wav.name})
             if not found_job.get("status"):
                 found_job["status"] = "done" # If only wav exists, it's still "done" in terms of generation
-        
+
         if found_job:
             found_job["log"] = "Job auto-discovered from existing files."
             if existing:
@@ -1163,14 +1148,14 @@ def api_jobs():
 
     jobs = list(jobs_dict.values())
     jobs.sort(key=lambda j: j.get('created_at', 0))
-    
+
     # Optimization: Remove full logs from list view to save bandwidth, EXCEPT for running jobs
     for j in jobs:
         if j.get('status') == 'running':
             continue
         if 'log' in j:
             del j['log']
-            
+
     return JSONResponse(jobs[:400])
 
 @app.get("/api/active_job")
@@ -1180,17 +1165,17 @@ def api_active_job():
     running = [j for j in jobs if j.status == "running"]
     if not running:
         return JSONResponse(None)
-    
+
     # Return the first running job (should only be one)
     j = running[0]
-    
+
     # Calculate dynamic progress/elapsed for the API response too
     if j.started_at and j.eta_seconds:
         now = time.time()
         elapsed = now - j.started_at
         time_prog = min(0.99, elapsed / float(j.eta_seconds))
         j.progress = max(j.progress, time_prog)
-        
+
     return JSONResponse(asdict(j))
 
 @app.get("/api/job/{chapter_file}")
@@ -1201,7 +1186,7 @@ def api_get_job(chapter_file: str):
     found = [j for j in jobs if j.chapter_file == chapter_file]
     if found:
         return JSONResponse(asdict(found[0]))
-    
+
     # If not found in memory/state, try auto-discovery again for logs?
     # For now just return 404
     return JSONResponse(None, status_code=404)
@@ -1210,16 +1195,17 @@ def api_get_job(chapter_file: str):
 def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
     """Updates the custom title for a specific job or all jobs for a chapter."""
     from .state import get_jobs, update_job, put_job
-    import time, uuid
+    import time
+    import uuid
     all_jobs = get_jobs()
-    
+
     # 1. Update EVERY existing job for this chapter file
     found_any = False
     for jid, j in all_jobs.items():
         if j.chapter_file == chapter_file:
             update_job(jid, custom_title=new_title)
             found_any = True
-            
+
     # 2. If no jobs exist yet, create a placeholder job record so the name is saved
     if not found_any:
         # Check if the chapter file actually exists on disk
@@ -1232,7 +1218,7 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
                 id=jid,
                 engine="xtts", # Default engine for the record
                 chapter_file=chapter_file,
-                status="done", 
+                status="done",
                 created_at=time.time(),
                 custom_title=new_title,
                 log="Job record created to store custom title."
@@ -1242,7 +1228,7 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
 
     if not found_any:
         return JSONResponse({"error": "Chapter not found."}, status_code=404)
-    
+
     return JSONResponse({"status": "success", "custom_title": new_title})
 
 @app.post("/queue/clear")
@@ -1259,17 +1245,17 @@ def api_preview(chapter_file: str, processed: bool = False):
     p = CHAPTER_DIR / chapter_file
     if not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
-    
+
     text = read_preview(p, max_chars=1000000)
     analysis = None
-    
+
     if processed:
         settings = get_settings()
         is_safe = settings.get("safe_mode", True)
-        
+
         # Include analysis report
         _, analysis = _run_analysis(chapter_file)
-        
+
         if is_safe:
             # Mimic the engine processing pipeline (Safe Mode ON)
             text = sanitize_for_xtts(text)
@@ -1278,7 +1264,7 @@ def api_preview(chapter_file: str, processed: bool = False):
             # Raw mode: Absolute bare minimum to prevent speech engine crashes
             text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
             text = text.strip()
-            
+
         text = pack_text_to_limit(text, pad=True)
-        
+
     return JSONResponse({"text": text, "analysis": analysis})

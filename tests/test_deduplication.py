@@ -1,39 +1,37 @@
-import pytest
 from fastapi.testclient import TestClient
 from app.web import app
-from app.state import get_jobs, load_state, clear_all_jobs
-import time
+from app.state import get_jobs, clear_all_jobs
 
 def test_deduplication():
     client = TestClient(app)
-    
+
     # Ensure starting state is empty
     clear_all_jobs()
-    
+
     # 1. Start XTTS queue
     client.post("/queue/start_xtts")
     jobs_v1 = get_jobs()
-    files_v1 = [j.chapter_file for j in jobs_v1.values()]
-    ids_v1 = set(jobs_v1.keys())
-    
+    [j.chapter_file for j in jobs_v1.values()]
+    set(jobs_v1.keys())
+
     # 2. Start XTTS queue again
     # It should prune the old jobs (which are likely finished/failed unless worker is active)
     # Actually, worker will be active in background if uvicorn is running, but in TestClient it depends.
     client.post("/queue/start_xtts")
     jobs_v2 = get_jobs()
     files_v2 = [j.chapter_file for j in jobs_v2.values()]
-    ids_v2 = set(jobs_v2.keys())
-    
+    set(jobs_v2.keys())
+
     # There should only be ONE job per file in the final state
     assert len(files_v2) == len(set(files_v2))
-    
+
     # The IDs should have changed (pruned and replaced) or stayed same if active
     # But since they were likely not started yet, they should have been pruned.
     # The key is that we don't have DUPLICATES for the same file.
     file_counts = {}
     for j in jobs_v2.values():
         file_counts[j.chapter_file] = file_counts.get(j.chapter_file, 0) + 1
-    
+
     for f, count in file_counts.items():
         assert count == 1, f"Duplicate found for {f}"
 

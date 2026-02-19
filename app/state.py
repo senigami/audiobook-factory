@@ -120,7 +120,7 @@ def get_jobs() -> Dict[str, Job]:
         # Safety: only pass keys that exist in the current Job dataclass
         import dataclasses
         job_fields = {f.name for f in dataclasses.fields(Job)}
-        
+
         jobs = {}
         for jid, jdata in raw.items():
             filtered = {k: v for k, v in jdata.items() if k in job_fields}
@@ -146,7 +146,7 @@ def update_job(job_id: str, **updates) -> None:
         j.update(updates)
         jobs[job_id] = j
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
-        
+
         # Notify listeners
         for callback in _JOB_LISTENERS:
             try:

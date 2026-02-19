@@ -1,4 +1,3 @@
-import pytest
 from app.textops import (
     sanitize_for_xtts,
     safe_split_long_sentences,
@@ -62,7 +61,7 @@ def test_pack_text_to_limit():
     text = "Short line 1.\nShort line 2.\nShort line 3."
     packed = pack_text_to_limit(text, limit=100)
     assert packed == "Short line 1. Short line 2. Short line 3."
-    
+
     packed_small = pack_text_to_limit(text, limit=15)
     assert "Short line 1.\nShort line 2.\nShort line 3." == packed_small
 
