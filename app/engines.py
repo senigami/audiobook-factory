@@ -303,11 +303,13 @@ def generate_video_sample(
         return 1
 
     logo_filter = ""
-    inputs = f"-f lavfi -i color=c=black:s=1280x720:d={max_duration} -i {shlex.quote(str(input_audio))}"
+    # Small 400x400 canvas for a compact player feel
+    inputs = f"-f lavfi -i color=c=black:s=400x400:d={max_duration} -i {shlex.quote(str(input_audio))}"
     
     if logo_path and logo_path.exists():
         inputs += f" -i {shlex.quote(str(logo_path))}"
-        logo_filter = '-filter_complex "[0:v][2:v]overlay=W-w-20:H-h-20[outv]" -map "[outv]" '
+        # Scale logo to fit 400x400 and center it
+        logo_filter = '-filter_complex "[2:v]scale=400:400:force_original_aspect_ratio=decrease[logo];[0:v][logo]overlay=(W-w)/2:(H-h)/2[outv]" -map "[outv]" '
     else:
         logo_filter = '-map 0:v '
 
