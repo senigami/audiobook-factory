@@ -365,6 +365,8 @@ def worker_loop(q: "queue.Queue[str]"):
                 new_progress = None
                 new_log = None
 
+                if s: print(f"DEBUG: worker output for {jid}: {s}")
+
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
                     current_p = getattr(j, 'progress', 0.0)
