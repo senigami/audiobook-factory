@@ -91,7 +91,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
   return (
-    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 0 2rem 0', margin: '-2.5rem -2.5rem 0 -2.5rem', background: 'var(--background)', position: 'relative', zIndex: 100 }}>
+    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 0 2rem 0', margin: '-2.5rem -2.5rem 0 -2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
       {/* Editor Header */}
       <header style={{ 
         display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.5rem', 
@@ -135,7 +135,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
           
         {/* Left pane: Text Editor */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '1.5rem', overflowY: 'auto' }}>
-            <div style={{ maxWidth: '800px', width: '100%', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
                     <button 
@@ -168,7 +168,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         placeholder="Start typing your chapter text here..."
                         style={{
                             flex: 1,
-                            background: 'var(--surface-light)',
+                            background: 'var(--bg)',
                             border: '1px solid var(--border)',
                             borderRadius: '12px',
                             padding: '1.5rem',
@@ -183,7 +183,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                 ) : (
                     <div style={{ 
                         flex: 1, 
-                        background: 'var(--surface)', 
+                        background: 'var(--bg)', 
                         border: '1px solid var(--border)', 
                         borderRadius: '12px', 
                         padding: '1.5rem', 
@@ -193,12 +193,21 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         gap: '0.75rem'
                     }}>
                         {(analysis?.safe_text || '').split('\n').filter(Boolean).map((line: string, i: number) => (
-                            <div key={i} style={{ padding: '0.75rem', background: 'var(--surface-light)', borderRadius: '8px', border: '1px solid var(--border)', position: 'relative' }}>
+                            <div key={i} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border)', position: 'relative' }}>
                                 <div style={{ position: 'absolute', top: '0.25rem', right: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                     #{i + 1}
                                 </div>
-                                <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: 0, paddingRight: '1rem', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                                    {line}
+                                <p style={{ 
+                                    fontSize: '0.9rem', 
+                                    color: 'var(--text-primary)', 
+                                    lineHeight: 1.5, 
+                                    margin: 0, 
+                                    paddingRight: '1rem', 
+                                    fontFamily: 'monospace',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-all'
+                                }}>
+                                    {line}|
                                 </p>
                             </div>
                         ))}

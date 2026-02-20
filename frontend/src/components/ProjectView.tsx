@@ -2,17 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Play, Image as ImageIcon, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
-import type { Project, Chapter, Job, Audiobook } from '../types';
+import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types';
 import { ChapterEditor } from './ChapterEditor';
 
 interface ProjectViewProps {
   projectId: string;
   jobs: Record<string, Job>;
+  speakerProfiles: SpeakerProfile[];
   onBack: () => void;
   onNavigateToQueue: () => void;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBack, onNavigateToQueue }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -414,11 +415,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Project Voice:</span>
                           <select 
                               style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem', cursor: 'pointer' }}
-                              defaultValue="Cozy Narrator"
+                              onChange={(e) => {
+                                  // In a real app, we'd save this to the project settings in the DB
+                                  console.log("Selected voice:", e.target.value);
+                              }}
+                              defaultValue={speakerProfiles.find(p => p.is_default)?.name || (speakerProfiles.length > 0 ? speakerProfiles[0].name : "")}
                           >
-                              <option>Cozy Narrator</option>
-                              <option>Deep Voice</option>
-                              <option>British Female</option>
+                              {speakerProfiles.map(p => (
+                                  <option key={p.name} value={p.name}>{p.name}</option>
+                              ))}
                           </select>
                       </div>
                       <button 
@@ -441,31 +446,30 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
           </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
         {chapters.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem', background: 'var(--surface)', borderRadius: '12px', border: '1px dashed var(--border)' }}>
+          <div style={{ textAlign: 'center', padding: '4rem' }}>
             <FileText size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
             <p style={{ color: 'var(--text-muted)' }}>No chapters yet. Add one to get started.</p>
           </div>
         ) : (
-          <Reorder.Group axis="y" values={chapters} onReorder={handleReorder} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <Reorder.Group axis="y" values={chapters} onReorder={handleReorder} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
             {chapters.map((chap, idx) => (
               <Reorder.Item 
                 key={chap.id}
                 value={chap}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 style={{
-                  background: 'var(--surface)',
-                  borderRadius: '12px',
-                  padding: '0.75rem 1.25rem',
-                  border: '1px solid var(--border)',
+                  padding: '0.4rem 1.25rem',
+                  borderBottom: idx === chapters.length - 1 ? 'none' : '1px solid var(--border)',
                   display: 'flex',
-                  gap: '1.5rem',
+                  gap: '1.25rem',
                   alignItems: 'center',
-                  cursor: 'grab'
+                  cursor: 'grab',
+                  background: 'var(--surface)'
                 }}
-                whileDrag={{ scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
+                whileDrag={{ background: 'var(--surface-alt)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
                 dragListener={!isAssemblyMode}
                 onClick={() => {
                     if (isAssemblyMode && chap.audio_status === 'done') {
@@ -476,64 +480,66 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                     }
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '70px', flexShrink: 0 }}>
                     {isAssemblyMode ? (
                         <div style={{ color: chap.audio_status === 'done' ? 'var(--accent)' : 'var(--border)', cursor: chap.audio_status === 'done' ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center' }}>
-                            {selectedChapters.has(chap.id) && chap.audio_status === 'done' ? <CheckSquare size={24} /> : <Square size={24} />}
+                            {selectedChapters.has(chap.id) && chap.audio_status === 'done' ? <CheckSquare size={18} /> : <Square size={18} />}
                         </div>
                     ) : (
-                        <div style={{ cursor: 'grab', color: 'var(--text-muted)' }} title="Drag to reorder">
-                            <GripVertical size={20} />
+                        <div style={{ cursor: 'grab', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }} title="Drag to reorder">
+                            <GripVertical size={14} />
                         </div>
                     )}
                     <div style={{
-                        width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)'
+                        width: '20px', height: '20px', borderRadius: '50%', background: 'var(--surface-light)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.7rem', color: 'var(--text-muted)'
                     }}>
                         {idx + 1}
                     </div>
                 </div>
+
                 <div 
                   onClick={() => { if (!isAssemblyMode) setEditingChapterId(chap.id); }}
-                  style={{ flex: 1, opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1, cursor: isAssemblyMode ? 'default' : 'pointer', padding: '0.5rem 0' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1, cursor: isAssemblyMode ? 'default' : 'pointer', minWidth: '150px', flex: '1 1 0' }}
                   title={isAssemblyMode ? "" : "Click to edit chapter"}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                    <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
-                    {chap.audio_status === 'done' && <span title="Audio Generated"><CheckCircle size={14} color="var(--success)" /></span>}
-                    {chap.audio_status === 'processing' && <span title="Generating Audio..."><Clock size={14} color="var(--warning)" /></span>}
-                    {chap.audio_status === 'error' && <span title="Generation Failed"><AlertTriangle size={14} color="var(--error)" /></span>}
-                    {chap.text_last_modified && chap.audio_generated_at && chap.audio_generated_at > 0 && (chap.text_last_modified > chap.audio_generated_at) && (
-                      <span title="Text modified since last audio generation" style={{ display: 'flex', alignItems: 'center' }}>
-                        <AlertTriangle size={14} color="var(--warning)" />
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    <span>{(chap.audio_length_seconds > 0) ? `${formatLength(chap.audio_length_seconds)} runtime` : `~${formatLength(chap.predicted_audio_length)} runtime`}</span>
-                  </div>
+                    <h4 style={{ fontWeight: 500, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chap.title}</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        {chap.audio_status === 'done' && <span title="Audio Generated"><CheckCircle size={14} color="var(--success)" /></span>}
+                        {chap.audio_status === 'processing' && <span title="Generating Audio..."><Clock size={14} color="var(--warning)" /></span>}
+                        {chap.audio_status === 'error' && <span title="Generation Failed"><AlertTriangle size={14} color="var(--error)" /></span>}
+                        {chap.text_last_modified && chap.audio_generated_at && chap.audio_generated_at > 0 && (chap.text_last_modified > chap.audio_generated_at) && (
+                        <span title="Text modified since last audio generation" style={{ display: 'flex', alignItems: 'center' }}>
+                            <AlertTriangle size={14} color="var(--warning)" />
+                        </span>
+                        )}
+                    </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto' }}>
-                  {chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', flex: '2 1 0', minWidth: 0 }}>
+                  {chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode ? (
                       <audio 
                           controls 
                           src={`/out/xtts/${chap.audio_file_path}`} 
-                          style={{ height: '32px', maxWidth: '260px' }}
+                          style={{ height: '30px', width: '100%', maxWidth: '600px' }}
                           onClick={e => e.stopPropagation()}
                           onPointerDown={e => e.stopPropagation()} 
                       />
+                  ) : (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        ~{formatLength(chap.predicted_audio_length)} runtime
+                    </span>
                   )}
                   
-                  <div style={{ display: 'flex', gap: '0.25rem', borderLeft: chap.audio_status === 'done' ? '1px solid var(--border)' : 'none', paddingLeft: chap.audio_status === 'done' ? '1rem' : '0' }}>
-                      <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
-                        <Zap size={18} />
+                  <div style={{ display: 'flex', gap: '0.15rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto', borderLeft: '1px solid var(--border)', paddingLeft: '1rem', marginLeft: '0.5rem' }}>
+                      <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--accent)' }} title="Add to Generation Queue">
+                        <Zap size={16} />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
-                        <Edit3 size={18} />
+                      <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-secondary)' }} title="Edit Text">
+                        <Edit3 size={16} />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete">
-                        <Trash2 size={18} />
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--error-muted)' }} title="Delete">
+                        <Trash2 size={16} />
                       </button>
                   </div>
                 </div>

@@ -21,6 +21,8 @@
   --glass: rgba(255, 255, 255, 0.02);
   --glass-hover: rgba(255, 255, 255, 0.06);
   --glass-active: rgba(255, 255, 255, 0.1);
+  --surface-light: #1a1a21;
+  --background: var(--bg);
   --header-height: 72px;
 }
 

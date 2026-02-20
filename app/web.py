@@ -386,7 +386,7 @@ async def api_analyze_text(text_content: str = Form(...)):
     split_text = safe_split_long_sentences(cleaned_text)
 
     # Pack the sentences into engine-sized chunks for preview
-    packed_text = pack_text_to_limit(split_text, pad=False)
+    packed_text = pack_text_to_limit(split_text, pad=True)
 
     # We still check for long sentences after splitting (just to log uncleanable)
     cleaned_hits = find_long_sentences(split_text)

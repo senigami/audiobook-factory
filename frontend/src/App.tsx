@@ -31,7 +31,7 @@ function App() {
 
   const fetchQueueCount = async () => {
     try {
-        const res = await fetch('/api/queue');
+        const res = await fetch('/api/processing_queue');
         const queueData = await res.json();
         const active = queueData.filter((q: any) => q.status === 'queued' || q.status === 'running');
         setQueueCount(active.length);
@@ -120,6 +120,7 @@ function App() {
                 <ProjectView 
                   projectId={activeProjectId} 
                   jobs={jobs}
+                  speakerProfiles={initialData?.speaker_profiles || []}
                   onBack={() => setActiveProjectId(null)} 
                   onNavigateToQueue={() => setActiveTab('queue')}
                 />
