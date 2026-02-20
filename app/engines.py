@@ -305,7 +305,7 @@ def generate_video_sample(
     logo_filter = ""
     # Small 400x400 canvas for a compact player feel
     inputs = f"-f lavfi -i color=c=black:s=400x400:d={max_duration} -i {shlex.quote(str(input_audio))}"
-    
+
     if logo_path and logo_path.exists():
         inputs += f" -i {shlex.quote(str(logo_path))}"
         # Scale logo to fit 400x400 and center it

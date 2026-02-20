@@ -308,21 +308,21 @@ def set_default_speaker(name: str = Form(...)):
 async def export_sample(filename: str):
     wav_path, mp3_path = xtts_outputs_for(filename)
     source = mp3_path if mp3_path.exists() else wav_path
-    
+
     if not source.exists():
         return JSONResponse({"status": "error", "message": "Audio not found for this chapter. Generate it first."}, status_code=404)
-    
+
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     out_video = SAMPLES_DIR / (Path(filename).stem + "_sample.mp4")
     logo_path = ASSETS_DIR / "logo.png"
-    
+
     # We run this in a background job or just synchronously for now if it's short
     # Since it's only 2 minutes, it should be relatively quick
     def on_output(line): print(line, end="")
     def cancel_check(): return False
-    
+
     rc = generate_video_sample(source, out_video, logo_path, on_output, cancel_check, max_duration=120)
-    
+
     if rc == 0:
         return {"status": "success", "url": f"/out/samples/{out_video.name}"}
     else:
