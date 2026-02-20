@@ -1,6 +1,71 @@
-import type { Job } from '../types';
+import type { Job, Project, Chapter } from '../types';
 
 export const api = {
+  // --- Projects ---
+  fetchProjects: async (): Promise<Project[]> => {
+    const res = await fetch('/api/projects');
+    return res.json();
+  },
+  fetchProject: async (id: string): Promise<Project> => {
+    const res = await fetch(`/api/projects/${id}`);
+    return res.json();
+  },
+  createProject: async (data: { name: string; series?: string; author?: string; cover?: File }): Promise<{ status: string; project_id: string }> => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    if (data.series) formData.append('series', data.series);
+    if (data.author) formData.append('author', data.author);
+    if (data.cover) formData.append('cover', data.cover);
+    const res = await fetch('/api/projects', { method: 'POST', body: formData });
+    return res.json();
+  },
+  updateProject: async (id: string, data: { name?: string; series?: string; author?: string; cover?: File }): Promise<any> => {
+    const formData = new FormData();
+    if (data.name) formData.append('name', data.name);
+    if (data.series) formData.append('series', data.series);
+    if (data.author) formData.append('author', data.author);
+    if (data.cover) formData.append('cover', data.cover);
+    const res = await fetch(`/api/projects/${id}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  deleteProject: async (id: string): Promise<any> => {
+    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    return res.json();
+  },
+
+  // --- Chapters ---
+  fetchChapters: async (projectId: string): Promise<Chapter[]> => {
+    const res = await fetch(`/api/projects/${projectId}/chapters`);
+    return res.json();
+  },
+  createChapter: async (projectId: string, data: { title: string; text_content?: string; sort_order?: number; file?: File }): Promise<{status: string, chapter: Chapter}> => {
+    const formData = new FormData();
+    formData.append('title', data.title);
+    if (data.text_content) formData.append('text_content', data.text_content);
+    formData.append('sort_order', (data.sort_order || 0).toString());
+    if (data.file) formData.append('file', data.file);
+    const res = await fetch(`/api/projects/${projectId}/chapters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+  updateChapter: async (chapterId: string, data: { title?: string; text_content?: string }): Promise<{status: string, chapter: Chapter}> => {
+    const formData = new FormData();
+    if (data.title) formData.append('title', data.title);
+    if (data.text_content) formData.append('text_content', data.text_content);
+    const res = await fetch(`/api/chapters/${chapterId}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  deleteChapter: async (chapterId: string): Promise<{ status: string }> => {
+    const res = await fetch(`/api/chapters/${chapterId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  reorderChapters: async (projectId: string, chapterIds: string[]): Promise<{ status: string }> => {
+    const formData = new FormData();
+    formData.append('chapter_ids', JSON.stringify(chapterIds));
+    const res = await fetch(`/api/projects/${projectId}/reorder_chapters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+
+  // --- Jobs ---
   fetchJobs: async (): Promise<Job[]> => {
     const res = await fetch('/api/jobs');
     return res.json();
@@ -34,7 +99,7 @@ export const api = {
     const res = await fetch('/api/chapter/reset', { method: 'POST', body: formData });
     return res.json();
   },
-  deleteChapter: async (filename: string): Promise<any> => {
+  deleteLegacyChapter: async (filename: string): Promise<any> => {
     const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },

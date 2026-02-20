@@ -19,6 +19,10 @@ from .config import (
 from .state import get_jobs, get_settings, update_settings, clear_all_jobs, update_job
 from .models import Job
 from .jobs import enqueue, cancel as cancel_job, paused, requeue, clear_job_queue
+from .db import (
+    create_project, get_project, list_projects, update_project, delete_project,
+    list_chapters as db_list_chapters, get_chapter, create_chapter, update_chapter, delete_chapter, reorder_chapters
+)
 from .textops import (
     split_by_chapter_markers, write_chapters_to_folder,
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
@@ -35,6 +39,7 @@ app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts"
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
 app.mount("/out/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="out_samples")
+app.mount("/out/covers", StaticFiles(directory=str(COVER_DIR)), name="out_covers")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -235,6 +240,137 @@ def list_audiobooks():
 
         res.append(item)
     return res
+
+# --- Projects API ---
+@app.get("/api/projects")
+def api_list_projects():
+    return JSONResponse(list_projects())
+
+@app.get("/api/projects/{project_id}")
+def api_get_project(project_id: str):
+    p = get_project(project_id)
+    if not p:
+        return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+    return JSONResponse(p)
+
+@app.post("/api/projects")
+async def api_create_project(
+    name: str = Form(...),
+    series: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    cover: Optional[UploadFile] = File(None)
+):
+    COVER_DIR.mkdir(parents=True, exist_ok=True)
+    cover_path = None
+    if cover:
+        ext = Path(cover.filename).suffix
+        cover_filename = f"{uuid.uuid4().hex}{ext}"
+        cover_p = COVER_DIR / cover_filename
+        content = await cover.read()
+        cover_p.write_bytes(content)
+        cover_path = f"/out/covers/{cover_filename}"
+
+    pid = create_project(name, series, author, cover_path)
+    return JSONResponse({"status": "success", "project_id": pid})
+
+@app.put("/api/projects/{project_id}")
+async def api_update_project(
+    project_id: str,
+    name: Optional[str] = Form(None),
+    series: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    cover: Optional[UploadFile] = File(None)
+):
+    p = get_project(project_id)
+    if not p:
+        return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+
+    updates = {}
+    if name is not None: updates["name"] = name
+    if series is not None: updates["series"] = series
+    if author is not None: updates["author"] = author
+
+    if cover:
+        COVER_DIR.mkdir(parents=True, exist_ok=True)
+        ext = Path(cover.filename).suffix
+        cover_filename = f"{uuid.uuid4().hex}{ext}"
+        cover_p = COVER_DIR / cover_filename
+        content = await cover.read()
+        cover_p.write_bytes(content)
+        updates["cover_image_path"] = f"/out/covers/{cover_filename}"
+
+    if updates:
+        update_project(project_id, **updates)
+
+    return JSONResponse({"status": "success", "project_id": project_id})
+
+@app.delete("/api/projects/{project_id}")
+def api_delete_project(project_id: str):
+    success = delete_project(project_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+# --------------------
+
+# --- Chapters API ---
+@app.get("/api/projects/{project_id}/chapters")
+def api_list_project_chapters(project_id: str):
+    return JSONResponse(db_list_chapters(project_id))
+
+@app.post("/api/projects/{project_id}/chapters")
+async def api_create_chapter(
+    project_id: str,
+    title: str = Form(...),
+    text_content: Optional[str] = Form(""),
+    sort_order: int = Form(0),
+    file: Optional[UploadFile] = File(None)
+):
+    actual_text = text_content or ""
+    if file:
+        content = await file.read()
+        try:
+            actual_text = content.decode('utf-8')
+        except UnicodeDecodeError:
+            actual_text = content.decode('latin-1', errors='replace')
+
+    cid = create_chapter(project_id, title, actual_text, sort_order)
+    new_chapter = get_chapter(cid)
+    return JSONResponse({"status": "success", "chapter": new_chapter})
+
+@app.put("/api/chapters/{chapter_id}")
+async def api_update_chapter_details(
+    chapter_id: str,
+    title: Optional[str] = Form(None),
+    text_content: Optional[str] = Form(None)
+):
+    updates = {}
+    if title is not None: updates["title"] = title
+    if text_content is not None: updates["text_content"] = text_content
+
+    if updates:
+        update_chapter(chapter_id, **updates)
+
+    return JSONResponse({"status": "success", "chapter": get_chapter(chapter_id)})
+
+@app.delete("/api/chapters/{chapter_id}")
+def api_delete_chapter_record(chapter_id: str):
+    success = delete_chapter(chapter_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+import json
+@app.post("/api/projects/{project_id}/reorder_chapters")
+async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
+    try:
+        ids_list = json.loads(chapter_ids)
+        success = reorder_chapters(project_id, ids_list)
+        if success:
+            return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "error", "message": "Failed to reorder"}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+# --------------------
 
 @app.get("/")
 def api_welcome():

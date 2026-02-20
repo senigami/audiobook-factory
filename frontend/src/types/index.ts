@@ -1,6 +1,31 @@
 export type Engine = 'xtts' | 'audiobook';
 export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
+export interface Project {
+  id: string;
+  name: string;
+  series: string | null;
+  author: string | null;
+  cover_image_path: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface Chapter {
+  id: string;
+  project_id: string;
+  title: string;
+  text_content: string;
+  sort_order: number;
+  audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
+  audio_file_path: string | null;
+  text_last_modified: number | null;
+  audio_generated_at: number | null;
+  char_count: number;
+  word_count: number;
+  predicted_audio_length: number;
+}
+
 export interface SpeakerProfile {
   name: string;
   wav_count: number;
