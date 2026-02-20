@@ -12,7 +12,7 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs }) => {
   const navItems = [
     { id: 'library', label: 'Library', icon: Library },
-    { id: 'synthesis', label: 'Synthesis', icon: Zap },
+    { id: 'queue', label: 'Queue', icon: Zap },
     { id: 'voices', label: 'Voices', icon: Mic },
     { id: 'assembly', label: 'Assembly', icon: Library },
   ];

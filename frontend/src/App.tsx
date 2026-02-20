@@ -8,6 +8,7 @@ import { SynthesisTab } from './components/SynthesisTab';
 import { LibraryTab } from './components/LibraryTab';
 import { ProjectLibrary } from './components/ProjectLibrary';
 import { ProjectView } from './components/ProjectView';
+import { GlobalQueue } from './components/GlobalQueue';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
 import type { Job } from './types';
@@ -15,7 +16,7 @@ import type { Job } from './types';
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
   const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
-  const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library' | 'assembly'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
@@ -105,41 +106,42 @@ function App() {
               />
             )}
             {activeTab === 'library' && (
-              <ProjectLibrary 
-                onSelectProject={(id: string) => {
-                    setActiveProjectId(id);
-                    setActiveTab('synthesis');
-                }}
-              />
-            )}
-            {activeTab === 'synthesis' && (
               activeProjectId ? (
                 <ProjectView 
                   projectId={activeProjectId} 
-                  onBack={() => {
-                    setActiveProjectId(null);
-                    setActiveTab('library');
-                  }} 
+                  jobs={jobs}
+                  onBack={() => setActiveProjectId(null)} 
+                  onNavigateToQueue={() => setActiveTab('queue')}
                 />
               ) : (
-                <SynthesisTab
-                  chapters={chaptersToShow}
-                  jobs={jobs}
-                  selectedFile={selectedFile}
-                  onSelect={setSelectedFile}
-                  statusSets={{
-                    xttsMp3: initialData?.xtts_mp3 || [],
-                    xttsWav: initialData?.xtts_wav_only || [],
-                  }}
-                  onRefresh={handleRefresh}
-                  speakerProfiles={initialData?.speaker_profiles || []}
-                  paused={initialData?.paused || false}
-                  settings={initialData?.settings}
-                  hideFinished={hideFinished}
-                  onToggleHideFinished={() => setHideFinished(!hideFinished)}
-                  onOpenPreview={setPreviewFilename}
+                <ProjectLibrary
+                  onSelectProject={setActiveProjectId}
                 />
               )
+            )}
+            
+            {activeTab === 'queue' && (
+                <GlobalQueue />
+            )}
+
+            {activeTab === 'synthesis' && (
+              <SynthesisTab
+                chapters={chaptersToShow}
+                jobs={jobs}
+                selectedFile={selectedFile}
+                onSelect={setSelectedFile}
+                statusSets={{
+                  xttsMp3: initialData?.xtts_mp3 || [],
+                  xttsWav: initialData?.xtts_wav_only || [],
+                }}
+                onRefresh={handleRefresh}
+                speakerProfiles={initialData?.speaker_profiles || []}
+                paused={initialData?.paused || false}
+                settings={initialData?.settings}
+                hideFinished={hideFinished}
+                onToggleHideFinished={() => setHideFinished(!hideFinished)}
+                onOpenPreview={setPreviewFilename}
+              />
             )}
             {activeTab === 'assembly' && (
               <LibraryTab

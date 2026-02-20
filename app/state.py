@@ -147,6 +147,14 @@ def update_job(job_id: str, **updates) -> None:
         jobs[job_id] = j
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
+        # Sync with SQLite DB if this job corresponds to a processing_queue item
+        if "status" in updates:
+            try:
+                from .db import update_queue_item
+                update_queue_item(job_id, updates["status"])
+            except Exception as e:
+                print(f"Warning: Failed to sync job status to SQLite: {e}")
+
         # Notify listeners
         for callback in _JOB_LISTENERS:
             try:
