@@ -37,22 +37,29 @@ def init_db():
 
             # Chapters table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chapters (
-                id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                text_content TEXT,
-                sort_order INTEGER NOT NULL,
-                audio_status TEXT NOT NULL DEFAULT 'unprocessed',
-                audio_file_path TEXT,
-                text_last_modified REAL,
-                audio_generated_at REAL,
-                char_count INTEGER DEFAULT 0,
-                word_count INTEGER DEFAULT 0,
-                predicted_audio_length REAL DEFAULT 0.0,
-                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
+                CREATE TABLE IF NOT EXISTS chapters (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    text_content TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    audio_status TEXT DEFAULT 'unprocessed',
+                    audio_file_path TEXT,
+                    text_last_modified REAL,
+                    audio_generated_at REAL,
+                    char_count INTEGER DEFAULT 0,
+                    word_count INTEGER DEFAULT 0,
+                    predicted_audio_length REAL DEFAULT 0.0,
+                    audio_length_seconds REAL DEFAULT 0.0,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                )
             """)
+
+            # Migration for adding audio_length_seconds if it doesn't exist
+            cursor.execute("PRAGMA table_info(chapters)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'audio_length_seconds' not in columns:
+                cursor.execute("ALTER TABLE chapters ADD COLUMN audio_length_seconds REAL DEFAULT 0.0")
 
             # Processing Queue table
             cursor.execute("""
@@ -250,7 +257,7 @@ def get_queue() -> List[Dict[str, Any]]:
             """)
             return [dict(row) for row in cursor.fetchall()]
 
-def update_queue_item(queue_id: str, status: str) -> bool:
+def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 0.0) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -268,7 +275,10 @@ def update_queue_item(queue_id: str, status: str) -> bool:
                 if status == 'done':
                     # Assuming standard naming output by jobs.py
                     audio_path = f"sqlite_{chapter_id}_{split_part}.mp3"
-                    cursor.execute("UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ? WHERE id = ?", (audio_path, now, chapter_id))
+                    cursor.execute(
+                        "UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ?, audio_length_seconds = ? WHERE id = ?", 
+                        (audio_path, now, audio_length_seconds, chapter_id)
+                    )
                 elif status in ['failed', 'error']:
                     cursor.execute("UPDATE chapters SET audio_status = 'error' WHERE id = ?", (chapter_id,))
                 elif status == 'running':

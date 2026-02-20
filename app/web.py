@@ -1442,6 +1442,15 @@ from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear
 def api_get_queue():
     return JSONResponse(get_queue())
 
+@app.post("/api/migration/import_legacy")
+def api_import_legacy():
+    from .migration import import_legacy_filesystem_data
+    try:
+        result = import_legacy_filesystem_data()
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
 @app.post("/api/processing_queue")
 def api_add_to_queue(project_id: str = Form(...), chapter_id: str = Form(...), split_part: int = Form(0)):
     try:

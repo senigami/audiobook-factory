@@ -24,6 +24,7 @@ export interface Chapter {
   char_count: number;
   word_count: number;
   predicted_audio_length: number;
+  audio_length_seconds: number;
 }
 
 export interface ProcessingQueueItem {
