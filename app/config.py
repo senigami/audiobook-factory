@@ -9,6 +9,8 @@ XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
 AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
 VOICES_DIR = BASE_DIR / "voices"
 COVER_DIR = BASE_DIR / "uploads" / "covers"
+SAMPLES_DIR = BASE_DIR / "samples"
+ASSETS_DIR = BASE_DIR / "assets"
 
 
 # Your existing environments (adjust only if different)

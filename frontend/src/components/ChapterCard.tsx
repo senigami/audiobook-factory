@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText, Video, Loader2 } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
@@ -19,8 +19,6 @@ interface ChapterCardProps {
   makeMp3?: boolean;
 }
 
-
-
 const getStatusConfig = (status: Status) => {
   const config = {
     queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
@@ -37,6 +35,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [showMenu, setShowMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const status = job?.status || 'queued';
 
@@ -241,6 +240,41 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                   style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start' }}
                 >
                   <FileText size={12} /> Preview & Analyze
+                </button>
+                <button
+                  disabled={isExporting || !(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)}
+                  onClick={async () => {
+                    setShowMenu(false);
+                    setIsExporting(true);
+                    try {
+                      const res = await api.exportSample(filename);
+                      if (res.url) {
+                        window.open(res.url, '_blank');
+                      } else {
+                        alert(res.message || 'Export failed');
+                      }
+                    } catch (err) {
+                      console.error('Export failed', err);
+                      alert('Export failed');
+                    } finally {
+                      setIsExporting(false);
+                    }
+                  }}
+                  className="btn-ghost"
+                  style={{ 
+                    width: '100%', 
+                    textAlign: 'left', 
+                    padding: '8px', 
+                    fontSize: '0.75rem', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    justifyContent: 'flex-start',
+                    opacity: (isExporting || !(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)) ? 0.5 : 1
+                  }}
+                >
+                  {isExporting ? <Loader2 size={12} className="animate-spin" /> : <Video size={12} />}
+                  {isExporting ? 'Generating Video...' : 'Export Video Sample'}
                 </button>
                 <button
                   onClick={async () => {

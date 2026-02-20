@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 
@@ -52,6 +53,27 @@ export default defineConfig({
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       }
+    }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      thresholds: {
+        lines: 30,
+        functions: 20,
+        branches: 30,
+        statements: 30
+      },
+      exclude: [
+        'node_modules/**',
+        'src/test/**',
+        '**/*.d.ts',
+        '**/*.test.{ts,tsx}',
+        'vite.config.ts'
+      ]
     }
   }
 })

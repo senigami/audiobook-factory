@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR
+from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR
 from .engines import xtts_generate, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
@@ -188,7 +188,6 @@ def cleanup_and_reconcile():
 
 def get_speaker_wavs(profile_name: str) -> Optional[str]:
     """Returns a comma-separated string of absolute paths for the given profile."""
-    from .config import VOICES_DIR
 
     # User choice or system default
     target_profile = profile_name if profile_name else "Default"
@@ -206,7 +205,6 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
 
 def get_speaker_settings(profile_name: str) -> dict:
     """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
-    from .config import VOICES_DIR
     import json
 
     defaults = get_settings()

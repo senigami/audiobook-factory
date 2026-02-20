@@ -12,3 +12,15 @@ ignore = [
     "E722", # bare except
     "W291", # trailing whitespace
 ]
+
+[tool.coverage.run]
+omit = ["app/xtts_inference.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

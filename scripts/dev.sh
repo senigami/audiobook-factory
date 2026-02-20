@@ -16,7 +16,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "Starting Backend (Uvicorn)..."
 cd "$PROJECT_ROOT"
 source venv/bin/activate
-uvicorn run:app --port 8123 &
+uvicorn run:app --port 8123 --reload &
 BACKEND_PID=$!
 
 # Start Frontend
