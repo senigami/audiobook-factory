@@ -48,8 +48,6 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
 
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 3000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleReorder = async (newOrder: ProcessingQueueItem[]) => {

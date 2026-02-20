@@ -2,18 +2,17 @@ import sqlite3
 import time
 import uuid
 import json
+import os
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-from threading import Lock
+from typing import List, Dict, Any, Optional
+import threading
 
-from .config import BASE_DIR
+# Use a connection pool or a single connection with a lock
+_db_lock = threading.Lock()
+DB_PATH = Path("audiobook_factory.db")
 
-DB_PATH = BASE_DIR / "audiobook_factory.db"
-_db_lock = Lock()
-
-def get_connection() -> sqlite3.Connection:
-    # Use check_same_thread=False because we use a global lock, and we might query from different threads
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -24,15 +23,15 @@ def init_db():
 
             # Projects table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                series TEXT,
-                author TEXT,
-                cover_image_path TEXT,
-                created_at REAL NOT NULL,
-                updated_at REAL NOT NULL
-            )
+                CREATE TABLE IF NOT EXISTS projects (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    series TEXT,
+                    author TEXT,
+                    cover_image_path TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                )
             """)
 
             # Chapters table
@@ -42,54 +41,35 @@ def init_db():
                     project_id TEXT NOT NULL,
                     title TEXT NOT NULL,
                     text_content TEXT,
-                    sort_order INTEGER DEFAULT 0,
+                    sort_order INTEGER,
                     audio_status TEXT DEFAULT 'unprocessed',
                     audio_file_path TEXT,
-                    text_last_modified REAL,
                     audio_generated_at REAL,
-                    char_count INTEGER DEFAULT 0,
-                    word_count INTEGER DEFAULT 0,
-                    sent_count INTEGER DEFAULT 0,
-                    predicted_audio_length REAL DEFAULT 0.0,
-                    audio_length_seconds REAL DEFAULT 0.0,
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                    audio_length_seconds REAL,
+                    text_last_modified REAL,
+                    predicted_audio_length REAL,
+                    FOREIGN KEY (project_id) REFERENCES projects (id)
                 )
             """)
 
-            # Migrations
-            cursor.execute("PRAGMA table_info(chapters)")
-            columns = [col[1] for col in cursor.fetchall()]
-            if 'audio_length_seconds' not in columns:
-                cursor.execute("ALTER TABLE chapters ADD COLUMN audio_length_seconds REAL DEFAULT 0.0")
-            if 'sent_count' not in columns:
-                cursor.execute("ALTER TABLE chapters ADD COLUMN sent_count INTEGER DEFAULT 0")
-
             # Processing Queue table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS processing_queue (
-                id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                chapter_id TEXT NOT NULL,
-                split_part INTEGER DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'queued',
-                created_at REAL NOT NULL,
-                completed_at REAL,
-                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-                FOREIGN KEY(chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
-            )
-            """)
-
-            # Settings table (Key-Value)
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
+                CREATE TABLE IF NOT EXISTS processing_queue (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT,
+                    chapter_id TEXT,
+                    split_part INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'queued',
+                    created_at REAL,
+                    completed_at REAL,
+                    FOREIGN KEY (project_id) REFERENCES projects (id),
+                    FOREIGN KEY (chapter_id) REFERENCES chapters (id)
+                )
             """)
 
             conn.commit()
 
-# Project Functions
+# --- Project Functions ---
 def create_project(name: str, series: Optional[str] = None, author: Optional[str] = None, cover_image_path: Optional[str] = None) -> str:
     with _db_lock:
         with get_connection() as conn:
@@ -109,9 +89,7 @@ def get_project(project_id: str) -> Optional[Dict[str, Any]]:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
             row = cursor.fetchone()
-            if row:
-                return dict(row)
-            return None
+            return dict(row) if row else None
 
 def list_projects() -> List[Dict[str, Any]]:
     with _db_lock:
@@ -121,18 +99,19 @@ def list_projects() -> List[Dict[str, Any]]:
             return [dict(row) for row in cursor.fetchall()]
 
 def update_project(project_id: str, **updates) -> bool:
-    if not updates:
-        return True
-
+    if not updates: return False
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            updates['updated_at'] = time.time()
-            set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
-            values = list(updates.values())
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(time.time()) # updated_at
             values.append(project_id)
 
-            cursor.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)
+            cursor.execute(f"UPDATE projects SET {', '.join(fields)}, updated_at = ? WHERE id = ?", values)
             conn.commit()
             return cursor.rowcount > 0
 
@@ -140,31 +119,23 @@ def delete_project(project_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("PRAGMA foreign_keys = ON;")
+            # Delete associated chapters first
+            cursor.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
             cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             conn.commit()
             return cursor.rowcount > 0
 
 # --- Chapter Functions ---
-def create_chapter(project_id: str, title: str, text_content: str = "", sort_order: int = 0) -> str:
+def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0) -> str:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
             chapter_id = str(uuid.uuid4())
             now = time.time()
-
-            # Calculate counts
-            char_count = len(text_content)
-            word_count = len(text_content.split())
-            sent_count = text_content.count('.') + text_content.count('?') + text_content.count('!')
-
-            # Simple assumption: 16 chars per second for speech
-            predicted_audio_length = char_count / 16.7
-
             cursor.execute("""
-                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, char_count, word_count, sent_count, predicted_audio_length)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (chapter_id, project_id, title, text_content, sort_order, now, char_count, word_count, sent_count, predicted_audio_length))
+                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, predicted_audio_length)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (chapter_id, project_id, title, text_content, sort_order, now, predicted_audio_length))
             conn.commit()
             return chapter_id
 
@@ -174,8 +145,7 @@ def get_chapter(chapter_id: str) -> Optional[Dict[str, Any]]:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM chapters WHERE id = ?", (chapter_id,))
             row = cursor.fetchone()
-            if row: return dict(row)
-            return None
+            return dict(row) if row else None
 
 def list_chapters(project_id: str) -> List[Dict[str, Any]]:
     with _db_lock:
@@ -185,109 +155,40 @@ def list_chapters(project_id: str) -> List[Dict[str, Any]]:
             return [dict(row) for row in cursor.fetchall()]
 
 def update_chapter(chapter_id: str, **updates) -> bool:
-    if not updates: return True
-
+    if not updates: return False
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
             if 'text_content' in updates:
-                text = updates['text_content']
-                updates['text_last_modified'] = time.time()
-                updates['char_count'] = len(text)
-                updates['word_count'] = len(text.split())
-                updates['sent_count'] = text.count('.') + text.count('?') + text.count('!')
-                updates['predicted_audio_length'] = len(text) / 16.7
-
-            set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
-            values = list(updates.values())
+                fields.append("text_last_modified = ?")
+                values.append(time.time())
             values.append(chapter_id)
 
-            cursor.execute(f"UPDATE chapters SET {set_clause} WHERE id = ?", values)
+            cursor.execute(f"UPDATE chapters SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
             return cursor.rowcount > 0
 
 def delete_chapter(chapter_id: str) -> bool:
-    print(f"[DB] Attempting to delete chapter: {chapter_id}")
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            # 1. Get info before deletion
-            cursor.execute("SELECT title, project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
-            item = cursor.fetchone()
-            if not item:
-                print(f"[DB] Chapter {chapter_id} not found for deletion")
-                return False
-
-            # 2. Perform deletion (with FK cascade enabled)
-            cursor.execute("PRAGMA foreign_keys = ON;")
             cursor.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
-            conn.commit()
-            success = cursor.rowcount > 0
-
-            if success:
-                print(f"[DB] Successfully deleted chapter '{item['title']}' from DB")
-                # 3. Physical file cleanup
-                if item['audio_file_path']:
-                    from .config import get_project_audio_dir, XTTS_OUT_DIR
-                    try:
-                        pdir = get_project_audio_dir(item['project_id'])
-                        base_pth = pdir / item['audio_file_path']
-                        base_pth.unlink(missing_ok=True)
-                        if base_pth.suffix == '.mp3':
-                            base_pth.with_suffix('.wav').unlink(missing_ok=True)
-                        else:
-                            base_pth.with_suffix('.mp3').unlink(missing_ok=True)
-                        print(f"[DB] Cleaned up physical audio files in {pdir}")
-                    except Exception as e:
-                        print(f"[DB] Error cleaning up audio files: {e}")
-            # 4. Verify deletion
-            cursor.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,))
-            if cursor.fetchone():
-                print(f"[DB] CRITICAL: Chapter {chapter_id} still exists after DELETE and COMMIT!")
-                return False
-
-            print(f"[DB] Verified chapter {chapter_id} is gone.")
-            return True
-
-def reset_chapter_audio(chapter_id: str) -> bool:
-    with _db_lock:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
-            item = cursor.fetchone()
-            if item and item['audio_file_path']:
-                from .config import get_project_audio_dir
-                try:
-                    pdir = get_project_audio_dir(item['project_id'])
-                    (pdir / item['audio_file_path']).unlink(missing_ok=True)
-                    (pdir / item['audio_file_path'].replace(".mp3", ".wav")).unlink(missing_ok=True)
-                except: pass
-
-            cursor.execute("""
-                UPDATE chapters 
-                SET audio_status = 'unprocessed', 
-                    audio_file_path = NULL, 
-                    audio_length_seconds = 0.0,
-                    audio_generated_at = NULL
-                WHERE id = ?
-            """, (chapter_id,))
             conn.commit()
             return cursor.rowcount > 0
 
-def reorder_chapters(project_id: str, chapter_ids: List[str]) -> bool:
+def reorder_chapters(chapter_ids: List[str]) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("BEGIN TRANSACTION")
-            try:
-                for idx, cid in enumerate(chapter_ids):
-                    cursor.execute("UPDATE chapters SET sort_order = ? WHERE id = ? AND project_id = ?", (idx, cid, project_id))
-                conn.commit()
-                return True
-            except:
-                conn.rollback()
-                return False
+            for i, cid in enumerate(chapter_ids):
+                cursor.execute("UPDATE chapters SET sort_order = ? WHERE id = ?", (i, cid))
+            conn.commit()
+            return True
 
 # --- Processing Queue Functions ---
 def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
@@ -320,6 +221,14 @@ def get_queue() -> List[Dict[str, Any]]:
                     q.created_at ASC
             """)
             return [dict(row) for row in cursor.fetchall()]
+
+def clear_queue() -> int:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue")
+            conn.commit()
+            return cursor.rowcount
 
 def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 0.0) -> bool:
     with _db_lock:
@@ -359,15 +268,37 @@ def remove_from_queue(queue_id: str) -> bool:
             conn.commit()
             return cursor.rowcount > 0
 
+def reconcile_queue_status(active_ids: List[str]):
+    """Sets any 'running' or 'queued' jobs to 'cancelled' if their ID is not in the active_ids list."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Find jobs that are in processing state but not active in state.json
+            placeholders = ','.join(['?'] * len(active_ids)) if active_ids else "''"
+            cursor.execute(f"""
+                UPDATE processing_queue 
+                SET status = 'cancelled', completed_at = ? 
+                WHERE status IN ('running', 'queued') AND id NOT IN ({placeholders})
+            """, (time.time(), *active_ids))
+
+            # Also sync chapter status
+            cursor.execute(f"""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed' 
+                WHERE id IN (
+                    SELECT chapter_id FROM processing_queue 
+                    WHERE status = 'cancelled' AND id NOT IN ({placeholders})
+                )
+            """, (*active_ids,))
+
+            conn.commit()
+
 def reorder_queue(queue_ids: List[str]) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("BEGIN TRANSACTION")
             try:
-                # To reorder by created_at, we just space out the created_at times
-                # Or we can add a sort_order column to processing_queue.
-                # Since we don't have sort_order, we can update created_at to be sequential
                 now = time.time()
                 for idx, qid in enumerate(queue_ids):
                     cursor.execute("UPDATE processing_queue SET created_at = ? WHERE id = ?", (now + idx, qid))
@@ -377,26 +308,17 @@ def reorder_queue(queue_ids: List[str]) -> bool:
                 conn.rollback()
                 return False
 
-def clear_queue() -> int:
-    with _db_lock:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM processing_queue WHERE status = 'queued'")
-            conn.commit()
-            return cursor.rowcount
-
-# Init the DB structurally when module is loaded
-init_db()
-
+# --- Initialization & Migration ---
 def migrate_state_json_to_db():
+    from .config import BASE_DIR
     state_file = BASE_DIR / "state.json"
     if not state_file.exists():
         return
 
+    init_db()
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            # Check if we already migrated
             cursor.execute("SELECT COUNT(*) FROM projects")
             count = cursor.fetchone()[0]
             if count > 0:

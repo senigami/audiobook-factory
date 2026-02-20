@@ -14,7 +14,11 @@ import type { Job } from './types';
 
 function App() {
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
-  const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
+  const { jobs, refreshJobs, testProgress } = useJobs(
+    refetchHome, 
+    () => fetchQueueCount(), 
+    () => refetchHome()
+  );
   const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);

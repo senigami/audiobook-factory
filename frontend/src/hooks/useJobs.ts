@@ -3,7 +3,7 @@ import type { Job } from '../types';
 import { api } from '../api';
 import { useWebSocket } from './useWebSocket';
 
-export const useJobs = (onJobComplete?: () => void) => {
+export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, onPauseUpdate?: (paused: boolean) => void) => {
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
   const prevJobsRef = useRef<Record<string, Job>>({});
@@ -30,10 +30,8 @@ export const useJobs = (onJobComplete?: () => void) => {
     if (data.type === 'job_updated') {
       const { job_id, updates } = data;
       setJobs(prev => {
-        // Find by ID
         const filename = Object.keys(prev).find(f => prev[f].id === job_id);
         if (!filename) {
-          // If not found, it might be a new job, so refresh list
           refreshJobs();
           return prev;
         }
@@ -43,11 +41,15 @@ export const useJobs = (onJobComplete?: () => void) => {
 
         return { ...prev, [filename]: newJob };
       });
+    } else if (data.type === 'queue_updated') {
+        if (onQueueUpdate) onQueueUpdate();
+    } else if (data.type === 'pause_updated') {
+        if (onPauseUpdate) onPauseUpdate(data.paused);
     } else if (data.type === 'test_progress') {
       const { name, progress, started_at } = data;
       setTestProgress(prev => ({ ...prev, [name]: { progress, started_at } }));
     }
-  }, [refreshJobs]);
+  }, [refreshJobs, onQueueUpdate, onPauseUpdate]);
 
   const { connected } = useWebSocket('/ws', handleUpdate);
 

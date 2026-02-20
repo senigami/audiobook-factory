@@ -102,8 +102,35 @@ def broadcast_test_progress(name: str, progress: float, started_at: float = None
             loop
         )
 
+def broadcast_queue_update():
+    """Notify all clients that the processing queue has changed."""
+    import asyncio
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "queue_updated"}),
+            loop
+        )
+
+def broadcast_pause_state(paused: bool):
+    """Notify all clients of a change in pause status."""
+    import asyncio
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "pause_updated", "paused": paused}),
+            loop
+        )
+
 @app.on_event("startup")
 def startup_event():
+    # Capture the main thread's loop for the bridge
+    import asyncio
+    try:
+        _main_loop[0] = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
     # Re-populate in-memory queue from state on restart
     existing = get_jobs()
     count = 0
@@ -122,6 +149,11 @@ def startup_event():
             count += 1
     if count > 0:
         print(f"recovered {count} jobs from state")
+
+    # 2. Reconcile DB queue with what's actually still in memory/state
+    from .db import reconcile_queue_status
+    active_ids = list(get_jobs().keys()) # Only jobs that still exist in state.json
+    reconcile_queue_status(active_ids)
 
     # Register bridge between state updates and WebSocket broadcast
     import asyncio
@@ -652,11 +684,13 @@ def start_xtts_queue_get():
 @app.post("/queue/pause")
 def pause_queue():
     set_paused(True)
+    broadcast_pause_state(True)
     return JSONResponse({"status": "ok", "message": "Queue paused"})
 
 @app.post("/queue/resume")
 def resume_queue():
     set_paused(False)
+    broadcast_pause_state(False)
     return JSONResponse({"status": "ok", "message": "Queue resumed"})
 
 @app.post("/api/queue/cancel_pending")
@@ -1500,6 +1534,10 @@ def api_add_to_queue(
     speaker_profile: Optional[str] = Form(None)
 ):
     try:
+        active_profile = speaker_profile or get_settings().get("default_speaker_profile")
+        if not active_profile:
+            return JSONResponse({"status": "error", "message": "No speaker profile selected and no default set. Please choose a voice first."}, status_code=400)
+
         qid = add_to_queue(project_id, chapter_id, split_part)
 
         # TO INTEGRATE WITH LEGACY WORKER AND PRESERVE SSE:
@@ -1542,6 +1580,7 @@ def api_add_to_queue(
             )
             put_job(j)
             enqueue(j)
+            broadcast_queue_update()
 
         return JSONResponse({"status": "success", "queue_id": qid})
     except Exception as e:
@@ -1553,6 +1592,7 @@ def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
         q_list = [q.strip() for q in queue_ids.split(",") if q.strip()]
         success = reorder_queue(q_list)
         if success:
+            broadcast_queue_update()
             return JSONResponse({"status": "success"})
         return JSONResponse({"status": "error", "message": "Failed to reorder queue"}, status_code=500)
     except Exception as e:
@@ -1562,12 +1602,14 @@ def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
 def api_remove_from_queue(queue_id: str):
     success = remove_from_queue(queue_id)
     if success:
+        broadcast_queue_update()
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Item not found"}, status_code=404)
 
 @app.delete("/api/processing_queue")
 def api_clear_queue():
     count = db_clear_queue()
+    broadcast_queue_update()
     return JSONResponse({"status": "success", "cleared": count})
 # -----------------------------
 
