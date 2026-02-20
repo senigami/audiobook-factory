@@ -500,17 +500,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
                     <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
-                    {chap.audio_status === 'done' && <CheckCircle size={14} color="var(--success-muted)" />}
-                    {chap.audio_status === 'processing' && <Clock size={14} color="var(--warning)" />}
-                    {chap.audio_status === 'error' && <AlertTriangle size={14} color="var(--error)" />}
-                    {chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at) && (
+                    {chap.audio_status === 'done' && <span title="Audio Generated"><CheckCircle size={14} color="var(--success)" /></span>}
+                    {chap.audio_status === 'processing' && <span title="Generating Audio..."><Clock size={14} color="var(--warning)" /></span>}
+                    {chap.audio_status === 'error' && <span title="Generation Failed"><AlertTriangle size={14} color="var(--error)" /></span>}
+                    {chap.text_last_modified && chap.audio_generated_at && chap.audio_generated_at > 0 && (chap.text_last_modified > chap.audio_generated_at) && (
                       <span title="Text modified since last audio generation" style={{ display: 'flex', alignItems: 'center' }}>
                         <AlertTriangle size={14} color="var(--warning)" />
                       </span>
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    <span>{chap.audio_status === 'done' ? `${formatLength(chap.audio_length_seconds || chap.predicted_audio_length)} runtime` : `~${formatLength(chap.predicted_audio_length)} runtime`}</span>
+                    <span>{(chap.audio_length_seconds > 0) ? `${formatLength(chap.audio_length_seconds)} runtime` : `~${formatLength(chap.predicted_audio_length)} runtime`}</span>
                   </div>
                 </div>
 

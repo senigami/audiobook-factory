@@ -223,15 +223,23 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             {analysis ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div className="glass-panel" style={{ padding: '1rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent)' }}>{analysis.word_count.toLocaleString()}</div>
-                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Words</div>
+                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{analysis.word_count.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Words</div>
                         </div>
-                        <div className="glass-panel" style={{ padding: '1rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent)' }}>
+                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{analysis.char_count.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Chars</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{(analysis.sent_count || 0).toLocaleString()}</div>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Sentences</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>
                                 {Math.floor(analysis.predicted_seconds / 60)}m {analysis.predicted_seconds % 60}s
                             </div>
-                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Est. Audio</div>
+                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Est. Audio</div>
                         </div>
                     </div>
 
