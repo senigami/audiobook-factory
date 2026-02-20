@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from app.web import app, _main_loop
 from app.models import Job
 from app.state import put_job, get_settings, get_jobs
-from app.config import XTTS_OUT_DIR, ASSETS_DIR
 
 client = TestClient(app)
 
