@@ -23,6 +23,7 @@ export interface Chapter {
   audio_generated_at: number | null;
   char_count: number;
   word_count: number;
+  sent_count: number;
   predicted_audio_length: number;
   audio_length_seconds: number;
 }

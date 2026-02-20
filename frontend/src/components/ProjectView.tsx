@@ -458,7 +458,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                 style={{
                   background: 'var(--surface)',
                   borderRadius: '12px',
-                  padding: '1.25rem',
+                  padding: '0.75rem 1.25rem',
                   border: '1px solid var(--border)',
                   display: 'flex',
                   gap: '1.5rem',
@@ -502,29 +502,40 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                     <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
                     {chap.audio_status === 'done' && <CheckCircle size={14} color="var(--success-muted)" />}
                     {chap.audio_status === 'processing' && <Clock size={14} color="var(--warning)" />}
+                    {chap.audio_status === 'error' && <AlertTriangle size={14} color="var(--error)" />}
                     {chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at) && (
                       <span title="Text modified since last audio generation" style={{ display: 'flex', alignItems: 'center' }}>
-                        <AlertTriangle size={14} color="var(--error-muted)" />
+                        <AlertTriangle size={14} color="var(--warning)" />
                       </span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    <span>{chap.word_count.toLocaleString()} words</span>
-                    <span>~{formatLength(chap.predicted_audio_length)} runtime</span>
-                    <span style={{ textTransform: 'capitalize' }}>Status: {chap.audio_status}</span>
+                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    <span>{chap.audio_status === 'done' ? `${formatLength(chap.audio_length_seconds || chap.predicted_audio_length)} runtime` : `~${formatLength(chap.predicted_audio_length)} runtime`}</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto' }}>
-                  <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
-                    <Zap size={18} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
-                    <Edit3 size={18} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete">
-                    <Trash2 size={18} />
-                  </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto' }}>
+                  {chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode && (
+                      <audio 
+                          controls 
+                          src={`/out/xtts/${chap.audio_file_path}`} 
+                          style={{ height: '32px', maxWidth: '260px' }}
+                          onClick={e => e.stopPropagation()}
+                          onPointerDown={e => e.stopPropagation()} 
+                      />
+                  )}
+                  
+                  <div style={{ display: 'flex', gap: '0.25rem', borderLeft: chap.audio_status === 'done' ? '1px solid var(--border)' : 'none', paddingLeft: chap.audio_status === 'done' ? '1rem' : '0' }}>
+                      <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
+                        <Zap size={18} />
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
+                        <Edit3 size={18} />
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete">
+                        <Trash2 size={18} />
+                      </button>
+                  </div>
                 </div>
               </Reorder.Item>
             ))}

@@ -49,17 +49,20 @@ def init_db():
                     audio_generated_at REAL,
                     char_count INTEGER DEFAULT 0,
                     word_count INTEGER DEFAULT 0,
+                    sent_count INTEGER DEFAULT 0,
                     predicted_audio_length REAL DEFAULT 0.0,
                     audio_length_seconds REAL DEFAULT 0.0,
                     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
                 )
             """)
 
-            # Migration for adding audio_length_seconds if it doesn't exist
+            # Migrations
             cursor.execute("PRAGMA table_info(chapters)")
             columns = [col[1] for col in cursor.fetchall()]
             if 'audio_length_seconds' not in columns:
                 cursor.execute("ALTER TABLE chapters ADD COLUMN audio_length_seconds REAL DEFAULT 0.0")
+            if 'sent_count' not in columns:
+                cursor.execute("ALTER TABLE chapters ADD COLUMN sent_count INTEGER DEFAULT 0")
 
             # Processing Queue table
             cursor.execute("""
@@ -153,14 +156,15 @@ def create_chapter(project_id: str, title: str, text_content: str = "", sort_ord
             # Calculate counts
             char_count = len(text_content)
             word_count = len(text_content.split())
+            sent_count = text_content.count('.') + text_content.count('?') + text_content.count('!')
 
             # Simple assumption: 16 chars per second for speech
             predicted_audio_length = char_count / 16.7
 
             cursor.execute("""
-                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, char_count, word_count, predicted_audio_length)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (chapter_id, project_id, title, text_content, sort_order, now, char_count, word_count, predicted_audio_length))
+                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, char_count, word_count, sent_count, predicted_audio_length)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (chapter_id, project_id, title, text_content, sort_order, now, char_count, word_count, sent_count, predicted_audio_length))
             conn.commit()
             return chapter_id
 
@@ -192,6 +196,7 @@ def update_chapter(chapter_id: str, **updates) -> bool:
                 updates['text_last_modified'] = time.time()
                 updates['char_count'] = len(text)
                 updates['word_count'] = len(text.split())
+                updates['sent_count'] = text.count('.') + text.count('?') + text.count('!')
                 updates['predicted_audio_length'] = len(text) / 16.7
 
             set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api';
 import type { Chapter } from '../types';
@@ -101,7 +101,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem' }}>
           <ArrowLeft size={18} />
         </button>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <input 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
@@ -111,14 +111,22 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     padding: '0.25rem'
                 }}
             />
+            
+            {chapter.audio_status === 'done' && chapter.audio_file_path && (
+                <div style={{ paddingLeft: '1rem', borderLeft: '1px solid var(--border)' }}>
+                    <audio 
+                        controls 
+                        src={`/out/xtts/${chapter.audio_file_path}`} 
+                        style={{ height: '32px', maxWidth: '300px' }}
+                    />
+                </div>
+            )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {saving ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} color="var(--success-muted)" />}
                 {saving ? 'Saving...' : 'Saved'}
             </span>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '0.5rem 1.25rem', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <Save size={16} /> Save Changes
-            </button>
         </div>
       </header>
 
@@ -185,8 +193,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         gap: '0.75rem'
                     }}>
                         {(analysis?.safe_text || '').split('\n').filter(Boolean).map((line: string, i: number) => (
-                            <div key={i} style={{ padding: '0.75rem', background: 'var(--surface-light)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                                <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: 0, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                            <div key={i} style={{ padding: '0.75rem', background: 'var(--surface-light)', borderRadius: '8px', border: '1px solid var(--border)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: '0.25rem', right: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    #{i + 1}
+                                </div>
+                                <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: 0, paddingRight: '1rem', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
                                     {line}
                                 </p>
                             </div>
