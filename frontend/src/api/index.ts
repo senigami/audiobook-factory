@@ -28,8 +28,12 @@ export const api = {
     const res = await fetch(`/api/projects/${id}`, { method: 'PUT', body: formData });
     return res.json();
   },
-  deleteProject: async (id: string): Promise<any> => {
-    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  deleteProject: async (projectId: string): Promise<any> => {
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  assembleProject: async (projectId: string): Promise<any> => {
+    const res = await fetch(`/api/projects/${projectId}/assemble`, { method: 'POST' });
     return res.json();
   },
 
@@ -119,6 +123,32 @@ export const api = {
     const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}/export-sample`, { method: 'POST' });
     return res.json();
   },
-  // Basic helper for home data (since the / route returns HTML, we might need a dedicated API endpoint for initial state)
-  // For now, we'll mimic the SSR data by calling specific APIs.
+
+  // --- Processing Queue ---
+  getProcessingQueue: async (): Promise<any[]> => {
+    const res = await fetch('/api/processing_queue');
+    return res.json();
+  },
+  addProcessingQueue: async (projectId: string, chapterId: string, splitPart: number = 0): Promise<any> => {
+    const formData = new FormData();
+    formData.append('project_id', projectId);
+    formData.append('chapter_id', chapterId);
+    formData.append('split_part', splitPart.toString());
+    const res = await fetch('/api/processing_queue', { method: 'POST', body: formData });
+    return res.json();
+  },
+  reorderProcessingQueue: async (queueIds: string[]): Promise<any> => {
+    const formData = new FormData();
+    formData.append('queue_ids', queueIds.join(','));
+    const res = await fetch('/api/processing_queue/reorder', { method: 'PUT', body: formData });
+    return res.json();
+  },
+  removeProcessingQueue: async (queueId: string): Promise<any> => {
+    const res = await fetch(`/api/processing_queue/${encodeURIComponent(queueId)}`, { method: 'DELETE' });
+    return res.json();
+  },
+  clearProcessingQueue: async (): Promise<any> => {
+    const res = await fetch('/api/processing_queue', { method: 'DELETE' });
+    return res.json();
+  },
 };

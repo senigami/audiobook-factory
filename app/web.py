@@ -1435,6 +1435,83 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
 
     return JSONResponse({"status": "success", "custom_title": new_title})
 
+# --- Processing Queue API ---
+from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear_queue as db_clear_queue
+
+@app.get("/api/processing_queue")
+def api_get_queue():
+    return JSONResponse(get_queue())
+
+@app.post("/api/processing_queue")
+def api_add_to_queue(project_id: str = Form(...), chapter_id: str = Form(...), split_part: int = Form(0)):
+    try:
+        qid = add_to_queue(project_id, chapter_id, split_part)
+
+        # TO INTEGRATE WITH LEGACY WORKER AND PRESERVE SSE:
+        # Fetch chapter title & text from SQLite
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title, text_content FROM chapters WHERE id = ?", (chapter_id,))
+            c_item = cursor.fetchone()
+
+        if c_item:
+            title, text_content = c_item
+            # Write a temp text file for the legacy worker to read!
+            # The stem of the filename becomes the audio file name (sqlite_{chapter_id}_{split_part}.txt)
+            temp_filename = f"sqlite_{chapter_id}_{split_part}.txt"
+            temp_path = CHAPTER_DIR / temp_filename
+            temp_path.write_text(text_content or "", encoding="utf-8", errors="replace")
+
+            # Create legacy Job
+            settings = get_settings()
+            from .models import Job
+            from .state import put_job
+            from .jobs import enqueue
+            import time
+
+            j = Job(
+                id=qid, # map queue_id 1:1 with job_id
+                engine="xtts",
+                chapter_file=temp_filename, # Worker reads this text file
+                status="queued",
+                created_at=time.time(),
+                safe_mode=bool(settings.get("safe_mode", True)),
+                make_mp3=True,
+                bypass_pause=True,
+                custom_title=title # Ensures frontend shows the chapter title globally
+            )
+            put_job(j)
+            enqueue(j)
+
+        return JSONResponse({"status": "success", "queue_id": qid})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.put("/api/processing_queue/reorder")
+def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
+    try:
+        q_list = [q.strip() for q in queue_ids.split(",") if q.strip()]
+        success = reorder_queue(q_list)
+        if success:
+            return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "error", "message": "Failed to reorder queue"}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.delete("/api/processing_queue/{queue_id}")
+def api_remove_from_queue(queue_id: str):
+    success = remove_from_queue(queue_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Item not found"}, status_code=404)
+
+@app.delete("/api/processing_queue")
+def api_clear_queue():
+    count = db_clear_queue()
+    return JSONResponse({"status": "success", "cleared": count})
+# -----------------------------
+
 @app.post("/queue/clear")
 def clear_history():
     """Wipe job history, empty the in-memory queue, and stop processes."""
@@ -1472,3 +1549,59 @@ def api_preview(chapter_file: str, processed: bool = False):
         text = pack_text_to_limit(text, pad=True)
 
     return JSONResponse({"text": text, "analysis": analysis})
+
+@app.post("/api/projects/{project_id}/assemble")
+def assemble_project(project_id: str):
+    from .db import get_project, get_chapters
+    from .jobs import enqueue
+    from .state import put_job
+    from .models import Job
+    import time
+
+    project = get_project(project_id)
+    if not project:
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+
+    chapters = get_chapters(project_id)
+    if not chapters:
+        return JSONResponse({"error": "No chapters found in project"}, status_code=400)
+
+    chapter_list = []
+    for c in chapters:
+        if c['audio_status'] == 'done' and c['audio_file_path']:
+            chapter_list.append({
+                'filename': c['audio_file_path'],
+                'title': c['title']
+            })
+        else:
+            return JSONResponse({
+                "error": f"Chapter '{c['title']}' is not processed yet or audio is missing. All chapters must be processed before assembly."
+            }, status_code=400)
+
+    book_title = project['name']
+
+    # Create the job
+    import uuid
+    jid = uuid.uuid4().hex[:12]
+    j = Job(
+        id=jid,
+        engine="audiobook",
+        chapter_file=book_title, # For audiobook, chapter_file works as the Book Title
+        status="queued",
+        created_at=time.time(),
+        safe_mode=False,
+        make_mp3=False,
+        bypass_pause=True,
+        author_meta=project.get('author', ''),
+        narrator_meta="Generated by Audiobook Factory",
+        chapter_list=chapter_list,
+        cover_path=project.get('cover_image_path', None)
+    )
+
+    put_job(j)
+    enqueue(j)
+
+    from .state import update_job
+    update_job(jid, status="queued") # Trigger SSE broadcast immediately
+
+    return JSONResponse({"status": "success", "job_id": jid})

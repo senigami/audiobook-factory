@@ -218,6 +218,99 @@ def reorder_chapters(project_id: str, chapter_ids: List[str]) -> bool:
                 conn.rollback()
                 return False
 
+# --- Processing Queue Functions ---
+def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            queue_id = str(uuid.uuid4())
+            now = time.time()
+            cursor.execute("""
+                INSERT INTO processing_queue (id, project_id, chapter_id, split_part, status, created_at)
+                VALUES (?, ?, ?, ?, 'queued', ?)
+            """, (queue_id, project_id, chapter_id, split_part, now))
+
+            # Also update chapter status to queued if it's unprocessed or done
+            cursor.execute("UPDATE chapters SET audio_status = 'processing' WHERE id = ?", (chapter_id,))
+            conn.commit()
+            return queue_id
+
+def get_queue() -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT q.*, c.title AS chapter_title, p.name AS project_name 
+                FROM processing_queue q
+                JOIN chapters c ON q.chapter_id = c.id
+                JOIN projects p ON q.project_id = p.id
+                ORDER BY 
+                    CASE WHEN q.status = 'running' THEN 0 ELSE 1 END,
+                    q.created_at ASC
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_queue_item(queue_id: str, status: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            now = time.time()
+            if status in ['done', 'failed', 'cancelled']:
+                cursor.execute("UPDATE processing_queue SET status = ?, completed_at = ? WHERE id = ?", (status, now, queue_id))
+            else:
+                cursor.execute("UPDATE processing_queue SET status = ? WHERE id = ?", (status, queue_id))
+
+            # Sync Chapter status and audio path
+            cursor.execute("SELECT chapter_id, split_part FROM processing_queue WHERE id = ?", (queue_id,))
+            row = cursor.fetchone()
+            if row:
+                chapter_id, split_part = row
+                if status == 'done':
+                    # Assuming standard naming output by jobs.py
+                    audio_path = f"sqlite_{chapter_id}_{split_part}.mp3"
+                    cursor.execute("UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ? WHERE id = ?", (audio_path, now, chapter_id))
+                elif status in ['failed', 'error']:
+                    cursor.execute("UPDATE chapters SET audio_status = 'error' WHERE id = ?", (chapter_id,))
+                elif status == 'running':
+                    cursor.execute("UPDATE chapters SET audio_status = 'processing' WHERE id = ?", (chapter_id,))
+
+            conn.commit()
+            return cursor.rowcount > 0
+
+def remove_from_queue(queue_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue WHERE id = ?", (queue_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+def reorder_queue(queue_ids: List[str]) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN TRANSACTION")
+            try:
+                # To reorder by created_at, we just space out the created_at times
+                # Or we can add a sort_order column to processing_queue.
+                # Since we don't have sort_order, we can update created_at to be sequential
+                now = time.time()
+                for idx, qid in enumerate(queue_ids):
+                    cursor.execute("UPDATE processing_queue SET created_at = ? WHERE id = ?", (now + idx, qid))
+                conn.commit()
+                return True
+            except:
+                conn.rollback()
+                return False
+
+def clear_queue() -> int:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue WHERE status = 'queued'")
+            conn.commit()
+            return cursor.rowcount
+
 # Init the DB structurally when module is loaded
 init_db()
 

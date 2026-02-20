@@ -26,6 +26,18 @@ export interface Chapter {
   predicted_audio_length: number;
 }
 
+export interface ProcessingQueueItem {
+  id: string;
+  project_id: string;
+  chapter_id: string;
+  split_part: number;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  created_at: number;
+  completed_at: number | null;
+  chapter_title?: string;
+  project_name?: string;
+}
+
 export interface SpeakerProfile {
   name: string;
   wav_count: number;

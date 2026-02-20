@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical } from 'lucide-react';
-import { Reorder } from 'framer-motion';
+import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Play, Loader2 } from 'lucide-react';
+import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
-import type { Project, Chapter } from '../types';
+import type { Project, Chapter, Job } from '../types';
 import { ChapterEditor } from './ChapterEditor';
 
 interface ProjectViewProps {
   projectId: string;
+  jobs: Record<string, Job>;
   onBack: () => void;
+  onNavigateToQueue: () => void;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, onBack }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBack, onNavigateToQueue }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,8 +97,43 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, onBack }) =
     }
   };
 
+  const handleQueueChapter = async (chap: Chapter) => {
+    if (chap.char_count > 50000) {
+        const proceed = window.confirm(`This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`);
+        if (!proceed) return;
+    }
+    try {
+        await api.addProcessingQueue(projectId, chap.id, 0);
+        loadData();
+        onNavigateToQueue();
+    } catch (e) {
+        console.error("Failed to enqueue", e);
+    }
+  };
+
+  const [assembling, setAssembling] = useState(false);
+  const handleAssemble = async () => {
+    setAssembling(true);
+    try {
+        const res = await api.assembleProject(projectId);
+        if (res.error) {
+            alert(res.error);
+        }
+    } catch (e) {
+        console.error("Assembly failed", e);
+        alert("Failed to start assembly");
+    } finally {
+        setAssembling(false);
+    }
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading project...</div>;
   if (!project) return <div style={{ padding: '2rem' }}>Project not found.</div>;
+
+  const activeAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'running');
+  const finishedAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'done');
+
+  const allChaptersDone = chapters.length > 0 && chapters.every(c => c.audio_status === 'done');
 
   if (editingChapterId) {
       return <ChapterEditor 
@@ -121,12 +157,50 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, onBack }) =
           <h2 style={{ fontSize: '1.75rem', fontWeight: 600 }}>{project.name}</h2>
           {project.author && <p style={{ color: 'var(--text-muted)' }}>by {project.author}</p>}
         </div>
-        <div style={{ marginLeft: 'auto' }}>
-            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem' }}>
+            <button
+                className="btn-primary"
+                onClick={handleAssemble}
+                disabled={assembling || !allChaptersDone || !!activeAssemblyJob}
+                style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    opacity: (!allChaptersDone || !!activeAssemblyJob) ? 0.5 : 1,
+                    cursor: (!allChaptersDone || !!activeAssemblyJob) ? 'not-allowed' : 'pointer'
+                }}
+            >   
+                {assembling ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                Assemble M4B
+            </button>
+            <button className="btn-ghost" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)' }}>
                 <Plus size={16} /> Add Chapter
             </button>
         </div>
       </header>
+
+      {/* Assembly Progress */}
+      {activeAssemblyJob && (
+          <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontWeight: 600 }}>Assembling {project.name}...</h3>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      {Math.round(activeAssemblyJob.progress * 100)}%
+                  </div>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${activeAssemblyJob.progress * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  ETA: {activeAssemblyJob.eta_seconds ? `${Math.floor(activeAssemblyJob.eta_seconds / 60)}m ${activeAssemblyJob.eta_seconds % 60}s` : 'Calculating...'}
+              </div>
+          </div>
+      )}
+
+      {finishedAssemblyJob && !activeAssemblyJob && (
+          <div style={{ background: 'var(--success-muted)', color: '#fff', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CheckCircle size={20} />
+              <span>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
+          </div>
+      )}
 
       {/* Chapters List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -186,6 +260,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, onBack }) =
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleQueueChapter(chap)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
+                    <Zap size={18} />
+                  </button>
                   <button onClick={() => setEditingChapterId(chap.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
                     <Edit3 size={18} />
                   </button>
