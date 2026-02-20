@@ -32,8 +32,12 @@ export const api = {
     const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
     return res.json();
   },
-  assembleProject: async (projectId: string): Promise<any> => {
-    const res = await fetch(`/api/projects/${projectId}/assemble`, { method: 'POST' });
+  assembleProject: async (projectId: string, chapterIds?: string[]): Promise<any> => {
+    const formData = new FormData();
+    if (chapterIds) {
+        formData.append('chapter_ids', JSON.stringify(chapterIds));
+    }
+    const res = await fetch(`/api/projects/${projectId}/assemble`, { method: 'POST', body: formData });
     return res.json();
   },
 

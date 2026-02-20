@@ -19,6 +19,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   
   const [analysis, setAnalysis] = useState<any>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
   return (
-    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 0 2rem 0', margin: '-2.5rem -2.5rem 0 -2.5rem' }}>
+    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 0 2rem 0', margin: '-2.5rem -2.5rem 0 -2.5rem', background: 'var(--background)', position: 'relative', zIndex: 100 }}>
       {/* Editor Header */}
       <header style={{ 
         display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.5rem', 
@@ -150,13 +151,20 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
         {/* Right pane: Analysis & Feedback */}
         <div style={{ 
-            width: '350px', borderLeft: '1px solid var(--border)', background: 'var(--surface)', 
+            width: '400px', borderLeft: '1px solid var(--border)', background: 'var(--surface)', 
             padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', 
             overflowY: 'auto' 
         }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                Engine Feedback
-                {analyzing && <RefreshCw size={14} className="animate-spin text-muted" />}
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Engine Feedback
+                    {analyzing && <RefreshCw size={14} className="animate-spin text-muted" />}
+                </span>
+                {analysis?.safe_text && (
+                    <button onClick={() => setShowPreview(!showPreview)} className={showPreview ? "btn-primary" : "btn-ghost"} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                        {showPreview ? 'Hide Preview' : 'Preview Safe Text'}
+                    </button>
+                )}
             </h3>
 
             {analysis ? (
@@ -238,7 +246,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             </motion.div>
                         )}
 
-                        {analysis.uncleanable === 0 && text.trim().length > 0 && (
+                        {analysis.uncleanable === 0 && text.trim().length > 0 && !showPreview && (
                             <motion.div 
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -250,6 +258,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             >
                                 <CheckCircle size={18} />
                                 <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Engine safe!</span>
+                            </motion.div>
+                        )}
+
+                        {showPreview && analysis.safe_text && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                style={{
+                                    background: 'var(--surface-light)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: '12px',
+                                    padding: '1rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.75rem'
+                                }}
+                            >
+                                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Safe Text Preview</h4>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                                    {analysis.safe_text}
+                                </p>
                             </motion.div>
                         )}
                     </AnimatePresence>

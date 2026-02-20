@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
-import { Sidebar } from './components/Sidebar';
 import { Panel } from './components/Panel';
 import { PreviewModal } from './components/PreviewModal';
 import { VoicesTab } from './components/VoicesTab';
@@ -23,10 +22,26 @@ function App() {
   const [showLogs, setShowLogs] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [queueCount, setQueueCount] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  const fetchQueueCount = async () => {
+    try {
+        const res = await fetch('/api/queue');
+        const queueData = await res.json();
+        const active = queueData.filter((q: any) => q.status === 'queued' || q.status === 'running');
+        setQueueCount(active.length);
+    } catch(e) { console.error('Failed to get queue count', e); }
+  };
+
+  useEffect(() => {
+     fetchQueueCount();
+     const interval = setInterval(fetchQueueCount, 3000);
+     return () => clearInterval(interval);
   }, []);
 
   const handleRefresh = async () => {
@@ -82,12 +97,7 @@ function App() {
         onTabChange={(tab) => setActiveTab(tab)}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
-        headerRight={
-          <Sidebar
-            paused={initialData?.paused || false}
-            onRefresh={handleRefresh}
-          />
-        }
+        queueCount={queueCount}
       >
         <div style={{
           flex: 1,
@@ -121,7 +131,10 @@ function App() {
             )}
             
             {activeTab === 'queue' && (
-                <GlobalQueue />
+                <GlobalQueue 
+                    paused={initialData?.paused || false} 
+                    onRefresh={handleRefresh} 
+                />
             )}
 
             {activeTab === 'synthesis' && (

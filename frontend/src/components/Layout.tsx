@@ -7,9 +7,10 @@ interface LayoutProps {
   headerRight?: React.ReactNode;
   showLogs?: boolean;
   onToggleLogs?: () => void;
+  queueCount?: number;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs, queueCount }) => {
   const navItems = [
     { id: 'library', label: 'Library', icon: Library },
     { id: 'queue', label: 'Queue', icon: Zap },
@@ -120,6 +121,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
               >
                 <item.icon size={16} opacity={activeTab === item.id ? 1 : 0.6} />
                 <span className="nav-label" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
+                {item.id === 'queue' && queueCount !== undefined && queueCount > 0 && (
+                   <div style={{ 
+                       background: 'var(--accent)', color: 'white', borderRadius: '10px', 
+                       padding: '2px 8px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '4px' 
+                   }}>{queueCount}</div>
+                )}
               </button>
             ))}
           </nav>

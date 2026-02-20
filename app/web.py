@@ -406,7 +406,8 @@ async def api_analyze_text(text_content: str = Form(...)):
         "auto_fixed": auto_fixed,
         "uncleanable": uncleanable,
         "uncleanable_sentences": uncleanable_sentences,
-        "threshold": SENT_CHAR_LIMIT
+        "threshold": SENT_CHAR_LIMIT,
+        "safe_text": split_text
     })
 # --------------------
 
@@ -1560,12 +1561,13 @@ def api_preview(chapter_file: str, processed: bool = False):
     return JSONResponse({"text": text, "analysis": analysis})
 
 @app.post("/api/projects/{project_id}/assemble")
-def assemble_project(project_id: str):
+def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     from .db import get_project, get_chapters
     from .jobs import enqueue
     from .state import put_job
     from .models import Job
     import time
+    import json
 
     project = get_project(project_id)
     if not project:
@@ -1574,6 +1576,19 @@ def assemble_project(project_id: str):
     chapters = get_chapters(project_id)
     if not chapters:
         return JSONResponse({"error": "No chapters found in project"}, status_code=400)
+
+    selected_ids = []
+    if chapter_ids:
+        try:
+            selected_ids = json.loads(chapter_ids)
+        except:
+            pass
+
+    if selected_ids:
+        chapters = [c for c in chapters if c['id'] in selected_ids]
+
+    if not chapters:
+        return JSONResponse({"error": "No valid chapters selected for assembly"}, status_code=400)
 
     chapter_list = []
     for c in chapters:

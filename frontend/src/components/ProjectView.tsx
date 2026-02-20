@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Play, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Play, Image as ImageIcon, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
 import type { Project, Chapter, Job, Audiobook } from '../types';
 import { ChapterEditor } from './ChapterEditor';
-import { AssemblyModal } from './AssemblyModal';
 
 interface ProjectViewProps {
   projectId: string;
@@ -18,8 +17,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
-  const [showAssemblyModal, setShowAssemblyModal] = useState(false);
   const [availableAudiobooks, setAvailableAudiobooks] = useState<Audiobook[]>([]);
+  const [isAssemblyMode, setIsAssemblyMode] = useState(false);
+  const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -171,13 +171,40 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
       }
   };
 
+  const handleStartAssemblyMode = () => {
+    const defaultSelected = new Set(chapters.filter(c => c.audio_status === 'done').map(c => c.id));
+    setSelectedChapters(defaultSelected);
+    setIsAssemblyMode(true);
+  };
+
+  const handleConfirmAssembly = async () => {
+    if (selectedChapters.size === 0) {
+        alert("Please select at least one chapter to assemble.");
+        return;
+    }
+    setSubmitting(true);
+    try {
+        await api.assembleProject(projectId, Array.from(selectedChapters));
+        setIsAssemblyMode(false);
+        loadData();
+    } catch (e) {
+        console.error("Assembly failed", e);
+        alert("Assembly failed.");
+    } finally {
+        setSubmitting(false);
+    }
+  };
+
+  const handleSortChapters = async () => {
+      const sorted = [...chapters].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
+      await handleReorder(sorted);
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading project...</div>;
   if (!project) return <div style={{ padding: '2rem' }}>Project not found.</div>;
 
   const activeAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'running');
   const finishedAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'done');
-
-  const allChaptersDone = chapters.length > 0 && chapters.every(c => c.audio_status === 'done');
 
   if (editingChapterId) {
       return <ChapterEditor 
@@ -225,7 +252,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
             overflow: 'hidden'
         }}>
             {project.cover_image_path ? (
-                <img src={project.cover_image_path} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={project.cover_image_path} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
                 <ImageIcon size={48} style={{ opacity: 0.2 }} />
             )}
@@ -288,14 +315,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
 
             <button
                 className="btn-ghost"
-                onClick={() => setShowAssemblyModal(true)}
+                onClick={handleStartAssemblyMode}
                 style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     border: '1px solid var(--border)', padding: '0.75rem'
                 }}
             >   
                 <CheckCircle size={16} />
-                Assembly & Versions
+                Assemble Audiobook
             </button>
             <button className="btn-ghost" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid var(--border)', padding: '0.75rem' }}>
                 <Plus size={16} /> Add Chapter
@@ -418,15 +445,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
         )}
       </div>
 
-      {/* Assembly Modal Hookup */}
-      <AssemblyModal
-        isOpen={showAssemblyModal}
-        onClose={() => setShowAssemblyModal(false)}
-        onConfirm={async (data) => {
-            alert('Calling new structured assembly logic -> ' + data.title);
-            // Replace with actual structured call implementation later
-        }}
-      />
       {/* Assembly Progress */}
       {activeAssemblyJob && (
           <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
@@ -454,27 +472,54 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
 
       {/* Chapters List */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Chapters</h3>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
+              {isAssemblyMode ? 'Select Chapters for Assembly' : 'Chapters'}
+          </h3>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface)', padding: '0.25rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Project Voice:</span>
-                  <select 
-                      style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem', cursor: 'pointer' }}
-                      defaultValue="Cozy Narrator"
-                  >
-                      <option>Cozy Narrator</option>
-                      <option>Deep Voice</option>
-                      <option>British Female</option>
-                  </select>
-              </div>
-              <button 
-                  onClick={handleQueueAllUnprocessed}
-                  disabled={submitting || chapters.filter(c => c.audio_status === 'unprocessed' || c.audio_status === 'error').length === 0}
-                  className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-              >
-                  <Zap size={16} /> Queue All Unprocessed
-              </button>
+              {isAssemblyMode ? (
+                  <>
+                      <button onClick={() => setIsAssemblyMode(false)} className="btn-ghost" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={handleConfirmAssembly} 
+                          disabled={submitting || selectedChapters.size === 0} 
+                          className="btn-primary" 
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                      >
+                          <CheckCircle size={16} /> Confirm Assembly
+                      </button>
+                  </>
+              ) : (
+                  <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface)', padding: '0.25rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Project Voice:</span>
+                          <select 
+                              style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem', cursor: 'pointer' }}
+                              defaultValue="Cozy Narrator"
+                          >
+                              <option>Cozy Narrator</option>
+                              <option>Deep Voice</option>
+                              <option>British Female</option>
+                          </select>
+                      </div>
+                      <button 
+                          onClick={handleSortChapters}
+                          className="btn-ghost" 
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', fontSize: '0.85rem', border: '1px solid var(--border)' }}
+                      >
+                          <ArrowUpDown size={16} /> Sort A-Z
+                      </button>
+                      <button 
+                          onClick={handleQueueAllUnprocessed}
+                          disabled={submitting || chapters.filter(c => c.audio_status === 'unprocessed' || c.audio_status === 'error').length === 0}
+                          className="btn-primary" 
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                      >
+                          <Zap size={16} /> Queue All Unprocessed
+                      </button>
+                  </>
+              )}
           </div>
       </div>
 
@@ -503,11 +548,26 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                   cursor: 'grab'
                 }}
                 whileDrag={{ scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
+                dragListener={!isAssemblyMode}
+                onClick={() => {
+                    if (isAssemblyMode && chap.audio_status === 'done') {
+                        const newSet = new Set(selectedChapters);
+                        if (newSet.has(chap.id)) newSet.delete(chap.id);
+                        else newSet.add(chap.id);
+                        setSelectedChapters(newSet);
+                    }
+                }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ cursor: 'grab', color: 'var(--text-muted)' }} title="Drag to reorder">
-                        <GripVertical size={20} />
-                    </div>
+                    {isAssemblyMode ? (
+                        <div style={{ color: chap.audio_status === 'done' ? 'var(--accent)' : 'var(--border)', cursor: chap.audio_status === 'done' ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center' }}>
+                            {selectedChapters.has(chap.id) && chap.audio_status === 'done' ? <CheckSquare size={24} /> : <Square size={24} />}
+                        </div>
+                    ) : (
+                        <div style={{ cursor: 'grab', color: 'var(--text-muted)' }} title="Drag to reorder">
+                            <GripVertical size={20} />
+                        </div>
+                    )}
                     <div style={{
                         width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-light)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)'
@@ -516,7 +576,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                     </div>
                 </div>
                 
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
                     <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
                     {chap.audio_status === 'done' && <CheckCircle size={14} color="var(--success-muted)" />}
@@ -534,14 +594,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => handleQueueChapter(chap)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
+                <div style={{ display: 'flex', gap: '0.5rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto' }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue">
                     <Zap size={18} />
                   </button>
-                  <button onClick={() => setEditingChapterId(chap.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
+                  <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text">
                     <Edit3 size={18} />
                   </button>
-                  <button onClick={() => handleDeleteChapter(chap.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete">
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete">
                     <Trash2 size={18} />
                   </button>
                 </div>

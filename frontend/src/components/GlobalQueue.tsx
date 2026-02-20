@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Reorder } from 'framer-motion';
-import { Trash2, GripVertical, CheckCircle, Clock, Layers, Play, XCircle } from 'lucide-react';
+import { Trash2, GripVertical, CheckCircle, Clock, Layers, Play, Pause, XCircle } from 'lucide-react';
 import { api } from '../api';
 import type { ProcessingQueueItem } from '../types';
 
-export const GlobalQueue: React.FC = () => {
+interface GlobalQueueProps {
+    paused?: boolean;
+    onRefresh?: () => void;
+}
+
+export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefresh }) => {
   const [queue, setQueue] = useState<ProcessingQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,6 +21,16 @@ export const GlobalQueue: React.FC = () => {
       console.error("Failed to fetch queue", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePauseToggle = async () => {
+    try {
+      await fetch('/queue/pause', { method: 'POST' });
+      if (onRefresh) onRefresh();
+      fetchQueue();
+    } catch (e) {
+      console.error('Failed to toggle pause', e);
     }
   };
 
@@ -63,9 +78,19 @@ export const GlobalQueue: React.FC = () => {
           </h2>
           <p style={{ color: 'var(--text-muted)' }}>Manage your batch audio generation tasks</p>
         </div>
-        <button onClick={async () => { await api.clearProcessingQueue(); fetchQueue(); }} className="btn-ghost" style={{ color: 'var(--error-muted)' }}>
-          Clear Queue
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button
+                onClick={handlePauseToggle}
+                className="btn-glass"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border)', color: paused ? 'var(--warning)' : 'var(--success)' }}
+            >
+                {paused ? <Play size={16} /> : <Pause size={16} />}
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{paused ? 'Resume Processing' : 'Pause All Jobs'}</span>
+            </button>
+            <button onClick={async () => { await api.clearProcessingQueue(); fetchQueue(); }} className="btn-ghost" style={{ color: 'var(--error-muted)' }}>
+              Clear Queue
+            </button>
+        </div>
       </header>
 
       {queue.length === 0 ? (
