@@ -27,6 +27,10 @@ from .textops import (
 
 app = FastAPI()
 
+# Ensure required directories exist before mounting
+for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
