@@ -24,6 +24,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [showCoverModal, setShowCoverModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [editProjectData, setEditProjectData] = useState({ name: '', series: '', author: '' });
   const [editCover, setEditCover] = useState<File | null>(null);
@@ -239,18 +240,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
           alignItems: 'center'
       }}>
         {/* Project Cover Art */}
-        <div style={{
-            width: '160px',
-            height: '160px',
-            flexShrink: 0,
-            borderRadius: '12px',
-            background: 'var(--surface-light)',
-            border: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden'
-        }}>
+        <div 
+            onClick={() => project.cover_image_path ? setShowCoverModal(true) : null}
+            style={{
+                width: '160px',
+                height: '160px',
+                flexShrink: 0,
+                borderRadius: '12px',
+                background: 'var(--surface-light)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                cursor: project.cover_image_path ? 'zoom-in' : 'default',
+                transition: 'transform 0.2s',
+            }}
+            onMouseOver={(e) => { if (project.cover_image_path) e.currentTarget.style.transform = 'scale(1.02)' }}
+            onMouseOut={(e) => { if (project.cover_image_path) e.currentTarget.style.transform = 'scale(1)' }}
+        >
             {project.cover_image_path ? (
                 <img src={project.cover_image_path} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
@@ -354,96 +362,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
               <span>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
           </div>
       )}
-
-      {/* Chapters List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {chapters.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem', background: 'var(--surface)', borderRadius: '12px', border: '1px dashed var(--border)' }}>
-            <FileText size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
-            <p style={{ color: 'var(--text-muted)' }}>No chapters yet. Add one to get started.</p>
-          </div>
-        ) : (
-          <Reorder.Group axis="y" values={chapters} onReorder={handleReorder} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {chapters.map((chap, idx) => (
-              <Reorder.Item 
-                key={chap.id}
-                value={chap}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: '12px',
-                  padding: '1.25rem',
-                  border: '1px solid var(--border)',
-                  display: 'flex',
-                  gap: '1.5rem',
-                  alignItems: 'center',
-                  cursor: 'grab'
-                }}
-                whileDrag={{ scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ cursor: 'grab', color: 'var(--text-muted)' }} title="Drag to reorder">
-                        <GripVertical size={20} />
-                    </div>
-                    <div style={{
-                        width: '32px', height: '32px', borderRadius: '50%', background: 'var(--surface-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)'
-                    }}>
-                        {idx + 1}
-                    </div>
-                </div>
-                
-                <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) auto', gap: '1rem', alignItems: 'center' }}>
-                  {/* Left Metadata */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                      <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
-                      {chap.audio_status === 'done' && <CheckCircle size={14} color="var(--success-muted)" />}
-                      {chap.audio_status === 'processing' && <Clock size={14} color="var(--warning)" />}
-                      {chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at) && (
-                        <span title="Text modified since last audio generation" style={{ display: 'flex', alignItems: 'center' }}>
-                          <AlertTriangle size={14} color="var(--error-muted)" />
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <span>{chap.word_count.toLocaleString()} words</span>
-                      <span>~{formatLength(chap.predicted_audio_length)} runtime</span>
-                      <span style={{ textTransform: 'capitalize' }}>Status: {chap.audio_status}</span>
-                    </div>
-                  </div>
-
-                  {/* Right Actions & Player */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    {chap.audio_status === 'done' && chap.audio_file_path && (
-                        <audio 
-                            controls 
-                            src={`/out/xtts/${chap.audio_file_path}`} 
-                            style={{ height: '32px', maxWidth: '200px' }}
-                            onPointerDown={e => e.stopPropagation()} // Prevent reorder drag
-                        />
-                    )}
-
-                    <div style={{ display: 'flex', gap: '0.25rem', borderLeft: '1px solid var(--border)', paddingLeft: '1rem' }}>
-                        <button onClick={() => handleQueueChapter(chap)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--accent)' }} title="Add to Generation Queue" onPointerDown={e => e.stopPropagation()}>
-                            <Zap size={18} />
-                        </button>
-                        <button onClick={() => setEditingChapterId(chap.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }} title="Edit Text" onPointerDown={e => e.stopPropagation()}>
-                            <Edit3 size={18} />
-                        </button>
-                        <button onClick={() => handleDeleteChapter(chap.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }} title="Delete" onPointerDown={e => e.stopPropagation()}>
-                            <Trash2 size={18} />
-                        </button>
-                    </div>
-                  </div>
-                </div>
-
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-        )}
-      </div>
 
       {/* Assembly Progress */}
       {activeAssemblyJob && (
@@ -575,8 +493,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
                         {idx + 1}
                     </div>
                 </div>
-                
-                <div style={{ flex: 1, opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1 }}>
+                <div 
+                  onClick={() => { if (!isAssemblyMode) setEditingChapterId(chap.id); }}
+                  style={{ flex: 1, opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1, cursor: isAssemblyMode ? 'default' : 'pointer', padding: '0.5rem 0' }}
+                  title={isAssemblyMode ? "" : "Click to edit chapter"}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
                     <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{chap.title}</h4>
                     {chap.audio_status === 'done' && <CheckCircle size={14} color="var(--success-muted)" />}
@@ -610,6 +531,21 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, onBac
           </Reorder.Group>
         )}
       </div>
+
+      {/* Cover Image Modal */}
+      {showCoverModal && project.cover_image_path && (
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)'
+        }} onClick={() => setShowCoverModal(false)}>
+            <img 
+                src={project.cover_image_path} 
+                alt="Enlarged Cover" 
+                style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }} 
+                onClick={e => e.stopPropagation()}
+            />
+        </div>
+      )}
 
       {/* Add Chapter Modal */}
       {showAddModal && (

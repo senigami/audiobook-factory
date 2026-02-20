@@ -384,6 +384,11 @@ async def api_analyze_text(text_content: str = Form(...)):
     raw_hits = find_long_sentences(text_content)
     cleaned_text = clean_text_for_tts(text_content)
     split_text = safe_split_long_sentences(cleaned_text)
+
+    # Pack the sentences into engine-sized chunks for preview
+    packed_text = pack_text_to_limit(split_text, pad=False)
+
+    # We still check for long sentences after splitting (just to log uncleanable)
     cleaned_hits = find_long_sentences(split_text)
 
     uncleanable = len(cleaned_hits)
@@ -407,7 +412,7 @@ async def api_analyze_text(text_content: str = Form(...)):
         "uncleanable": uncleanable,
         "uncleanable_sentences": uncleanable_sentences,
         "threshold": SENT_CHAR_LIMIT,
-        "safe_text": split_text
+        "safe_text": packed_text
     })
 # --------------------
 

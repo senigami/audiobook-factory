@@ -19,7 +19,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   
   const [analysis, setAnalysis] = useState<any>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [editorTab, setEditorTab] = useState<'edit' | 'preview'>('edit');
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -128,24 +128,71 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         {/* Left pane: Text Editor */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '1.5rem', overflowY: 'auto' }}>
             <div style={{ maxWidth: '800px', width: '100%', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <textarea 
-                    value={text}
-                    onChange={e => setText(e.target.value)}
-                    placeholder="Start typing your chapter text here..."
-                    style={{
-                        flex: 1,
-                        background: 'var(--surface-light)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '12px',
-                        padding: '1.5rem',
-                        fontSize: '1.05rem',
-                        lineHeight: 1.6,
-                        color: 'var(--text-primary)',
-                        outline: 'none',
-                        resize: 'none',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                    }}
-                />
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                    <button 
+                        onClick={() => setEditorTab('edit')} 
+                        className={editorTab === 'edit' ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
+                    >
+                        Edit Text
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if (!analysis?.safe_text) alert("Please wait for text to be analyzed...");
+                            else {
+                                setEditorTab('preview');
+                                handleSave(); // Give a chance to save the displayed text
+                            }
+                        }} 
+                        className={editorTab === 'preview' ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
+                        disabled={!analysis?.safe_text}
+                    >
+                        Preview Safe Text
+                    </button>
+                </div>
+
+                {editorTab === 'edit' ? (
+                    <textarea 
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        placeholder="Start typing your chapter text here..."
+                        style={{
+                            flex: 1,
+                            background: 'var(--surface-light)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '12px',
+                            padding: '1.5rem',
+                            fontSize: '1.05rem',
+                            lineHeight: 1.6,
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                            resize: 'none',
+                            fontFamily: 'system-ui, -apple-system, sans-serif'
+                        }}
+                    />
+                ) : (
+                    <div style={{ 
+                        flex: 1, 
+                        background: 'var(--surface)', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: '12px', 
+                        padding: '1.5rem', 
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem'
+                    }}>
+                        {(analysis?.safe_text || '').split('\n').filter(Boolean).map((line: string, i: number) => (
+                            <div key={i} style={{ padding: '0.75rem', background: 'var(--surface-light)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: 0, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                                    {line}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
 
@@ -160,11 +207,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     Engine Feedback
                     {analyzing && <RefreshCw size={14} className="animate-spin text-muted" />}
                 </span>
-                {analysis?.safe_text && (
-                    <button onClick={() => setShowPreview(!showPreview)} className={showPreview ? "btn-primary" : "btn-ghost"} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
-                        {showPreview ? 'Hide Preview' : 'Preview Safe Text'}
-                    </button>
-                )}
             </h3>
 
             {analysis ? (
@@ -246,7 +288,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             </motion.div>
                         )}
 
-                        {analysis.uncleanable === 0 && text.trim().length > 0 && !showPreview && (
+                        {analysis.uncleanable === 0 && text.trim().length > 0 && (
                             <motion.div 
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -258,27 +300,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             >
                                 <CheckCircle size={18} />
                                 <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Engine safe!</span>
-                            </motion.div>
-                        )}
-
-                        {showPreview && analysis.safe_text && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                style={{
-                                    background: 'var(--surface-light)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: '12px',
-                                    padding: '1rem',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.75rem'
-                                }}
-                            >
-                                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Safe Text Preview</h4>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-                                    {analysis.safe_text}
-                                </p>
                             </motion.div>
                         )}
                     </AnimatePresence>
