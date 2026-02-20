@@ -15,6 +15,7 @@ def clean_voices(tmp_path):
     test_state = tmp_path / "test_state.json"
     # Create empty state if needed, but app.state should handle it
     with patch("app.web.VOICES_DIR", test_voices), \
+         patch("app.jobs.VOICES_DIR", test_voices), \
          patch("app.config.VOICES_DIR", test_voices), \
          patch("app.state.STATE_FILE", test_state), \
          patch("app.engines.Path", MagicMock(return_value=test_voices)): # Mocking for latent path if needed
