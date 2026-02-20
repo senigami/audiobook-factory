@@ -64,7 +64,12 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-    const prefix = '/out/xtts/';
+    let prefix = '/out/xtts/';
+    
+    // If it's a project job, use the project-specific audio mount
+    if (job?.project_id) {
+        prefix = `/projects/${job.project_id}/audio/`;
+    }
 
     if (makeMp3) {
       if (statusInfo?.isXttsMp3) return `${prefix}${stem}.mp3`;
@@ -75,13 +80,11 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     }
 
     if (job?.status === 'done') {
-      if (makeMp3) {
-        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
-        if (job.output_wav) return `${prefix}${job.output_wav}`;
-      } else {
-        if (job.output_wav) return `${prefix}${job.output_wav}`;
-        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
-      }
+      const audioFile = makeMp3 
+        ? (job.output_mp3 || job.output_wav)
+        : (job.output_wav || job.output_mp3);
+        
+      if (audioFile) return `${prefix}${audioFile}`;
     }
     return null;
   };

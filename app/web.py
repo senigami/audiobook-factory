@@ -14,7 +14,7 @@ from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
     XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR,
-    SAMPLES_DIR, ASSETS_DIR
+    SAMPLES_DIR, ASSETS_DIR, PROJECTS_DIR
 )
 from .state import get_jobs, get_settings, update_settings, clear_all_jobs, update_job
 from .models import Job
@@ -32,7 +32,7 @@ from .textops import (
 app = FastAPI()
 
 # Ensure required directories exist before mounting
-for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR]:
+for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR, PROJECTS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
@@ -40,6 +40,7 @@ app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out
 app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
 app.mount("/out/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="out_samples")
 app.mount("/out/covers", StaticFiles(directory=str(COVER_DIR)), name="out_covers")
+app.mount("/projects", StaticFiles(directory=str(PROJECTS_DIR)), name="projects")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -173,7 +174,7 @@ def is_react_dev_active():
     except:
         return False
 
-def list_chapters():
+def legacy_list_chapters():
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
     return sorted(CHAPTER_DIR.glob("*.txt"))
 
@@ -187,25 +188,48 @@ def output_exists(engine: str, chapter_file: str) -> bool:
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
     return False
 
-def xtts_outputs_for(chapter_file: str):
+def xtts_outputs_for(chapter_file: str, project_id: Optional[str] = None):
+    from .config import get_project_audio_dir
     stem = Path(chapter_file).stem
-    wav = XTTS_OUT_DIR / f"{stem}.wav"
-    mp3 = XTTS_OUT_DIR / f"{stem}.mp3"
+    if project_id:
+        pdir = get_project_audio_dir(project_id)
+    else:
+        pdir = XTTS_OUT_DIR
+    wav = pdir / f"{stem}.wav"
+    mp3 = pdir / f"{stem}.mp3"
     return wav, mp3
 
 
+@app.get("/api/audiobooks")
+def api_list_audiobooks():
+    return list_audiobooks()
+
 def list_audiobooks():
-    if not AUDIOBOOK_DIR.exists(): return []
     res = []
-    # Sort m4b files by modification time or name, here we use name reverse
-    m4b_files = sorted(AUDIOBOOK_DIR.glob("*.m4b"), reverse=True)
+
+    # 1. Gather all m4b files (Legacy & Project-specific)
+    m4b_files = []
+    if AUDIOBOOK_DIR.exists():
+        for p in AUDIOBOOK_DIR.glob("*.m4b"):
+            m4b_files.append((p, f"/out/audiobook/{p.name}"))
+
+    if PROJECTS_DIR.exists():
+        for proj_dir in PROJECTS_DIR.iterdir():
+            if proj_dir.is_dir():
+                m4b_dir = proj_dir / "m4b"
+                if m4b_dir.exists():
+                    for p in m4b_dir.glob("*.m4b"):
+                        m4b_files.append((p, f"/projects/{proj_dir.name}/m4b/{p.name}"))
+
+    # Sort by modification time reverse
+    m4b_files.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
 
     import subprocess
     import shlex
-    for p in m4b_files:
-        item = {"filename": p.name, "title": p.name, "cover_url": None}
+    for p, url in m4b_files:
+        item = {"filename": p.name, "title": p.name, "cover_url": None, "url": url}
 
-        # 1. Try to extract embedded title
+        # Try to extract embedded title
         try:
             probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
             title_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
@@ -215,18 +239,6 @@ def list_audiobooks():
         except:
             pass
 
-        # 2. Look for existing cover file
-        found_img = False
-        for ext in [".jpg", ".jpeg", ".png", ".webp"]:
-            c_path = p.with_suffix(ext)
-            if c_path.exists():
-                item["cover_url"] = f"/out/audiobook/{p.stem}{ext}"
-                found_img = True
-                break
-
-        # 2. If not found, try to extract it from the m4b metadata
-        if not found_img:
-            target_jpg = p.with_suffix(".jpg")
             # This extracts the 'attached_pic' which is mapped as a video stream in m4b
             cmd = f"ffmpeg -y -i {shlex.quote(str(p))} -map 0:v -c copy -frames:v 1 {shlex.quote(str(target_jpg))}"
             try:
@@ -359,6 +371,14 @@ def api_delete_chapter_record(chapter_id: str):
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
 
+@app.post("/api/chapters/{chapter_id}/reset")
+def api_reset_chapter_audio(chapter_id: str):
+    from .db import reset_chapter_audio
+    success = reset_chapter_audio(chapter_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
 import json
 @app.post("/api/projects/{project_id}/reorder_chapters")
 async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
@@ -442,7 +462,7 @@ def api_home():
     # 2. Re-fetch settings so they include the potential new default
     settings = get_settings()
 
-    chapters = [p.name for p in list_chapters()]
+    chapters = [p.name for p in legacy_list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
 
     # status sets logic
@@ -568,7 +588,7 @@ def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
     existing = get_jobs()
     active = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
 
-    for p in list_chapters():
+    for p in legacy_list_chapters():
         c = p.name
         if output_exists("xtts", c):
             continue
@@ -1063,7 +1083,7 @@ def reset_chapter(chapter_file: str = Form(...)):
     return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
 
 @app.delete("/api/chapter/{filename}")
-def delete_chapter(filename: str):
+def api_delete_legacy_chapter(filename: str):
     path = CHAPTER_DIR / filename
     stem = path.stem
 
@@ -1323,7 +1343,7 @@ def api_jobs():
             j['progress'] = max(j.get('progress', 0.0), time_prog)
 
     # Auto-discovery
-    chapters = [p.name for p in list_chapters()]
+    chapters = [p.name for p in legacy_list_chapters()]
     for c in chapters:
         # If we already have a job record, don't override it unless it's not 'done'
         # and we find a finished file.
@@ -1446,7 +1466,22 @@ from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear
 
 @app.get("/api/processing_queue")
 def api_get_queue():
-    return JSONResponse(get_queue())
+    queue_items = get_queue()
+    all_jobs = get_jobs()
+
+    # Merge live job progress from state.json using qid
+    for item in queue_items:
+        job = all_jobs.get(item['id'])
+        if job:
+            item['progress'] = job.progress
+            item['eta_seconds'] = job.eta_seconds
+            item['started_at'] = job.started_at
+            item['log'] = job.log
+            # Re-sync status if DB is stale but job is running
+            if job.status == 'running' and item['status'] != 'running':
+                item['status'] = 'running'
+
+    return JSONResponse(queue_items)
 
 @app.post("/api/migration/import_legacy")
 def api_import_legacy():
@@ -1458,7 +1493,12 @@ def api_import_legacy():
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @app.post("/api/processing_queue")
-def api_add_to_queue(project_id: str = Form(...), chapter_id: str = Form(...), split_part: int = Form(0)):
+def api_add_to_queue(
+    project_id: str = Form(...), 
+    chapter_id: str = Form(...), 
+    split_part: int = Form(0),
+    speaker_profile: Optional[str] = Form(None)
+):
     try:
         qid = add_to_queue(project_id, chapter_id, split_part)
 
@@ -1472,10 +1512,12 @@ def api_add_to_queue(project_id: str = Form(...), chapter_id: str = Form(...), s
 
         if c_item:
             title, text_content = c_item
-            # Write a temp text file for the legacy worker to read!
-            # The stem of the filename becomes the audio file name (sqlite_{chapter_id}_{split_part}.txt)
-            temp_filename = f"sqlite_{chapter_id}_{split_part}.txt"
-            temp_path = CHAPTER_DIR / temp_filename
+            # Write a text file for the worker into the project-specific text folder!
+            from .config import get_project_text_dir
+            text_dir = get_project_text_dir(project_id)
+
+            temp_filename = f"{chapter_id}_{split_part}.txt"
+            temp_path = text_dir / temp_filename
             temp_path.write_text(text_content or "", encoding="utf-8", errors="replace")
 
             # Create legacy Job
@@ -1486,15 +1528,17 @@ def api_add_to_queue(project_id: str = Form(...), chapter_id: str = Form(...), s
             import time
 
             j = Job(
-                id=qid, # map queue_id 1:1 with job_id
+                id=qid, 
+                project_id=project_id,
                 engine="xtts",
-                chapter_file=temp_filename, # Worker reads this text file
+                chapter_file=temp_filename, 
                 status="queued",
                 created_at=time.time(),
                 safe_mode=bool(settings.get("safe_mode", True)),
                 make_mp3=True,
-                bypass_pause=True,
-                custom_title=title # Ensures frontend shows the chapter title globally
+                bypass_pause=False,
+                custom_title=title, # Ensures frontend shows the chapter title globally
+                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile")
             )
             put_job(j)
             enqueue(j)
@@ -1614,6 +1658,7 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     jid = uuid.uuid4().hex[:12]
     j = Job(
         id=jid,
+        project_id=project_id,
         engine="audiobook",
         chapter_file=book_title, # For audiobook, chapter_file works as the Book Title
         status="queued",

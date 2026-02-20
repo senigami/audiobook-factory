@@ -101,10 +101,8 @@ export const api = {
     const res = await fetch(`/api/audiobook/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },
-  resetChapter: async (filename: string): Promise<any> => {
-    const formData = new FormData();
-    formData.append('chapter_file', filename);
-    const res = await fetch('/api/chapter/reset', { method: 'POST', body: formData });
+  resetChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/reset`, { method: 'POST' });
     return res.json();
   },
   deleteLegacyChapter: async (filename: string): Promise<any> => {
@@ -133,11 +131,12 @@ export const api = {
     const res = await fetch('/api/processing_queue');
     return res.json();
   },
-  addProcessingQueue: async (projectId: string, chapterId: string, splitPart: number = 0): Promise<any> => {
+  addProcessingQueue: async (projectId: string, chapterId: string, splitPart: number = 0, speakerProfile?: string): Promise<any> => {
     const formData = new FormData();
     formData.append('project_id', projectId);
     formData.append('chapter_id', chapterId);
     formData.append('split_part', splitPart.toString());
+    if (speakerProfile) formData.append('speaker_profile', speakerProfile);
     const res = await fetch('/api/processing_queue', { method: 'POST', body: formData });
     return res.json();
   },

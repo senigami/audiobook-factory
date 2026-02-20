@@ -3,6 +3,7 @@ import { Reorder } from 'framer-motion';
 import { Trash2, GripVertical, CheckCircle, Clock, Layers, Play, Pause, XCircle } from 'lucide-react';
 import { api } from '../api';
 import type { ProcessingQueueItem } from '../types';
+import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface GlobalQueueProps {
     paused?: boolean;
@@ -12,6 +13,11 @@ interface GlobalQueueProps {
 export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefresh }) => {
   const [queue, setQueue] = useState<ProcessingQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [localPaused, setLocalPaused] = useState(paused);
+
+  useEffect(() => {
+    setLocalPaused(paused);
+  }, [paused]);
 
   const fetchQueue = async () => {
     try {
@@ -25,12 +31,18 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
   };
 
   const handlePauseToggle = async () => {
+    const targetState = !localPaused;
+    setLocalPaused(targetState);
     try {
-      await fetch('/queue/pause', { method: 'POST' });
+      const endpoint = targetState ? '/queue/pause' : '/queue/resume';
+      const res = await fetch(endpoint, { method: 'POST' });
+      const data = await res.json();
+      console.log(`Queue ${targetState ? 'paused' : 'resumed'}:`, data);
       if (onRefresh) onRefresh();
       fetchQueue();
     } catch (e) {
       console.error('Failed to toggle pause', e);
+      setLocalPaused(!targetState); // Revert on failure
     }
   };
 
@@ -82,10 +94,19 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
             <button
                 onClick={handlePauseToggle}
                 className="btn-glass"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border)', color: paused ? 'var(--warning)' : 'var(--success)' }}
+                style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    padding: '10px 16px', 
+                    borderRadius: '12px', 
+                    border: '1px solid var(--border)', 
+                    color: localPaused ? 'var(--warning)' : 'var(--success)',
+                    background: localPaused ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'
+                }}
             >
-                {paused ? <Play size={16} /> : <Pause size={16} />}
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{paused ? 'Resume Processing' : 'Pause All Jobs'}</span>
+                {localPaused ? <Play size={16} /> : <Pause size={16} />}
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{localPaused ? 'Resume Processing' : 'Pause All Jobs'}</span>
             </button>
             <button onClick={async () => { await api.clearProcessingQueue(); fetchQueue(); }} className="btn-ghost" style={{ color: 'var(--error-muted)' }}>
               Clear Queue
@@ -113,10 +134,15 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
                           }}>
                               <Play size={24} color="var(--accent)" className="animate-pulse" />
                               <div style={{ flex: 1 }}>
-                                  <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{job.chapter_title}</h4>
-                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Project: {job.project_name} • Part {job.split_part + 1}</div>
+                                  <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>{job.chapter_title}</h4>
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>Project: {job.project_name} • Part {job.split_part + 1}</div>
+                                  <PredictiveProgressBar 
+                                    progress={job.progress || 0}
+                                    startedAt={job.started_at}
+                                    etaSeconds={job.eta_seconds}
+                                    label="Processing..."
+                                  />
                               </div>
-                              <div style={{ color: 'var(--accent)', fontWeight: 600 }}>Running...</div>
                           </div>
                       ))}
                   </div>

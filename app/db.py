@@ -208,11 +208,70 @@ def update_chapter(chapter_id: str, **updates) -> bool:
             return cursor.rowcount > 0
 
 def delete_chapter(chapter_id: str) -> bool:
+    print(f"[DB] Attempting to delete chapter: {chapter_id}")
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+            # 1. Get info before deletion
+            cursor.execute("SELECT title, project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
+            item = cursor.fetchone()
+            if not item:
+                print(f"[DB] Chapter {chapter_id} not found for deletion")
+                return False
+
+            # 2. Perform deletion (with FK cascade enabled)
             cursor.execute("PRAGMA foreign_keys = ON;")
             cursor.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+            conn.commit()
+            success = cursor.rowcount > 0
+
+            if success:
+                print(f"[DB] Successfully deleted chapter '{item['title']}' from DB")
+                # 3. Physical file cleanup
+                if item['audio_file_path']:
+                    from .config import get_project_audio_dir, XTTS_OUT_DIR
+                    try:
+                        pdir = get_project_audio_dir(item['project_id'])
+                        base_pth = pdir / item['audio_file_path']
+                        base_pth.unlink(missing_ok=True)
+                        if base_pth.suffix == '.mp3':
+                            base_pth.with_suffix('.wav').unlink(missing_ok=True)
+                        else:
+                            base_pth.with_suffix('.mp3').unlink(missing_ok=True)
+                        print(f"[DB] Cleaned up physical audio files in {pdir}")
+                    except Exception as e:
+                        print(f"[DB] Error cleaning up audio files: {e}")
+            # 4. Verify deletion
+            cursor.execute("SELECT 1 FROM chapters WHERE id = ?", (chapter_id,))
+            if cursor.fetchone():
+                print(f"[DB] CRITICAL: Chapter {chapter_id} still exists after DELETE and COMMIT!")
+                return False
+
+            print(f"[DB] Verified chapter {chapter_id} is gone.")
+            return True
+
+def reset_chapter_audio(chapter_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
+            item = cursor.fetchone()
+            if item and item['audio_file_path']:
+                from .config import get_project_audio_dir
+                try:
+                    pdir = get_project_audio_dir(item['project_id'])
+                    (pdir / item['audio_file_path']).unlink(missing_ok=True)
+                    (pdir / item['audio_file_path'].replace(".mp3", ".wav")).unlink(missing_ok=True)
+                except: pass
+
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed', 
+                    audio_file_path = NULL, 
+                    audio_length_seconds = 0.0,
+                    audio_generated_at = NULL
+                WHERE id = ?
+            """, (chapter_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -279,7 +338,7 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
                 chapter_id, split_part = row
                 if status == 'done':
                     # Assuming standard naming output by jobs.py
-                    audio_path = f"sqlite_{chapter_id}_{split_part}.mp3"
+                    audio_path = f"{chapter_id}_{split_part}.mp3"
                     cursor.execute(
                         "UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ?, audio_length_seconds = ? WHERE id = ?", 
                         (audio_path, now, audio_length_seconds, chapter_id)

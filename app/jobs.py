@@ -84,16 +84,24 @@ def format_seconds(seconds: int) -> str:
     return f"{m}m {s}s"
 
 
-def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> bool:
+def _output_exists(engine: str, chapter_file: str, project_id: Optional[str] = None, make_mp3: bool = True) -> bool:
     stem = Path(chapter_file).stem
     if engine == "audiobook":
+        if project_id:
+            from .config import get_project_m4b_dir
+            return (get_project_m4b_dir(project_id) / f"{chapter_file}.m4b").exists()
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
 
     if engine == "xtts":
-        mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
+        if project_id:
+            from .config import get_project_audio_dir
+            pdir = get_project_audio_dir(project_id)
+        else:
+            pdir = XTTS_OUT_DIR
+
+        mp3 = (pdir / f"{stem}.mp3").exists()
+        wav = (pdir / f"{stem}.wav").exists()
     else:
-        # Fallback for unexpected engine names
         return False
 
     if make_mp3:
@@ -261,9 +269,14 @@ def worker_loop(q: "queue.Queue[str]"):
             header = []
 
             if j.engine != "audiobook":
-                chapter_path = CHAPTER_DIR / j.chapter_file
-                if chapter_path.exists():
-                    text = chapter_path.read_text(encoding="utf-8", errors="replace")
+                if j.project_id:
+                    from .config import get_project_text_dir
+                    text_path = get_project_text_dir(j.project_id) / j.chapter_file
+                else:
+                    text_path = CHAPTER_DIR / j.chapter_file
+
+                if text_path.exists():
+                    text = text_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
                     perf = get_performance_metrics()
                     cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
@@ -280,7 +293,11 @@ def worker_loop(q: "queue.Queue[str]"):
                 ]
             else:
                 # Audiobook identity
-                src_dir = XTTS_OUT_DIR
+                if j.project_id:
+                    from .config import get_project_audio_dir
+                    src_dir = get_project_audio_dir(j.project_id)
+                else:
+                    src_dir = XTTS_OUT_DIR
 
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
@@ -328,11 +345,11 @@ def worker_loop(q: "queue.Queue[str]"):
             j._last_broadcast_p = 0.0 # Track what we just sent in update_job above
 
             # --- Safety Checks ---
-            if j.engine != "audiobook" and not chapter_path.exists():
-                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="Chapter file not found.")
+            if j.engine != "audiobook" and not text_path.exists():
+                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Chapter file not found: {j.chapter_file}")
                 continue
 
-            if _output_exists(j.engine, j.chapter_file):
+            if _output_exists(j.engine, j.chapter_file, project_id=j.project_id, make_mp3=j.make_mp3):
                 update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
                 continue
 
@@ -445,9 +462,15 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # --- Generate WAV or Audiobook ---
             if j.engine == "audiobook":
-                src_dir = XTTS_OUT_DIR
-                title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
-                out_file = AUDIOBOOK_DIR / f"{title}.m4b"
+                from .config import get_project_audio_dir, get_project_m4b_dir
+                if j.project_id:
+                    src_dir = get_project_audio_dir(j.project_id)
+                    title = j.chapter_file 
+                    out_file = get_project_m4b_dir(j.project_id) / f"{title}.m4b"
+                else:
+                    src_dir = XTTS_OUT_DIR
+                    title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
+                    out_file = AUDIOBOOK_DIR / f"{title}.m4b"
 
                 # Collect custom titles from all jobs
                 chapter_titles = {
@@ -484,8 +507,14 @@ def worker_loop(q: "queue.Queue[str]"):
                 continue
 
             elif j.engine == "xtts":
-                out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
-                out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
+                from .config import get_project_audio_dir
+                if j.project_id:
+                    pdir = get_project_audio_dir(j.project_id)
+                else:
+                    pdir = XTTS_OUT_DIR
+
+                out_wav = pdir / f"{Path(j.chapter_file).stem}.wav"
+                out_mp3 = pdir / f"{Path(j.chapter_file).stem}.mp3"
 
                 # Resolve speaker WAVs and settings from profile
                 sw = get_speaker_wavs(j.speaker_profile)

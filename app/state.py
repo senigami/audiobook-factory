@@ -161,7 +161,14 @@ def update_job(job_id: str, **updates) -> None:
                     # But jobs.py usually tells us output_mp3 if it set it in updates, else we check the job itself
                     output_file = updates.get("output_mp3", j.get("output_mp3"))
                     if output_file:
-                        mp3_path = XTTS_OUT_DIR / output_file
+                        project_id = updates.get("project_id", j.get("project_id"))
+                        if project_id:
+                            from .config import get_project_audio_dir
+                            pdir = get_project_audio_dir(project_id)
+                        else:
+                            pdir = XTTS_OUT_DIR
+
+                        mp3_path = pdir / output_file
                         if mp3_path.exists():
                             try:
                                 result = subprocess.run(

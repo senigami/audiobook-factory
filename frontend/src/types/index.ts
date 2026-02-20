@@ -38,6 +38,10 @@ export interface ProcessingQueueItem {
   completed_at: number | null;
   chapter_title?: string;
   project_name?: string;
+  progress?: number;
+  eta_seconds?: number;
+  started_at?: number;
+  log?: string;
 }
 
 export interface SpeakerProfile {
@@ -55,6 +59,7 @@ export interface Job {
   chapter_file: string;
   status: Status;
   created_at: number;
+  project_id?: string;
   started_at?: number;
   finished_at?: number;
   safe_mode: boolean;
@@ -83,6 +88,7 @@ export interface Audiobook {
   filename: string;
   title: string;
   cover_url: string | null;
+  url?: string;
 }
 
 export interface AssemblyChapter {

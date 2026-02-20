@@ -11,6 +11,27 @@ VOICES_DIR = BASE_DIR / "voices"
 COVER_DIR = BASE_DIR / "uploads" / "covers"
 SAMPLES_DIR = BASE_DIR / "samples"
 ASSETS_DIR = BASE_DIR / "assets"
+PROJECTS_DIR = BASE_DIR / "projects"
+
+def get_project_dir(project_id: str) -> Path:
+    d = PROJECTS_DIR / project_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def get_project_audio_dir(project_id: str) -> Path:
+    d = get_project_dir(project_id) / "audio"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def get_project_text_dir(project_id: str) -> Path:
+    d = get_project_dir(project_id) / "text"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def get_project_m4b_dir(project_id: str) -> Path:
+    d = get_project_dir(project_id) / "m4b"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 # Your existing environments (adjust only if different)

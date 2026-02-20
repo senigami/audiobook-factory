@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Play, Image as ImageIcon, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Image as ImageIcon, ArrowUpDown, CheckSquare, Square, MoreVertical, RefreshCw, Download } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
 import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types';
 import { ChapterEditor } from './ChapterEditor';
+import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface ProjectViewProps {
   projectId: string;
@@ -21,6 +22,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [availableAudiobooks, setAvailableAudiobooks] = useState<Audiobook[]>([]);
   const [isAssemblyMode, setIsAssemblyMode] = useState(false);
   const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
+  const [selectedVoice, setSelectedVoice] = useState<string>('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -105,12 +108,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
+    console.log("handleDeleteChapter called for:", chapterId);
     if (window.confirm("Are you sure you want to delete this chapter?")) {
       try {
-        await api.deleteChapter(chapterId);
-        loadData();
+        const res = await api.deleteChapter(chapterId);
+        console.log("Delete API response:", res);
+        await loadData();
+        console.log("Data reloaded after delete");
       } catch (e) {
         console.error("Delete failed", e);
+        alert("Failed to delete chapter. Check console for details.");
       }
     }
   };
@@ -143,11 +150,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
         const proceed = window.confirm(`This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`);
         if (!proceed) return;
     }
+    setSubmitting(true);
     try {
-        await api.addProcessingQueue(projectId, chap.id, 0);
+        await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
         loadData();
     } catch (e) {
         console.error("Failed to enqueue", e);
+    } finally {
+        setSubmitting(false);
+    }
+  };
+
+  const handleResetChapterAudio = async (chapterId: string) => {
+    if (window.confirm("Reset audio for this chapter? Physical files will be deleted and status reset.")) {
+      try {
+        await api.resetChapter(chapterId);
+        loadData();
+      } catch (e) {
+        console.error("Reset failed", e);
+      }
     }
   };
 
@@ -161,7 +182,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       setSubmitting(true);
       try {
           for (const chap of unprocessed) {
-              await api.addProcessingQueue(projectId, chap.id, 0);
+              await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
           }
           loadData();
           onNavigateToQueue();
@@ -310,9 +331,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '220px' }}>
             {bestM4b ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <a href={`/out/audiobooks/${bestM4b.filename}`} download className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '1rem', width: '100%', fontSize: '1rem', textDecoration: 'none' }}>
-                        <Play size={20} />
-                        Play / Download
+                    <a href={bestM4b.url || `/out/audiobook/${bestM4b.filename}`} download className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '1rem', width: '100%', fontSize: '1rem', textDecoration: 'none' }}>
+                      <Download size={20} />
+                      Download {bestM4b.filename}
                     </a>
                     <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center' }}>{bestM4b.filename}</p>
                 </div>
@@ -415,11 +436,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Project Voice:</span>
                           <select 
                               style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem', cursor: 'pointer' }}
-                              onChange={(e) => {
-                                  // In a real app, we'd save this to the project settings in the DB
-                                  console.log("Selected voice:", e.target.value);
-                              }}
-                              defaultValue={speakerProfiles.find(p => p.is_default)?.name || (speakerProfiles.length > 0 ? speakerProfiles[0].name : "")}
+                              onChange={(e) => setSelectedVoice(e.target.value)}
+                              value={selectedVoice || (speakerProfiles.find(p => p.is_default)?.name || (speakerProfiles[0]?.name || ''))}
                           >
                               {speakerProfiles.map(p => (
                                   <option key={p.name} value={p.name}>{p.name}</option>
@@ -517,19 +535,43 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', flex: '2 1 0', minWidth: 0 }}>
-                  {chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode ? (
-                      <audio 
-                          controls 
-                          src={`/out/xtts/${chap.audio_file_path}`} 
-                          style={{ height: '30px', width: '100%', maxWidth: '600px' }}
-                          onClick={e => e.stopPropagation()}
-                          onPointerDown={e => e.stopPropagation()} 
-                      />
-                  ) : (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        ~{formatLength(chap.predicted_audio_length)} runtime
-                    </span>
-                  )}
+                  {(() => {
+                    const job = Object.values(jobs).find(j => 
+                        j.project_id === projectId && 
+                        j.chapter_file && j.chapter_file.startsWith(chap.id)
+                    );
+                    
+                    if (chap.audio_status === 'processing' && job) {
+                        return (
+                            <div style={{ width: '100%', maxWidth: '300px' }}>
+                                <PredictiveProgressBar 
+                                    progress={job.progress || 0}
+                                    startedAt={job.started_at}
+                                    etaSeconds={job.eta_seconds}
+                                    label="Synthesizing..."
+                                />
+                            </div>
+                        );
+                    }
+                    
+                    if (chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode) {
+                        return (
+                            <audio 
+                                controls 
+                                src={`/projects/${projectId}/audio/${chap.audio_file_path}`} 
+                                style={{ height: '30px', width: '100%', maxWidth: '600px' }}
+                                onClick={e => e.stopPropagation()}
+                                onPointerDown={e => e.stopPropagation()} 
+                            />
+                        );
+                    }
+                    
+                    return (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            ~{formatLength(chap.predicted_audio_length)} runtime
+                        </span>
+                    );
+                  })()}
                   
                   <div style={{ display: 'flex', gap: '0.15rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto', borderLeft: '1px solid var(--border)', paddingLeft: '1rem', marginLeft: '0.5rem' }}>
                       <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--accent)' }} title="Add to Generation Queue">
@@ -538,9 +580,52 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                       <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-secondary)' }} title="Edit Text">
                         <Edit3 size={16} />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chap.id); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--error-muted)' }} title="Delete">
-                        <Trash2 size={16} />
-                      </button>
+                  </div>
+                  
+                  <div style={{ position: 'relative' }}>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setOpenMenuId(openMenuId === chap.id ? null : chap.id); 
+                      }} 
+                      className="btn-ghost" 
+                      style={{ padding: '0.4rem', color: 'var(--text-muted)' }}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    
+                    {openMenuId === chap.id && (
+                      <div 
+                        className="glass-panel"
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          right: 0,
+                          zIndex: 1000,
+                          minWidth: '160px',
+                          padding: '0.5rem',
+                          marginTop: '0.5rem',
+                          background: 'var(--surface)',
+                          boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <button 
+                          className="btn-ghost" 
+                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem' }}
+                          onClick={() => { setOpenMenuId(null); handleResetChapterAudio(chap.id); }}
+                        >
+                          <RefreshCw size={14} /> Reset Audio
+                        </button>
+                        <button 
+                          className="btn-ghost" 
+                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem', color: 'var(--error)' }}
+                          onClick={() => { setOpenMenuId(null); handleDeleteChapter(chap.id); }}
+                        >
+                          <Trash2 size={14} /> Delete Chapter
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Reorder.Item>
