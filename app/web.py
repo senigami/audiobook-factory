@@ -370,6 +370,44 @@ async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
         return JSONResponse({"status": "error", "message": "Failed to reorder"}, status_code=500)
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.post("/api/analyze_text")
+async def api_analyze_text(text_content: str = Form(...)):
+    from .jobs import BASELINE_XTTS_CPS
+    from .config import SENT_CHAR_LIMIT
+
+    char_count = len(text_content)
+    word_count = len(text_content.split())
+    sent_count = text_content.count('.') + text_content.count('?') + text_content.count('!')
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+
+    raw_hits = find_long_sentences(text_content)
+    cleaned_text = clean_text_for_tts(text_content)
+    split_text = safe_split_long_sentences(cleaned_text)
+    cleaned_hits = find_long_sentences(split_text)
+
+    uncleanable = len(cleaned_hits)
+    auto_fixed = len(raw_hits) - uncleanable
+
+    uncleanable_sentences = []
+    for idx, clen, start, end, s in cleaned_hits:
+        uncleanable_sentences.append({
+            "length": clen,
+            "text": s
+        })
+
+    return JSONResponse({
+        "status": "success",
+        "char_count": char_count,
+        "word_count": word_count,
+        "sent_count": sent_count,
+        "predicted_seconds": pred_seconds,
+        "raw_long_sentences": len(raw_hits),
+        "auto_fixed": auto_fixed,
+        "uncleanable": uncleanable,
+        "uncleanable_sentences": uncleanable_sentences,
+        "threshold": SENT_CHAR_LIMIT
+    })
 # --------------------
 
 @app.get("/")
