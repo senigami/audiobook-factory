@@ -6,36 +6,109 @@ configfile: pytest.ini
 plugins: anyio-4.12.1, typeguard-4.5.0, cov-7.0.0
 collecting ... collected 1 item
 
-tests/test_isolation_security.py::test_legacy_path_and_forward_sync ERROR [100%]
-ERROR: Coverage failure: total of 6 is less than fail-under=60
+tests/test_isolation_security.py::test_legacy_path_and_forward_sync FAILED [100%]
+ERROR: Coverage failure: total of 21 is less than fail-under=60
 
 
-==================================== ERRORS ====================================
-_____________ ERROR at setup of test_legacy_path_and_forward_sync ______________
-file /Users/stevendunn/GitHub-Steven/audiobook-factory/tests/test_isolation_security.py, line 184
-  def test_legacy_path_and_forward_sync(tmp_path, sandbox_env):
-E       fixture 'sandbox_env' not found
->       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, clean_storage, client, cov, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
->       use 'pytest --fixtures [testpath]' for help on them.
+=================================== FAILURES ===================================
+______________________ test_legacy_path_and_forward_sync _______________________
 
-/Users/stevendunn/GitHub-Steven/audiobook-factory/tests/test_isolation_security.py:184
+client = <starlette.testclient.TestClient object at 0x108017010>
+
+    def test_legacy_path_and_forward_sync(client):
+        """
+        Simulates a 'migrated' chapter that has text/audio in the global/legacy directories
+        instead of the new project-specific directories.
+        Verifies that cleanup_and_reconcile:
+        1. Finds the files using fallbacks
+        2. Keeps the job as 'done'
+        3. Forward-syncs the 'done' status to the SQLite chapters table
+        """
+        from app.db import init_db, create_project, create_chapter, get_connection
+        from app.state import put_job
+        from app.models import Job
+        from app.config import CHAPTER_DIR, XTTS_OUT_DIR
+        import uuid
+    
+        pid = create_project("Legacy Migration Test")
+    
+        cid = create_chapter(project_id=pid, title="Legacy Chapter", text_content="legacy format text", sort_order=1)
+    
+        # Pre-condition: Chapter should be 'unprocessed' in DB initially
+        with get_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT audio_status FROM chapters WHERE id = ?", (cid,))
+            status = c.fetchone()[0]
+            assert status == "unprocessed"
+    
+        # Create a job in state.json claiming to be done
+        jid = str(uuid.uuid4())
+        import time
+        j = Job(
+            id=jid,
+            engine="xtts",
+            status="done",
+            chapter_file=f"{cid}_0.txt",
+            project_id=pid,
+            make_mp3=True,
+            output_mp3=f"{cid}_0.mp3",
+            created_at=time.time(),
+            started_at=123.0,
+            finished_at=125.0,
+            bypass_pause=False
+        )
+        put_job(j)
+    
+        # 1. Create text file in LEGACY folder (CHAPTER_DIR), NOT project folder
+        legacy_text = CHAPTER_DIR / f"{cid}_0.txt"
+        legacy_text.parent.mkdir(parents=True, exist_ok=True)
+        legacy_text.write_text("legacy chapter text")
+    
+        # 2. Create audio file in LEGACY folder (XTTS_OUT_DIR), NOT project folder
+        legacy_mp3 = XTTS_OUT_DIR / f"{cid}_0.mp3"
+        legacy_mp3.parent.mkdir(parents=True, exist_ok=True)
+        legacy_mp3.write_text("legacy audio data")
+    
+        # 3. Trigger reconciliation
+        from app.jobs import cleanup_and_reconcile
+        cleanup_and_reconcile()
+    
+        # 4. Assert the job was NOT pruned or reset (still 'done')
+        from app.state import get_jobs
+        jobs = get_jobs()
+        assert jid in jobs
+        assert jobs[jid].status == "done"
+    
+        # 5. Assert the 'done' status was forward-synced to the SQLite chapters table
+        with get_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT audio_status, audio_file_path FROM chapters WHERE id = ?", (cid,))
+            row = c.fetchone()
+            assert row is not None
+>           assert row[0] == "done"
+E           AssertionError: assert 'unprocessed' == 'done'
+E             
+E             - done
+E             + unprocessed
+
+tests/test_isolation_security.py:254: AssertionError
 ================================ tests coverage ================================
 ______________ coverage: platform darwin, python 3.11.14-final-0 _______________
 
 Name               Stmts   Miss  Cover   Missing
 ------------------------------------------------
-app/config.py         36     12    67%   18-20, 23-25, 28-30, 33-35
-app/db.py            264    217    18%   76-86, 89-94, 97-101, 104-118, 121-128, 132-142, 145-150, 153-157, 160-176, 179-184, 187-193, 196-231, 235-249, 252-264, 267-272, 275-324, 327-332, 336-357, 360-372, 381-431
-app/engines.py       192    192     0%   1-322
-app/jobs.py          356    356     0%   1-643
+app/config.py         36      3    92%   33-35
+app/db.py            264    181    31%   89-94, 97-101, 104-118, 121-128, 145-150, 153-157, 160-176, 179-184, 187-193, 196-231, 235-249, 252-264, 267-272, 282, 291, 299-300, 307-308, 311-321, 327-332, 336-357, 360-372, 381-431
+app/engines.py       192    174     9%   15-24, 27-91, 94-100, 103-134, 139-147, 151-162, 177-287, 302-322
+app/jobs.py          356    278    22%   25-30, 34-39, 42-44, 49-55, 59, 63-66, 69-72, 75, 79-84, 90-93, 102-106, 110, 136, 139-146, 149-151, 158, 169-181, 194-203, 205-206, 210, 219-229, 234-265, 270-635
 app/migration.py      37     37     0%   1-79
 app/models.py         30      0   100%
-app/state.py         145    106    27%   20, 53-70, 74-75, 79-80, 84-86, 90-94, 98-105, 109-113, 117-128, 132-136, 140-203, 207-213
-app/textops.py       197    197     0%   42-353
-app/web.py          1092   1092     0%   1-1750
+app/state.py         145     87    40%   20, 55-57, 61-70, 74-75, 79-80, 84-86, 90-94, 98-105, 109-113, 140-203, 207-213
+app/textops.py       197    179     9%   52-57, 60-72, 75-117, 121-122, 125-138, 141-150, 153-191, 194-201, 220-260, 269-300, 308-320, 328-353
+app/web.py          1092    923    15%   49, 56-57, 61-62, 67-73, 79-94, 102-112, 116-123, 127-134, 139-200, 204-205, 209-217, 220-221, 224-225, 228-231, 234-242, 247, 250-299, 304, 308-311, 320-331, 341-362, 366-369, 375, 385-395, 398-402, 410-424, 428-431, 435-439, 444-451, 455-483, 501, 515-538, 555-563, 567-568, 572-592, 596-621, 629-642, 646-703, 708, 713-715, 719-721, 726-735, 745-779, 784-822, 830-868, 872-886, 890-906, 910-924, 931-983, 987-1021, 1025-1045, 1050-1097, 1101-1102, 1106-1110, 1114-1144, 1148-1175, 1182-1217, 1220-1283, 1289-1344, 1357-1372, 1376-1379, 1384-1450, 1455-1470, 1475-1483, 1488-1523, 1530-1545, 1549-1554, 1563-1614, 1618-1626, 1630-1634, 1638-1640, 1646-1649, 1654-1679, 1683-1750
 ------------------------------------------------
-TOTAL               2349   2209     6%
-FAIL Required test coverage of 60% not reached. Total coverage: 5.96%
+TOTAL               2349   1862    21%
+FAIL Required test coverage of 60% not reached. Total coverage: 20.73%
 =========================== short test summary info ============================
-ERROR tests/test_isolation_security.py::test_legacy_path_and_forward_sync
-=============================== 1 error in 0.08s ===============================
+FAILED tests/test_isolation_security.py::test_legacy_path_and_forward_sync - ...
+============================== 1 failed in 0.34s ===============================

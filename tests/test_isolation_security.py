@@ -181,7 +181,7 @@ def test_reconciliation_project_aware(client):
     assert jobs[jid].status == "queued"
 
 
-def test_legacy_path_and_forward_sync(tmp_path, sandbox_env):
+def test_legacy_path_and_forward_sync(client):
     """
     Simulates a 'migrated' chapter that has text/audio in the global/legacy directories
     instead of the new project-specific directories.
@@ -196,13 +196,9 @@ def test_legacy_path_and_forward_sync(tmp_path, sandbox_env):
     from app.config import CHAPTER_DIR, XTTS_OUT_DIR
     import uuid
 
-    init_db()
+    pid = create_project("Legacy Migration Test")
 
-    pid = str(uuid.uuid4())
-    create_project(name="Legacy Migration Test", id=pid)
-
-    cid = str(uuid.uuid4())
-    create_chapter(project_id=pid, title="Legacy Chapter", text_content="legacy format text", sort_order=1, id=cid)
+    cid = create_chapter(project_id=pid, title="Legacy Chapter", text_content="legacy format text", sort_order=1)
 
     # Pre-condition: Chapter should be 'unprocessed' in DB initially
     with get_connection() as conn:
@@ -212,21 +208,19 @@ def test_legacy_path_and_forward_sync(tmp_path, sandbox_env):
         assert status == "unprocessed"
 
     # Create a job in state.json claiming to be done
-    jid = str(uuid.uuid4())
+    jid = f"{cid}_0"
     import time
     j = Job(
         id=jid,
         engine="xtts",
         status="done",
-        chapter_file=f"{cid}_0",
+        chapter_file=f"{cid}_0.txt",
         project_id=pid,
         make_mp3=True,
         output_mp3=f"{cid}_0.mp3",
+        created_at=time.time(),
         started_at=123.0,
         finished_at=125.0,
-        timestamp=time.time(),
-        created_at=time.time(),
-        updated_at=time.time(),
         bypass_pause=False
     )
     put_job(j)
