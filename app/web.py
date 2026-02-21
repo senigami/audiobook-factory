@@ -394,6 +394,13 @@ async def api_create_chapter(
     new_chapter = get_chapter(cid)
     return JSONResponse({"status": "success", "chapter": new_chapter})
 
+def compute_chapter_metrics(text: str):
+    from .jobs import BASELINE_XTTS_CPS
+    char_count = len(text)
+    word_count = len(text.split())
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+    return char_count, word_count, pred_seconds
+
 @app.put("/api/chapters/{chapter_id}")
 async def api_update_chapter_details(
     chapter_id: str,
@@ -401,8 +408,15 @@ async def api_update_chapter_details(
     text_content: Optional[str] = Form(None)
 ):
     updates = {}
-    if title is not None: updates["title"] = title
-    if text_content is not None: updates["text_content"] = text_content
+    if title is not None: 
+        updates["title"] = title
+
+    if text_content is not None: 
+        updates["text_content"] = text_content
+        char_count, word_count, pred_seconds = compute_chapter_metrics(text_content)
+        updates["char_count"] = char_count
+        updates["word_count"] = word_count
+        updates["predicted_audio_length"] = pred_seconds
 
     if updates:
         update_chapter(chapter_id, **updates)

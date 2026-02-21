@@ -75,17 +75,34 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (manualTitle?: string, manualText?: string) => {
     setSaving(true);
     try {
-      await api.updateChapter(chapterId, { title, text_content: text });
-      loadChapter(); // reload to get new stats
+      const payload = { 
+        title: manualTitle !== undefined ? manualTitle : title, 
+        text_content: manualText !== undefined ? manualText : text 
+      };
+      await api.updateChapter(chapterId, payload);
+      // We don't necessarily need to reload everything, but maybe update the local chapter object
+      setChapter(prev => prev ? { ...prev, ...payload } : null);
     } catch (e) {
       console.error(e);
     } finally {
       setSaving(false);
     }
   };
+
+  // Auto-save logic
+  useEffect(() => {
+    // Skip initial mount
+    if (loading) return;
+
+    const timer = setTimeout(() => {
+        handleSave();
+    }, 1500); // 1.5s debounce for auto-save
+
+    return () => clearTimeout(timer);
+  }, [title, text]);
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading editor...</div>;
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;

@@ -98,3 +98,26 @@ def test_import_legacy_data_is_safe(client):
     res = client.post("/api/migration/import_legacy")
     assert res.status_code == 200
     assert res.json()["status"] == "success"
+
+def test_chapter_metadata_sync(client):
+    """
+    Verifies that updating a chapter's text content also updates
+    its metadata (char_count, word_count, predicted_audio_length).
+    """
+    # 1. Create a chapter
+    res = client.post("/api/projects", data={"name": "SyncTest"})
+    pid = res.json()["project_id"]
+
+    res = client.post(f"/api/projects/{pid}/chapters", data={"title": "Original"})
+    cid = res.json()["chapter"]["id"]
+
+    # 2. Update with text
+    new_text = "This is a test with seven words now."
+    res = client.put(f"/api/chapters/{cid}", data={"text_content": new_text})
+    assert res.status_code == 200
+
+    updated = res.json()["chapter"]
+    assert updated["text_content"] == new_text
+    assert updated["char_count"] == len(new_text)
+    assert updated["word_count"] == 8 # "This is a test with seven words now."
+    assert updated["predicted_audio_length"] > 0
