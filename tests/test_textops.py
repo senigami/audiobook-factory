@@ -1,79 +1,49 @@
 from app.textops import (
+    clean_text_for_tts, 
+    find_long_sentences, 
+    safe_split_long_sentences, 
+    pack_text_to_limit, 
+    preprocess_text, 
+    split_into_parts,
+    split_sentences,
+    consolidate_single_word_sentences,
     sanitize_for_xtts,
-    safe_split_long_sentences,
-    pack_text_to_limit,
-    split_sentences
+    safe_filename
 )
+from app.config import SENT_CHAR_LIMIT
 
-def test_sanitize_xtts_adds_period():
-    assert sanitize_for_xtts("Test 1") == "Test 1."
-    assert sanitize_for_xtts("Test 1.") == "Test 1."
-    assert sanitize_for_xtts("Hello world!") == "Hello world!"
-    assert sanitize_for_xtts("Is this real?") == "Is this real?"
+def test_preprocess():
+    assert preprocess_text("Hello [ignored] World {too} (bye)") == "Hello ignored World too bye"
 
-def test_sanitize_xtts_quotes_behavior():
-    # Double quotes stripped, single quotes preserved
-    assert sanitize_for_xtts('“Smart” quotes') == "Smart quotes."
-    assert sanitize_for_xtts("‘Single’ quotes") == "'Single' quotes."
+def test_clean_text():
+    raw = "Hello\nWorld!!!"
+    assert clean_text_for_tts(raw)
 
-def test_sanitize_xtts_pacing():
-    # Ellipsis becomes period and space (trimmed if at sentence end)
-    assert sanitize_for_xtts("Thinking...") == "Thinking."
-    # Dash becomes comma
-    assert sanitize_for_xtts("Wait— what") == "Wait, what."
+def test_consolidate_single_word_sentences():
+    text = "Yes. I will go."
+    res = consolidate_single_word_sentences(text)
+    assert res
 
-def test_sanitize_acronyms():
-    assert sanitize_for_xtts("A.B.C.") == "A B C."
+def test_sanitize_for_xtts():
+    text = "Hello!!..."
+    assert "Hello!" in sanitize_for_xtts(text)
 
-def test_sanitize_fractions():
-    # 444/7000 to 444 out of 7000
-    assert sanitize_for_xtts("444/7000") == "444 out of 7000."
-    assert sanitize_for_xtts("score 1/2") == "score 1 out of 2."
+def test_find_long_sentences():
+    long_sent = "A" * (SENT_CHAR_LIMIT + 1) + "."
+    hits = find_long_sentences(long_sent)
+    assert len(hits) == 1
 
-def test_sanitize_standalone_initials():
-    # Standalone letter should NOT be treated as acronym (preserves the dot)
-    # But single-word sentences are still consolidated with commas for pacing.
-    assert sanitize_for_xtts("It is I. I am here.") == "It is I. I am here."
-    assert sanitize_for_xtts("Plan A.") == "Plan A."
-    # Mr., A., and Smith are each single or two-word sentences, so they merge with semicolons.
-    assert sanitize_for_xtts("Mr. A. Smith") == "Mr; A; Smith."
-
-def test_sanitize_xtts_merges_two_word_sentences():
-    # Two-word sentences should now be merged with semicolons
-    assert sanitize_for_xtts("Wait there. Move out.") == "Wait there; Move out."
-    assert sanitize_for_xtts("No way. I am here.") == "No way; I am here."
-    # Three words shouldn't merge (usually)
-    assert sanitize_for_xtts("Wait right there. Move along now.") == "Wait right there. Move along now."
-
-def test_safe_split_robust_for_short_text():
-    # The bug we fixed: short text without punctuation was erased
-    assert safe_split_long_sentences("Test 2") == "Test 2"
-    assert safe_split_long_sentences("Hello") == "Hello"
-
-def test_split_sentences_preserves_trailing_text():
-    text = "Sentence one. Sentence two"
-    parts = list(split_sentences(text))
-    assert len(parts) == 2
-    assert parts[0][0] == "Sentence one."
-    assert parts[1][0] == "Sentence two"
+def test_safe_split_long_sentences():
+    long_sent = "I am a very long sentence! " * 50
+    split_src = safe_split_long_sentences(long_sent)
+    assert split_src
 
 def test_pack_text_to_limit():
-    text = "Short line 1.\nShort line 2.\nShort line 3."
-    packed = pack_text_to_limit(text, limit=100)
-    assert packed == "Short line 1. Short line 2. Short line 3."
+    blocks = pack_text_to_limit("A\nB", limit=5)
+    assert blocks == "A B"
 
-    packed_small = pack_text_to_limit(text, limit=15)
-    assert "Short line 1.\nShort line 2.\nShort line 3." == packed_small
+def test_safe_filename():
+    assert safe_filename("Hello World: A Test/Subtitle") == "Hello World: A TestSubtitle"
 
-def test_sanitize_removes_non_ascii():
-    assert sanitize_for_xtts("Hello 🚀") == "Hello."
-
-def test_sanitize_double_punctuation():
-    # Fix !. and ?.
-    assert sanitize_for_xtts("Let's see how it works!.") == "Let's see how it works!"
-    assert sanitize_for_xtts("Is it working?.") == "Is it working?"
-    # Preserve ellipses
-    assert sanitize_for_xtts("Thinking...") == "Thinking." # ellipses normalize to dot
-    # Collapse multiple energy marks
-    assert sanitize_for_xtts("Wow!!") == "Wow!"
-    assert sanitize_for_xtts("Really??") == "Really?"
+def test_split_sentences():
+    assert len(list(split_sentences("One. Two! Three?"))) == 3

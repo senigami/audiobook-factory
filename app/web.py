@@ -271,6 +271,10 @@ def list_audiobooks():
         except:
             pass
 
+        target_jpg = AUDIOBOOK_DIR / f"{p.stem}.jpg"
+        if target_jpg.exists() and target_jpg.stat().st_size > 0:
+            item["cover_url"] = f"/out/audiobook/{p.stem}.jpg"
+        else:
             # This extracts the 'attached_pic' which is mapped as a video stream in m4b
             cmd = f"ffmpeg -y -i {shlex.quote(str(p))} -map 0:v -c copy -frames:v 1 {shlex.quote(str(target_jpg))}"
             try:
@@ -281,7 +285,6 @@ def list_audiobooks():
             except:
                 # If extraction fails (e.g. no embedded cover), just skip
                 pass
-
         res.append(item)
     return res
 
