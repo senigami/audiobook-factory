@@ -13,25 +13,8 @@ import { useInitialData } from './hooks/useInitialData';
 import type { Job } from './types';
 
 function App() {
-  const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
-  const { jobs, refreshJobs, testProgress } = useJobs(
-    refetchHome, 
-    () => fetchQueueCount(), 
-    () => refetchHome()
-  );
-  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [previewFilename, setPreviewFilename] = useState<string | null>(null);
-  const [showLogs, setShowLogs] = useState(false);
-  const [hideFinished, setHideFinished] = useState(false);
-  const [now, setNow] = useState(Date.now());
   const [queueCount, setQueueCount] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [queueRefreshTrigger, setQueueRefreshTrigger] = useState(0);
 
   const fetchQueueCount = async () => {
     try {
@@ -41,6 +24,27 @@ function App() {
         setQueueCount(active.length);
     } catch(e) { console.error('Failed to get queue count', e); }
   };
+
+  const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
+  const { jobs, refreshJobs, testProgress } = useJobs(
+    refetchHome, 
+    () => { fetchQueueCount(); setQueueRefreshTrigger(prev => prev + 1); }, 
+    () => refetchHome()
+  );
+  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [previewFilename, setPreviewFilename] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  const [hideFinished, setHideFinished] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // ...
 
   useEffect(() => {
      fetchQueueCount();
@@ -138,7 +142,8 @@ function App() {
             {activeTab === 'queue' && (
                 <GlobalQueue 
                     paused={initialData?.paused || false} 
-                    onRefresh={handleRefresh} 
+                    jobs={jobs}
+                    refreshTrigger={queueRefreshTrigger}
                 />
             )}
 

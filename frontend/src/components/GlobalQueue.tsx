@@ -2,15 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Reorder } from 'framer-motion';
 import { Trash2, GripVertical, CheckCircle, Clock, Layers, Play, Pause, XCircle } from 'lucide-react';
 import { api } from '../api';
-import type { ProcessingQueueItem } from '../types';
+import type { ProcessingQueueItem, Job } from '../types';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 
 interface GlobalQueueProps {
     paused?: boolean;
+    jobs?: Record<string, Job>;
+    refreshTrigger?: number;
     onRefresh?: () => void;
 }
 
-export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefresh }) => {
+export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs = {}, refreshTrigger = 0, onRefresh }) => {
   const [queue, setQueue] = useState<ProcessingQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [localPaused, setLocalPaused] = useState(paused);
@@ -48,7 +50,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
 
   useEffect(() => {
     fetchQueue();
-  }, []);
+  }, [refreshTrigger]);
 
   const handleReorder = async (newOrder: ProcessingQueueItem[]) => {
     // Only allow reordering of queued items
@@ -124,7 +126,13 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
               <div>
                   <h3 style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '1rem' }}>Processing Now</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      {activeJobs.map(job => (
+                      {activeJobs.map(job => {
+                          const liveJob = Object.values(jobs).find(j => j.id === job.id);
+                          const prog = liveJob?.progress ?? job.progress ?? 0;
+                          const started = liveJob?.started_at ?? job.started_at;
+                          const eta = liveJob?.eta_seconds ?? job.eta_seconds;
+
+                          return (
                           <div key={job.id} style={{
                               background: 'rgba(139, 92, 246, 0.1)', border: '1px solid var(--accent)',
                               borderRadius: '12px', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem',
@@ -135,14 +143,14 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, onRefr
                                   <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>{job.chapter_title}</h4>
                                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>Project: {job.project_name} • Part {job.split_part + 1}</div>
                                   <PredictiveProgressBar 
-                                    progress={job.progress || 0}
-                                    startedAt={job.started_at}
-                                    etaSeconds={job.eta_seconds}
+                                    progress={prog}
+                                    startedAt={started}
+                                    etaSeconds={eta}
                                     label="Processing..."
                                   />
                               </div>
                           </div>
-                      ))}
+                      )})}
                   </div>
               </div>
           )}
