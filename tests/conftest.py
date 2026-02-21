@@ -24,8 +24,8 @@ for d in ["chapters_out", "uploads", "reports", "xtts_audio", "audiobooks", "voi
     (SESSION_TEMP / d).mkdir(parents=True, exist_ok=True)
 
 # 2. NOW import modules that rely on these env vars
-from app.db import init_db
-from app.state import clear_all_jobs
+from app.db import init_db  # noqa: E402
+from app.state import clear_all_jobs  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def clean_storage():

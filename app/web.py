@@ -438,7 +438,7 @@ def api_reset_chapter_audio(chapter_id: str):
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
 
-import json
+import json  # noqa: E402
 @app.post("/api/projects/{project_id}/reorder_chapters")
 async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
     try:
@@ -1523,7 +1523,7 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
     return JSONResponse({"status": "success", "custom_title": new_title})
 
 # --- Processing Queue API ---
-from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear_queue as db_clear_queue
+from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear_queue as db_clear_queue  # noqa: E402
 
 @app.get("/api/processing_queue")
 def api_get_queue():

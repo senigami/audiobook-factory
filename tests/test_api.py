@@ -50,11 +50,17 @@ def test_api_active_job():
     response = client.get("/api/active_job")
     assert response.status_code == 200
 
-def test_backfill_surgical_logic(temp_chapter):
+def test_backfill_surgical_logic(temp_chapter, monkeypatch):
     from app.config import XTTS_OUT_DIR
     from app.state import put_job, get_jobs, delete_jobs
     from app.models import Job
     import time
+
+    def mock_wav_to_mp3(wav_path, mp3_path):
+        mp3_path.write_text("fake mp3 content")
+        return 0
+
+    monkeypatch.setattr("app.engines.wav_to_mp3", mock_wav_to_mp3)
 
     # 1. Force a job into state for our temp chapter
     jid = "test_backfill_jid"
