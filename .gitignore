@@ -189,3 +189,4 @@ state.json
 /audiobooks
 /to_combine
 /frontend/coverage
+audiobook_factory.db
