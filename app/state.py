@@ -9,7 +9,7 @@ from json import JSONDecodeError
 from .models import Job
 from .config import BASE_DIR
 
-STATE_FILE = BASE_DIR / "state.json"
+STATE_FILE = Path(os.getenv("STATE_FILE", str(BASE_DIR / "state.json")))
 
 # IMPORTANT: RLock prevents deadlock when a function that holds the lock calls another that also locks.
 _STATE_LOCK = threading.RLock()
@@ -183,6 +183,13 @@ def update_job(job_id: str, **updates) -> None:
                                 print(f"Warning: Could not get duration for {output_file}: {e}")
 
                 update_queue_item(job_id, updates["status"], audio_length_seconds=audio_length)
+
+                try:
+                    from .web import broadcast_queue_update
+                    broadcast_queue_update()
+                except ImportError:
+                    pass
+
             except Exception as e:
                 print(f"Warning: Failed to sync job status to SQLite: {e}")
 

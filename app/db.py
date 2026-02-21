@@ -9,7 +9,7 @@ import threading
 
 # Use a connection pool or a single connection with a lock
 _db_lock = threading.Lock()
-DB_PATH = Path("audiobook_factory.db")
+DB_PATH = Path(os.getenv("DB_PATH", "audiobook_factory.db"))
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -48,6 +48,8 @@ def init_db():
                     audio_length_seconds REAL,
                     text_last_modified REAL,
                     predicted_audio_length REAL,
+                    char_count INTEGER,
+                    word_count INTEGER,
                     FOREIGN KEY (project_id) REFERENCES projects (id)
                 )
             """)
@@ -126,16 +128,16 @@ def delete_project(project_id: str) -> bool:
             return cursor.rowcount > 0
 
 # --- Chapter Functions ---
-def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0) -> str:
+def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
             chapter_id = str(uuid.uuid4())
             now = time.time()
             cursor.execute("""
-                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, predicted_audio_length)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (chapter_id, project_id, title, text_content, sort_order, now, predicted_audio_length))
+                INSERT INTO chapters (id, project_id, title, text_content, sort_order, text_last_modified, predicted_audio_length, char_count, word_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (chapter_id, project_id, title, text_content, sort_order, now, predicted_audio_length, char_count, word_count))
             conn.commit()
             return chapter_id
 
@@ -187,6 +189,44 @@ def reorder_chapters(chapter_ids: List[str]) -> bool:
             cursor = conn.cursor()
             for i, cid in enumerate(chapter_ids):
                 cursor.execute("UPDATE chapters SET sort_order = ? WHERE id = ?", (i, cid))
+            conn.commit()
+            return True
+
+def reset_chapter_audio(chapter_id: str) -> bool:
+    from .config import get_project_audio_dir
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            project_id = row[0]
+            audio_file = row[1]
+
+            # 1. Delete file on disk if it exists
+            if project_id and audio_file:
+                p_audio_dir = get_project_audio_dir(project_id)
+                stem = Path(audio_file).stem
+                for ext in [".wav", ".mp3"]:
+                    f = p_audio_dir / f"{stem}{ext}"
+                    if f.exists():
+                        f.unlink()
+
+            # 2. Reset database fields
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed', 
+                    audio_file_path = NULL, 
+                    audio_generated_at = NULL, 
+                    audio_length_seconds = NULL 
+                WHERE id = ?
+            """, (chapter_id,))
+
+            # also remove from processing_queue if it's there
+            cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
+
             conn.commit()
             return True
 

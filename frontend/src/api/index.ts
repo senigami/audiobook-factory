@@ -121,8 +121,9 @@ export const api = {
     const res = await fetch('/api/queue/cancel_pending', { method: 'POST' });
     return res.json();
   },
-  exportSample: async (filename: string): Promise<{ url: string; status?: string; message?: string }> => {
-    const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}/export-sample`, { method: 'POST' });
+  exportSample: async (filename: string, projectId?: string): Promise<{ url: string; status?: string; message?: string }> => {
+    const url = `/api/chapter/${encodeURIComponent(filename)}/export-sample${projectId ? `?project_id=${projectId}` : ''}`;
+    const res = await fetch(url, { method: 'POST' });
     return res.json();
   },
 

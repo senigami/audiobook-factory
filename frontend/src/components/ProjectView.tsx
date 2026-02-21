@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Image as ImageIcon, ArrowUpDown, CheckSquare, Square, MoreVertical, RefreshCw, Download } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Image as ImageIcon, ArrowUpDown, CheckSquare, Square, MoreVertical, RefreshCw, Download, Video, Loader2 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
 import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types';
@@ -12,9 +12,10 @@ interface ProjectViewProps {
   speakerProfiles: SpeakerProfile[];
   onBack: () => void;
   onNavigateToQueue: () => void;
+  onOpenPreview: (filename: string) => void;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
   const [selectedVoice, setSelectedVoice] = useState<string>('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<string | null>(null); // Stores chapterId
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -169,6 +171,23 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       } catch (e) {
         console.error("Reset failed", e);
       }
+    }
+  };
+
+  const handleExportSample = async (chapter: Chapter) => {
+    setIsExporting(chapter.id);
+    try {
+        const res = await api.exportSample(chapter.id, projectId);
+        if (res.url) {
+            window.open(res.url, '_blank');
+        } else {
+            alert(res.message || 'Export failed');
+        }
+    } catch (err) {
+        console.error('Export failed', err);
+        alert('Export failed');
+    } finally {
+        setIsExporting(null);
     }
   };
 
@@ -464,7 +483,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
           </div>
       </div>
 
-      <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)' }}>
         {chapters.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem' }}>
             <FileText size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
@@ -610,6 +629,40 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                         }}
                         onClick={e => e.stopPropagation()}
                       >
+                        <button 
+                          className="btn-ghost" 
+                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem' }}
+                          onClick={() => { setOpenMenuId(null); onOpenPreview(chap.id); }}
+                        >
+                          <FileText size={14} /> Preview & Analyze
+                        </button>
+                        <button 
+                          className="btn-ghost" 
+                          disabled={chap.audio_status !== 'done' || isExporting !== null}
+                          style={{ 
+                            width: '100%', 
+                            justifyContent: 'flex-start', 
+                            padding: '0.5rem', 
+                            fontSize: '0.8rem',
+                            opacity: (chap.audio_status !== 'done' || isExporting !== null) ? 0.5 : 1
+                          }}
+                          onClick={() => { setOpenMenuId(null); handleExportSample(chap); }}
+                        >
+                          {isExporting === chap.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />}
+                          {isExporting === chap.id ? 'Generating...' : 'Export Video Sample'}
+                        </button>
+                        {chap.audio_status === 'done' && chap.audio_file_path && (
+                          <a 
+                            href={`/projects/${projectId}/audio/${chap.audio_file_path}`}
+                            download={chap.audio_file_path}
+                            className="btn-ghost" 
+                            style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem', textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '8px' }}
+                            onClick={() => setOpenMenuId(null)}
+                          >
+                            <Download size={14} /> Download Audio
+                          </a>
+                        )}
+                        <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
                         <button 
                           className="btn-ghost" 
                           style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem' }}

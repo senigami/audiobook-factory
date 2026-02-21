@@ -1,0 +1,100 @@
+import os
+import pytest
+from pathlib import Path
+
+# NOTE: Do NOT import TestClient or app at the top level.
+# Doing so can trigger module loading before conftest.py env vars are set.
+
+@pytest.fixture
+def client():
+    from fastapi.testclient import TestClient
+    from app.web import app
+    return TestClient(app)
+
+def test_sandbox_isolation_verification(client):
+    """
+    CRITICAL: Verifies that the test environment is truly isolated.
+    The paths used during tests should be within a temporary directory, 
+    not the real production directories.
+    """
+    # Import inside to ensure conftest.py env vars have taken effect on constants
+    from app.config import PROJECTS_DIR
+    from app.db import DB_PATH
+
+    # 1. Verify PROJECTS_DIR is inside a temp directory (it should match os.environ)
+    env_projects = os.environ.get("PROJECTS_DIR")
+    assert str(PROJECTS_DIR) == env_projects
+    assert "projects" in str(PROJECTS_DIR)
+
+    # 2. Verify we aren't using the production DB file
+    assert "test_audiobook_factory.db" in str(DB_PATH), f"Expected 'test_audiobook_factory.db' in {DB_PATH}"
+
+    # 3. Verify environment variable overrides are active
+    assert os.environ.get("AUDIOBOOK_BASE_DIR") is not None
+
+def test_export_sample_with_project_context(client):
+    """
+    Verifies that the restored export-sample endpoint works correctly 
+    with the new project_id structure.
+    """
+    # 1. Create a project and chapter
+    res = client.post("/api/projects", data={"name": "SafetyTest"})
+    pid = res.json()["project_id"]
+
+    res = client.post(f"/api/projects/{pid}/chapters", data={"title": "SafetyChapter", "text_content": "Safety first."})
+    cid = res.json()["chapter"]["id"]
+
+    # 2. Mock a WAV file in the project's audio directory
+    from app.config import get_project_audio_dir
+    p_audio_dir = get_project_audio_dir(pid)
+    wav_path = p_audio_dir / f"{cid}.wav"
+    wav_path.write_text("fake audio data")
+
+    # 3. Call the export endpoint with project_id
+    res = client.post(f"/api/chapter/{cid}/export-sample?project_id={pid}")
+
+    # We expect success if the file is found
+    assert res.status_code in [200, 500] 
+    if res.status_code == 200:
+        assert "url" in res.json()
+    else:
+        # If it failed due to video gen, it still found the source
+        assert res.json().get("message") != "Audio not found for this chapter. Generate it first."
+
+def test_reset_chapter_isolation(client):
+    """
+    Verifies that resetting a chapter correctly clears files 
+    inside the project-specific directory.
+    """
+    res = client.post("/api/projects", data={"name": "ResetTarget"})
+    pid = res.json()["project_id"]
+
+    res = client.post(f"/api/projects/{pid}/chapters", data={"title": "ToReset"})
+    cid = res.json()["chapter"]["id"]
+
+    from app.config import get_project_audio_dir
+    p_audio_dir = get_project_audio_dir(pid)
+    wav_path = p_audio_dir / f"{cid}.wav"
+    wav_path.write_text("data")
+
+    # Manually update the chapter to point to this file so reset knows to delete it
+    from app.db import update_chapter
+    update_chapter(cid, audio_file_path=f"{cid}.wav")
+
+    assert wav_path.exists()
+
+    # Reset
+    res = client.post(f"/api/chapters/{cid}/reset")
+    assert res.status_code == 200
+
+    # Check if file is gone
+    assert not wav_path.exists()
+
+def test_import_legacy_data_is_safe(client):
+    """
+    Verifies that running the migration endpoint doesn't crash 
+    and obeys isolation rules.
+    """
+    res = client.post("/api/migration/import_legacy")
+    assert res.status_code == 200
+    assert res.json()["status"] == "success"

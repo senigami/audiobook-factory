@@ -54,6 +54,9 @@ def test_chapter_endpoints():
     res = client.delete(f"/api/chapters/{cid}")
     assert res.status_code == 200
 
+    res = client.delete(f"/api/projects/{pid}")
+    assert res.status_code == 200
+
 def test_missing_entities():
     # missing project
     assert client.get("/api/projects/999").status_code == 404
@@ -67,6 +70,7 @@ def test_missing_entities():
     # missing chapter
     pid = client.post("/api/projects", data={"name": "x"}).json()["project_id"]
     assert client.delete("/api/chapters/999").status_code == 404
+    client.delete(f"/api/projects/{pid}")
 
 def test_reports():
     res = client.get("/report/missing_report.json")

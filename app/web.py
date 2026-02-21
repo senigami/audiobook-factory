@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 import re
@@ -66,8 +67,8 @@ class ConnectionManager:
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
-            except Exception:
-                # print(f"DEBUG: Broadcast failed for a connection: {e}")
+            except Exception as e:
+                print(f"DEBUG: Broadcast failed for a connection: {e}")
                 if connection in self.active_connections:
                     self.active_connections.remove(connection)
 
@@ -76,6 +77,12 @@ manager = ConnectionManager()
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    # Ensure loop is captured if it wasn't already
+    if not _main_loop[0]:
+        try:
+            _main_loop[0] = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
     try:
         while True:
             # We don't expect messages FROM client for now, but need to keep it open
@@ -88,10 +95,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # We'll use a globally accessible loop variable for the bridge
+# This is usually the main thread's event loop
 _main_loop = [None]
 
 def broadcast_test_progress(name: str, progress: float, started_at: float = None):
-    import asyncio
     loop = _main_loop[0]
     if loop and loop.is_running():
         msg = {"type": "test_progress", "name": name, "progress": progress}
@@ -101,33 +108,37 @@ def broadcast_test_progress(name: str, progress: float, started_at: float = None
             manager.broadcast(msg),
             loop
         )
+    else:
+        print(f"DEBUG: Skipping test_progress broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
 def broadcast_queue_update():
     """Notify all clients that the processing queue has changed."""
-    import asyncio
     loop = _main_loop[0]
     if loop and loop.is_running():
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "queue_updated"}),
             loop
         )
+    else:
+        print(f"DEBUG: Skipping queue_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
 def broadcast_pause_state(paused: bool):
     """Notify all clients of a change in pause status."""
-    import asyncio
     loop = _main_loop[0]
     if loop and loop.is_running():
         asyncio.run_coroutine_threadsafe(
             manager.broadcast({"type": "pause_updated", "paused": paused}),
             loop
         )
+    else:
+        print(f"DEBUG: Skipping pause_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
 @app.on_event("startup")
 def startup_event():
     # Capture the main thread's loop for the bridge
-    import asyncio
     try:
         _main_loop[0] = asyncio.get_running_loop()
+        print(f"INFO: Startup captured loop {id(_main_loop[0])}")
     except RuntimeError:
         pass
 
@@ -156,7 +167,6 @@ def startup_event():
     reconcile_queue_status(active_ids)
 
     # Register bridge between state updates and WebSocket broadcast
-    import asyncio
     from .state import add_job_listener
 
     def job_update_bridge(job_id, updates):
@@ -544,8 +554,8 @@ def set_default_speaker(name: str = Form(...)):
     return {"status": "success", "default_speaker_profile": name}
 
 @app.post("/api/chapter/{filename}/export-sample")
-async def export_sample(filename: str):
-    wav_path, mp3_path = xtts_outputs_for(filename)
+async def export_sample(filename: str, project_id: Optional[str] = None):
+    wav_path, mp3_path = xtts_outputs_for(filename, project_id=project_id)
     source = mp3_path if mp3_path.exists() else wav_path
 
     if not source.exists():

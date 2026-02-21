@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText, Video, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText, Video, Loader2, Download } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
@@ -279,6 +279,17 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                   {isExporting ? <Loader2 size={12} className="animate-spin" /> : <Video size={12} />}
                   {isExporting ? 'Generating Video...' : 'Export Video Sample'}
                 </button>
+                {getAudioSrc() && (
+                  <a 
+                    href={getAudioSrc()!}
+                    download={getAudioSrc()!.split('/').pop()}
+                    className="btn-ghost" 
+                    style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start', textDecoration: 'none', color: 'inherit' }}
+                    onClick={() => setShowMenu(false)}
+                  >
+                    <Download size={12} /> Download Audio
+                  </a>
+                )}
                 <button
                   onClick={async () => {
                     setShowMenu(false);

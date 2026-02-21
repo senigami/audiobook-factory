@@ -61,7 +61,7 @@ def main():
     try:
         if os.path.exists(latent_file):
             print(f"Loading cached latents for {speaker_id}...", file=sys.stderr)
-            latents = torch.load(latent_file, map_location=device)
+            latents = torch.load(latent_file, map_location=device, weights_only=False)
             gpt_cond_latent = latents["gpt_cond_latent"]
             speaker_embedding = latents["speaker_embedding"]
         else:

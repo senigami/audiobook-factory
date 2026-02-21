@@ -131,6 +131,7 @@ function App() {
                   speakerProfiles={initialData?.speaker_profiles || []}
                   onBack={() => setActiveProjectId(null)} 
                   onNavigateToQueue={() => setActiveTab('queue')}
+                  onOpenPreview={(filename) => setPreviewFilename(filename)}
                 />
               ) : (
                 <ProjectLibrary

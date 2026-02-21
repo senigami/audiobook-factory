@@ -66,6 +66,17 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
     }
   };
 
+  // Sync queue status with live jobs
+  useEffect(() => {
+    setQueue(prev => prev.map(q => {
+      const liveJob = Object.values(jobs).find(j => j.id === q.id);
+      if (liveJob && liveJob.status !== q.status) {
+        return { ...q, status: liveJob.status };
+      }
+      return q;
+    }));
+  }, [jobs]);
+
   const handleRemove = async (id: string) => {
     try {
         await api.removeProcessingQueue(id);

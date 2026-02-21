@@ -1,17 +1,18 @@
+import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(os.getenv("AUDIOBOOK_BASE_DIR", str(Path(__file__).resolve().parents[1])))
 
-CHAPTER_DIR = BASE_DIR / "chapters_out"
-UPLOAD_DIR = BASE_DIR / "uploads"
-REPORT_DIR = BASE_DIR / "reports"
-XTTS_OUT_DIR = BASE_DIR / "xtts_audio"
-AUDIOBOOK_DIR = BASE_DIR / "audiobooks"
-VOICES_DIR = BASE_DIR / "voices"
-COVER_DIR = BASE_DIR / "uploads" / "covers"
-SAMPLES_DIR = BASE_DIR / "samples"
-ASSETS_DIR = BASE_DIR / "assets"
-PROJECTS_DIR = BASE_DIR / "projects"
+CHAPTER_DIR = Path(os.getenv("CHAPTER_DIR", str(BASE_DIR / "chapters_out")))
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads")))
+REPORT_DIR = Path(os.getenv("REPORT_DIR", str(BASE_DIR / "reports")))
+XTTS_OUT_DIR = Path(os.getenv("XTTS_OUT_DIR", str(BASE_DIR / "xtts_audio")))
+AUDIOBOOK_DIR = Path(os.getenv("AUDIOBOOK_DIR", str(BASE_DIR / "audiobooks")))
+VOICES_DIR = Path(os.getenv("VOICES_DIR", str(BASE_DIR / "voices")))
+COVER_DIR = Path(os.getenv("COVER_DIR", str(UPLOAD_DIR / "covers")))
+SAMPLES_DIR = Path(os.getenv("SAMPLES_DIR", str(BASE_DIR / "samples")))
+ASSETS_DIR = Path(os.getenv("ASSETS_DIR", str(BASE_DIR / "assets")))
+PROJECTS_DIR = Path(os.getenv("PROJECTS_DIR", str(BASE_DIR / "projects")))
 
 def get_project_dir(project_id: str) -> Path:
     d = PROJECTS_DIR / project_id
