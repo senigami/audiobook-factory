@@ -21,6 +21,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
+      '/projects': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
       '/queue': {
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,

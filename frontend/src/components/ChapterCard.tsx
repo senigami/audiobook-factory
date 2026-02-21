@@ -84,7 +84,10 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         ? (job.output_mp3 || job.output_wav)
         : (job.output_wav || job.output_mp3);
         
-      if (audioFile) return `${prefix}${audioFile}`;
+      if (audioFile) {
+        const itemPrefix = job.project_id ? `/projects/${job.project_id}/audio/` : prefix;
+        return `${itemPrefix}${audioFile}`;
+      }
     }
     return null;
   };

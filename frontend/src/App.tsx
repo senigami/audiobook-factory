@@ -27,7 +27,7 @@ function App() {
 
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
   const { jobs, refreshJobs, testProgress } = useJobs(
-    refetchHome, 
+    () => { refetchHome(); setQueueRefreshTrigger(prev => prev + 1); }, 
     () => { fetchQueueCount(); setQueueRefreshTrigger(prev => prev + 1); }, 
     () => refetchHome()
   );
@@ -132,6 +132,7 @@ function App() {
                   onBack={() => setActiveProjectId(null)} 
                   onNavigateToQueue={() => setActiveTab('queue')}
                   onOpenPreview={(filename) => setPreviewFilename(filename)}
+                  refreshTrigger={queueRefreshTrigger}
                 />
               ) : (
                 <ProjectLibrary

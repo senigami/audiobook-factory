@@ -133,7 +133,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                 <div style={{ paddingLeft: '1rem', borderLeft: '1px solid var(--border)' }}>
                     <audio 
                         controls 
-                        src={`/out/xtts/${chapter.audio_file_path}`} 
+                        src={chapter.project_id 
+                            ? `/projects/${chapter.project_id}/audio/${chapter.audio_file_path}`
+                            : `/out/xtts/${chapter.audio_file_path}`} 
+                        onError={(e) => {
+                            const target = e.target as HTMLAudioElement;
+                            if (target.src.includes('/projects/')) {
+                                target.src = `/out/xtts/${chapter.audio_file_path}`;
+                            }
+                        }}
                         style={{ height: '32px', maxWidth: '300px' }}
                     />
                 </div>

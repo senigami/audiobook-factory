@@ -13,9 +13,10 @@ interface ProjectViewProps {
   onBack: () => void;
   onNavigateToQueue: () => void;
   onOpenPreview: (filename: string) => void;
+  refreshTrigger?: number;
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0 }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
 
   useEffect(() => {
     loadData();
-  }, [projectId]);
+  }, [projectId, refreshTrigger]);
 
   const handleCreateChapter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -578,6 +579,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                             <audio 
                                 controls 
                                 src={`/projects/${projectId}/audio/${chap.audio_file_path}`} 
+                                onError={(e) => {
+                                    const target = e.target as HTMLAudioElement;
+                                    if (target.src.includes(`/projects/${projectId}/audio/`)) {
+                                        target.src = `/out/xtts/${chap.audio_file_path}`;
+                                    }
+                                }}
                                 style={{ height: '30px', width: '100%', maxWidth: '600px' }}
                                 onClick={e => e.stopPropagation()}
                                 onPointerDown={e => e.stopPropagation()} 

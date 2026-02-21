@@ -243,7 +243,8 @@ def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
             """, (queue_id, project_id, chapter_id, split_part, now))
 
             # Also update chapter status to queued if it's unprocessed or done
-            cursor.execute("UPDATE chapters SET audio_status = 'processing' WHERE id = ?", (chapter_id,))
+            # Clear audio_generated_at so the "text changed" alert doesn't show for a stale version
+            cursor.execute("UPDATE chapters SET audio_status = 'processing', audio_generated_at = NULL WHERE id = ?", (chapter_id,))
             conn.commit()
             return queue_id
 
@@ -283,8 +284,30 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
             # Sync Chapter status and audio path
             cursor.execute("SELECT chapter_id, split_part FROM processing_queue WHERE id = ?", (queue_id,))
             row = cursor.fetchone()
+            chapter_id = None
+            split_part = 0
+
             if row:
                 chapter_id, split_part = row
+            else:
+                # Fallback: if queue_id is formatted like a chapter ID and exists, use that
+                # Sometimes jobs created outside the queue (or recovered) use the chapter_id directly
+                # Legacy jobs often have queue_id == chapter_id
+                # Or they are of the format chapter_id_split_part
+                parts = queue_id.rsplit('_', 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    possible_cid = parts[0]
+                    possible_split = int(parts[1])
+                else:
+                    possible_cid = queue_id
+                    possible_split = 0
+
+                cursor.execute("SELECT id FROM chapters WHERE id = ?", (possible_cid,))
+                if cursor.fetchone():
+                    chapter_id = possible_cid
+                    split_part = possible_split
+
+            if chapter_id:
                 if status == 'done':
                     # Assuming standard naming output by jobs.py
                     audio_path = f"{chapter_id}_{split_part}.mp3"
@@ -292,10 +315,10 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
                         "UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ?, audio_length_seconds = ? WHERE id = ?", 
                         (audio_path, now, audio_length_seconds, chapter_id)
                     )
-                elif status in ['failed', 'error']:
-                    cursor.execute("UPDATE chapters SET audio_status = 'error' WHERE id = ?", (chapter_id,))
-                elif status == 'running':
-                    cursor.execute("UPDATE chapters SET audio_status = 'processing' WHERE id = ?", (chapter_id,))
+                elif status == 'running' or status == 'queued':
+                    cursor.execute("UPDATE chapters SET audio_status = 'processing', audio_generated_at = NULL WHERE id = ?", (chapter_id,))
+                elif status == 'cancelled' or status == 'failed' or status == 'error':
+                    cursor.execute("UPDATE chapters SET audio_status = ?, audio_generated_at = NULL WHERE id = ?", ('unprocessed' if status == 'cancelled' else 'error', chapter_id))
 
             conn.commit()
             return cursor.rowcount > 0

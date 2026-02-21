@@ -182,7 +182,9 @@ def update_job(job_id: str, **updates) -> None:
                             except Exception as e:
                                 print(f"Warning: Could not get duration for {output_file}: {e}")
 
-                update_queue_item(job_id, updates["status"], audio_length_seconds=audio_length)
+                result_code = update_queue_item(job_id, updates["status"], audio_length_seconds=audio_length)
+
+                # print(f"DEBUG: SQLite sync for {job_id}: status={updates['status']}, len={audio_length}, result={result_code}")
 
                 try:
                     from .web import broadcast_queue_update
@@ -191,7 +193,7 @@ def update_job(job_id: str, **updates) -> None:
                     pass
 
             except Exception as e:
-                print(f"Warning: Failed to sync job status to SQLite: {e}")
+                print(f"Warning: Failed to sync job status to SQLite for {job_id}: {e}")
 
         # Notify listeners
         for callback in _JOB_LISTENERS:

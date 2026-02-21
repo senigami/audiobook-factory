@@ -121,3 +121,145 @@ def test_chapter_metadata_sync(client):
     assert updated["char_count"] == len(new_text)
     assert updated["word_count"] == 8 # "This is a test with seven words now."
     assert updated["predicted_audio_length"] > 0
+
+def test_reconciliation_project_aware(client):
+    """
+    Verifies that cleanup_and_reconcile respects project-specific paths.
+    """
+    # 1. Create a project and chapter
+    res = client.post("/api/projects", data={"name": "ReconTest"})
+    pid = res.json()["project_id"]
+
+    res = client.post(f"/api/projects/{pid}/chapters", data={"title": "ReconChapter"})
+    cid = res.json()["chapter"]["id"]
+
+    # 2. Add to queue and mark as done manually in state
+    from app.state import put_job, update_job
+    from app.models import Job
+    import time
+
+    jid = f"test_recon_{cid}"
+    j = Job(
+        id=jid, 
+        engine="xtts", 
+        chapter_file=f"{cid}_0.txt", 
+        status="done", 
+        created_at=time.time(),
+        project_id=pid
+    )
+    put_job(j)
+
+    # 2.5 Create the text file so it's not pruned as stale
+    from app.config import get_project_text_dir
+    p_text_dir = get_project_text_dir(pid)
+    (p_text_dir / f"{cid}_0.txt").write_text("chapter text")
+
+    # 3. Create the audio file in the project folder
+    from app.config import get_project_audio_dir
+    p_audio_dir = get_project_audio_dir(pid)
+    wav_path = p_audio_dir / f"{cid}_0.wav"
+    wav_path.write_text("audio content")
+    mp3_path = p_audio_dir / f"{cid}_0.mp3"
+    mp3_path.write_text("audio content")
+
+    # 4. Trigger reconciliation (happens in api_home)
+    from app.jobs import cleanup_and_reconcile
+    cleanup_and_reconcile()
+
+    # 5. Verify status is STILL 'done'
+    from app.state import get_jobs
+    jobs = get_jobs()
+    assert jobs[jid].status == "done"
+
+    # 6. Now delete the file and reconcile again
+    wav_path.unlink()
+    mp3_path.unlink()
+    cleanup_and_reconcile()
+
+    # 7. Verify status is now 'queued'
+    jobs = get_jobs()
+    assert jobs[jid].status == "queued"
+
+
+def test_legacy_path_and_forward_sync(tmp_path, sandbox_env):
+    """
+    Simulates a 'migrated' chapter that has text/audio in the global/legacy directories
+    instead of the new project-specific directories.
+    Verifies that cleanup_and_reconcile:
+    1. Finds the files using fallbacks
+    2. Keeps the job as 'done'
+    3. Forward-syncs the 'done' status to the SQLite chapters table
+    """
+    from app.db import init_db, create_project, create_chapter, get_connection
+    from app.state import put_job
+    from app.models import Job
+    from app.config import CHAPTER_DIR, XTTS_OUT_DIR
+    import uuid
+
+    init_db()
+
+    pid = str(uuid.uuid4())
+    create_project(name="Legacy Migration Test", id=pid)
+
+    cid = str(uuid.uuid4())
+    create_chapter(project_id=pid, title="Legacy Chapter", text_content="legacy format text", sort_order=1, id=cid)
+
+    # Pre-condition: Chapter should be 'unprocessed' in DB initially
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT audio_status FROM chapters WHERE id = ?", (cid,))
+        status = c.fetchone()[0]
+        assert status == "unprocessed"
+
+    # Create a job in state.json claiming to be done
+    jid = str(uuid.uuid4())
+    import time
+    j = Job(
+        id=jid,
+        engine="xtts",
+        status="done",
+        chapter_file=f"{cid}_0",
+        project_id=pid,
+        make_mp3=True,
+        output_mp3=f"{cid}_0.mp3",
+        started_at=123.0,
+        finished_at=125.0,
+        timestamp=time.time(),
+        created_at=time.time(),
+        updated_at=time.time(),
+        bypass_pause=False
+    )
+    put_job(j)
+
+    # 1. Create text file in LEGACY folder (CHAPTER_DIR), NOT project folder
+    legacy_text = CHAPTER_DIR / f"{cid}_0.txt"
+    legacy_text.parent.mkdir(parents=True, exist_ok=True)
+    legacy_text.write_text("legacy chapter text")
+
+    # 2. Create audio file in LEGACY folder (XTTS_OUT_DIR), NOT project folder
+    legacy_mp3 = XTTS_OUT_DIR / f"{cid}_0.mp3"
+    legacy_mp3.parent.mkdir(parents=True, exist_ok=True)
+    legacy_mp3.write_text("legacy audio data")
+
+    # 3. Trigger reconciliation
+    from app.jobs import cleanup_and_reconcile
+    cleanup_and_reconcile()
+
+    # 4. Assert the job was NOT pruned or reset (still 'done')
+    from app.state import get_jobs
+    jobs = get_jobs()
+    assert jid in jobs
+    assert jobs[jid].status == "done"
+
+    # 5. Assert the 'done' status was forward-synced to the SQLite chapters table
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT audio_status, audio_file_path FROM chapters WHERE id = ?", (cid,))
+        row = c.fetchone()
+        assert row is not None
+        assert row[0] == "done"
+        assert row[1] == f"{cid}_0.mp3"
+
+    # Cleanup test files
+    legacy_text.unlink()
+    legacy_mp3.unlink()
