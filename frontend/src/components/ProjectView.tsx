@@ -193,7 +193,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   };
 
   const handleQueueAllUnprocessed = async () => {
-      const unprocessed = chapters.filter(c => c.audio_status === 'unprocessed' || c.audio_status === 'error');
+      const liveQueuedChapterIds = new Set(
+          Object.values(jobs)
+              .filter(j => j.engine !== 'audiobook' && (j.status === 'queued' || j.status === 'running'))
+              .map(j => {
+                  // Reconstruct chapter ID from the file name, handling the _split format.
+                  // E.g. cid_0 -> cid
+                  const stem = j.chapter_file.replace('.txt', '');
+                  const parts = stem.split('_'); 
+                  if (parts.length > 1 && !isNaN(Number(parts[parts.length - 1]))) {
+                      parts.pop(); 
+                  }
+                  return parts.join('_');
+              })
+      );
+
+      const unprocessed = chapters.filter(c => 
+          (c.audio_status === 'unprocessed' || c.audio_status === 'error') && 
+          !liveQueuedChapterIds.has(c.id)
+      );
       if (unprocessed.length === 0) {
           alert("All chapters are already processed or queued.");
           return;
@@ -563,7 +581,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     
                     if (chap.audio_status === 'processing' && job) {
                         return (
-                            <div style={{ width: '100%', maxWidth: '300px' }}>
+                            <div style={{ width: '100%', maxWidth: '600px' }}>
                                 <PredictiveProgressBar 
                                     progress={job.progress || 0}
                                     startedAt={job.started_at}

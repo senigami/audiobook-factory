@@ -235,6 +235,16 @@ def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+
+            # Enforce Uniqueness: check if already queued or running
+            cursor.execute("""
+                SELECT id FROM processing_queue 
+                WHERE chapter_id = ? AND split_part = ? AND status IN ('queued', 'running')
+            """, (chapter_id, split_part))
+            existing = cursor.fetchone()
+            if existing:
+                return existing[0]
+
             queue_id = str(uuid.uuid4())
             now = time.time()
             cursor.execute("""

@@ -105,6 +105,46 @@ def test_backfill_surgical_logic(temp_chapter, monkeypatch):
     assert job.status == "done"
 
     # Cleanup files
-    if wav_path.exists(): wav_path.unlink()
     if mp3_path.exists(): mp3_path.unlink()
     delete_jobs([jid])
+
+def test_queue_uniqueness():
+    """
+    Verifies that a chapter cannot be added to the queue more than once concurrently.
+    """
+    from app.db import create_project, create_chapter, get_queue
+    from app.state import clear_all_jobs
+    import uuid
+
+    # 1. Setup clean environment
+    clear_all_jobs()
+
+    # 2. Create mock project and chapter
+    pid = create_project("Queue Uniqueness Test")
+    cid = create_chapter(project_id=pid, title="Unique Chapter")
+
+    # 3. Add to queue first time
+    res1 = client.post("/api/processing_queue", data={
+        "project_id": pid,
+        "chapter_id": cid,
+        "split_part": 0,
+        "speaker_profile": "test_profile"
+    })
+    assert res1.status_code == 200
+
+    # 4. Attempt to add to queue second time
+    res2 = client.post("/api/processing_queue", data={
+        "project_id": pid,
+        "chapter_id": cid,
+        "split_part": 0,
+        "speaker_profile": "test_profile"
+    })
+
+    # Should succeed, but return the exact same queue_id instead of a new one
+    assert res2.status_code == 200
+    assert res1.json()["queue_id"] == res2.json()["queue_id"]
+
+    # 5. Verify the actual queue only has 1 physical row
+    q = get_queue()
+    chapter_entries = [i for i in q if i["chapter_id"] == cid]
+    assert len(chapter_entries) == 1

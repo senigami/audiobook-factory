@@ -209,7 +209,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 onClick={e => e.stopPropagation()}
               >
                 <button
-                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)}
+                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running')}
                   onClick={async () => {
                     setShowMenu(false);
                     try {
@@ -229,10 +229,14 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                     alignItems: 'center',
                     gap: '8px',
                     justifyContent: 'flex-start',
-                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 0.5 : 1,
-                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 'not-allowed' : 'pointer'
+                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running') ? 0.5 : 1,
+                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running') ? 'not-allowed' : 'pointer'
                   }}
-                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Synthesize just this one chapter"}
+                  title={
+                    (status === 'queued' || status === 'running') ? "Already queued or processing. Please wait or cancel first." :
+                    (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : 
+                    "Synthesize just this one chapter"
+                  }
                 >
                   <Play size={12} /> Process Synthesis
                 </button>
