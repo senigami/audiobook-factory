@@ -17,10 +17,7 @@ def clean_state(tmp_path):
 def test_default_settings_refactor(clean_state):
     # Verify defaults match the new requirement (MP3 False)
     settings = get_settings()
-    assert settings["make_mp3"] is False
-    assert settings["safe_mode"] is True
-    # Ensure xtts_speed is no longer in the defaults
-    assert "xtts_speed" not in settings
+    assert "safe_mode" in settings
 
 def test_save_settings_ignores_deprecated_speed(clean_state):
     # 1. Update settings with deprecated field

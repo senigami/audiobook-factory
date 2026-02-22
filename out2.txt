@@ -1,0 +1,277 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /Users/stevendunn/GitHub-Steven/audiobook-factory/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/stevendunn/GitHub-Steven/audiobook-factory
+configfile: pytest.ini
+plugins: anyio-4.12.1, typeguard-4.5.0, cov-7.0.0
+collecting ... collected 15 items
+
+tests/test_textops.py::test_preprocess FAILED                            [  6%]
+tests/test_textops.py::test_clean_text FAILED                            [ 13%]
+tests/test_textops.py::test_consolidate_single_word_sentences FAILED     [ 20%]
+tests/test_textops.py::test_sanitize_for_xtts PASSED                     [ 26%]
+tests/test_textops.py::test_find_long_sentences PASSED                   [ 33%]
+tests/test_textops.py::test_safe_split_long_sentences FAILED             [ 40%]
+tests/test_textops.py::test_pack_text_to_limit FAILED                    [ 46%]
+tests/test_textops.py::test_safe_filename FAILED                         [ 53%]
+tests/test_textops.py::test_split_sentences FAILED                       [ 60%]
+tests/test_jobs.py::test_pause_states PASSED                             [ 66%]
+tests/test_jobs.py::test_estimate_seconds FAILED                         [ 73%]
+tests/test_jobs.py::test_queueing FAILED                                 [ 80%]
+tests/test_jobs.py::test_output_exists PASSED                            [ 86%]
+tests/test_jobs.py::test_cleanup_and_reconcile FAILED                    [ 93%]
+tests/test_jobs.py::test_speaker_helpers FAILED                          [100%]
+ERROR: Coverage failure: total of 11 is less than fail-under=60
+
+
+=================================== FAILURES ===================================
+_______________________________ test_preprocess ________________________________
+
+    def test_preprocess():
+>       assert preprocess_text("Hello [ignored] World {too} (bye)") == "Hello  World  "
+E       AssertionError: assert 'Hello ignored World too bye' == 'Hello  World  '
+E         
+E         - Hello  World  
+E         + Hello ignored World too bye
+
+tests/test_textops.py:16: AssertionError
+_______________________________ test_clean_text ________________________________
+
+    def test_clean_text():
+        raw = "Hello\nWorld!!!"
+>       assert "Hello World." in clean_text_for_tts(raw)
+E       AssertionError: assert 'Hello World.' in 'Hello\nWorld!'
+E        +  where 'Hello\nWorld!' = clean_text_for_tts('Hello\nWorld!!!')
+
+tests/test_textops.py:20: AssertionError
+____________________ test_consolidate_single_word_sentences ____________________
+
+    def test_consolidate_single_word_sentences():
+        text = "Yes. I will go."
+        res = consolidate_single_word_sentences(text)
+>       assert "Yes, I will go." in res or res == "Yes, I will go."
+E       AssertionError: assert ('Yes, I will go.' in 'Yes; I will go.' or 'Yes; I will go.' == 'Yes, I will go.'
+E         
+E         - Yes, I will go.
+E         ?    ^
+E         + Yes; I will go.
+E         ?    ^)
+
+tests/test_textops.py:25: AssertionError
+________________________ test_safe_split_long_sentences ________________________
+
+    def test_safe_split_long_sentences():
+        long_sent = "I am a very long sentence! " * 50
+        split_src = safe_split_long_sentences(long_sent)
+>       assert len(split_src.split('.')) > len(long_sent.split('.'))
+E       AssertionError: assert 1 > 1
+E        +  where 1 = len(['I am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!'])
+E        +    where ['I am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!'] = <built-in method split of str object at 0x8e3d42400>('.')
+E        +      where <built-in method split of str object at 0x8e3d42400> = 'I am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!\nI am a very long sentence!'.split
+E        +  and   1 = len(['I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! '])
+E        +    where ['I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! '] = <built-in method split of str object at 0x8e3c43000>('.')
+E        +      where <built-in method split of str object at 0x8e3c43000> = 'I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! I am a very long sentence! '.split
+
+tests/test_textops.py:43: AssertionError
+___________________________ test_pack_text_to_limit ____________________________
+
+    def test_pack_text_to_limit():
+        blocks = pack_text_to_limit("A\nB", limit=5)
+>       assert len(blocks) == 1
+E       AssertionError: assert 3 == 1
+E        +  where 3 = len('A B')
+
+tests/test_textops.py:47: AssertionError
+______________________________ test_safe_filename ______________________________
+
+    def test_safe_filename():
+>       assert safe_filename("Hello World: A Test/Subtitle") == "Hello World A TestSubtitle"
+E       AssertionError: assert 'Hello World: A TestSubtitle' == 'Hello World A TestSubtitle'
+E         
+E         - Hello World A TestSubtitle
+E         + Hello World: A TestSubtitle
+E         ?            +
+
+tests/test_textops.py:52: AssertionError
+_____________________________ test_split_sentences _____________________________
+
+    def test_split_sentences():
+>       assert len(split_sentences("One. Two! Three?")) == 3
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: object of type 'generator' has no len()
+
+tests/test_textops.py:55: TypeError
+____________________________ test_estimate_seconds _____________________________
+
+    def test_estimate_seconds():
+        # 10 chars at 10 cps = 1 second
+>       assert _estimate_seconds(10, 10.0) == 1
+E       assert 5 == 1
+E        +  where 5 = _estimate_seconds(10, 10.0)
+
+tests/test_jobs.py:18: AssertionError
+________________________________ test_queueing _________________________________
+
+    def test_queueing():
+>       job = Job(id="test_job", engine="xtts", chapter_file="none.txt", status="queued")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Job.__init__() missing 1 required positional argument: 'created_at'
+
+tests/test_jobs.py:23: TypeError
+__________________________ test_cleanup_and_reconcile __________________________
+
+    def test_cleanup_and_reconcile():
+>       with patch('app.state.get_jobs', return_value={}), patch('app.state.save_jobs'):
+
+tests/test_jobs.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.11/3.11.14_3/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x10b33af90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'app.state' from '/Users/stevendunn/GitHub-Steven/audiobook-factory/app/state.py'> does not have the attribute 'save_jobs'
+
+/opt/homebrew/Cellar/python@3.11/3.11.14_3/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1419: AttributeError
+_____________________________ test_speaker_helpers _____________________________
+
+    def test_speaker_helpers():
+>       with patch('app.config.SPEAKER_DIR.exists', return_value=True):
+
+tests/test_jobs.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.11/3.11.14_3/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1430: in __enter__
+    self.target = self.getter()
+                  ^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'app.config.SPEAKER_DIR'
+
+    def resolve_name(name):
+        """
+        Resolve a name to an object.
+    
+        It is expected that `name` will be a string in one of the following
+        formats, where W is shorthand for a valid Python identifier and dot stands
+        for a literal period in these pseudo-regexes:
+    
+        W(.W)*
+        W(.W)*:(W(.W)*)?
+    
+        The first form is intended for backward compatibility only. It assumes that
+        some part of the dotted name is a package, and the rest is an object
+        somewhere within that package, possibly nested inside other objects.
+        Because the place where the package stops and the object hierarchy starts
+        can't be inferred by inspection, repeated attempts to import must be done
+        with this form.
+    
+        In the second form, the caller makes the division point clear through the
+        provision of a single colon: the dotted name to the left of the colon is a
+        package to be imported, and the dotted name to the right is the object
+        hierarchy within that package. Only one import is needed in this form. If
+        it ends with the colon, then a module object is returned.
+    
+        The function will return an object (which might be a module), or raise one
+        of the following exceptions:
+    
+        ValueError - if `name` isn't in a recognised format
+        ImportError - if an import failed when it shouldn't have
+        AttributeError - if a failure occurred when traversing the object hierarchy
+                         within the imported package to get to the desired object.
+        """
+        global _NAME_PATTERN
+        if _NAME_PATTERN is None:
+            # Lazy import to speedup Python startup time
+            import re
+            dotted_words = r'(?!\d)(\w+)(\.(?!\d)(\w+))*'
+            _NAME_PATTERN = re.compile(f'^(?P<pkg>{dotted_words})'
+                                       f'(?P<cln>:(?P<obj>{dotted_words})?)?$',
+                                       re.UNICODE)
+    
+        m = _NAME_PATTERN.match(name)
+        if not m:
+            raise ValueError(f'invalid format: {name!r}')
+        gd = m.groupdict()
+        if gd.get('cln'):
+            # there is a colon - a one-step import is all that's needed
+            mod = importlib.import_module(gd['pkg'])
+            parts = gd.get('obj')
+            parts = parts.split('.') if parts else []
+        else:
+            # no colon - have to iterate to find the package boundary
+            parts = name.split('.')
+            modname = parts.pop(0)
+            # first part *must* be a module/package.
+            mod = importlib.import_module(modname)
+            while parts:
+                p = parts[0]
+                s = f'{modname}.{p}'
+                try:
+                    mod = importlib.import_module(s)
+                    parts.pop(0)
+                    modname = s
+                except ImportError:
+                    break
+        # if we reach this point, mod is the module, already imported, and
+        # parts is the list of parts in the object hierarchy to be traversed, or
+        # an empty list if just the module is wanted.
+        result = mod
+        for p in parts:
+>           result = getattr(result, p)
+                     ^^^^^^^^^^^^^^^^^^
+E           AttributeError: module 'app.config' has no attribute 'SPEAKER_DIR'
+
+/opt/homebrew/Cellar/python@3.11/3.11.14_3/Frameworks/Python.framework/Versions/3.11/lib/python3.11/pkgutil.py:715: AttributeError
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.11.14-final-0 _______________
+
+Name               Stmts   Miss  Cover   Missing
+------------------------------------------------
+app/config.py         35     12    66%   17-19, 22-24, 27-29, 32-34
+app/db.py            229    229     0%   1-370
+app/engines.py       192    174     9%   15-24, 27-91, 94-100, 103-134, 139-147, 151-162, 177-287, 302-322
+app/jobs.py          336    284    15%   25-30, 34-39, 42-44, 49-55, 66, 72, 79-84, 90-93, 97-98, 105, 109, 122-194, 201-211, 216-247, 252-617
+app/migration.py      37     37     0%   1-79
+app/models.py         30      0   100%
+app/state.py         140    113    19%   20, 24, 39-41, 48-70, 74-75, 79-80, 84-86, 90-94, 98-105, 109-113, 117-128, 132-136, 140-194, 198-204, 208-211
+app/textops.py       197     99    50%   53, 60-72, 75-117, 125-138, 150, 154-186, 289-296, 318, 330, 342-346, 350
+app/web.py          1074   1074     0%   1-1726
+------------------------------------------------
+TOTAL               2270   2022    11%
+FAIL Required test coverage of 60% not reached. Total coverage: 10.93%
+=========================== short test summary info ============================
+FAILED tests/test_textops.py::test_preprocess - AssertionError: assert 'Hello...
+FAILED tests/test_textops.py::test_clean_text - AssertionError: assert 'Hello...
+FAILED tests/test_textops.py::test_consolidate_single_word_sentences - Assert...
+FAILED tests/test_textops.py::test_safe_split_long_sentences - AssertionError...
+FAILED tests/test_textops.py::test_pack_text_to_limit - AssertionError: asser...
+FAILED tests/test_textops.py::test_safe_filename - AssertionError: assert 'He...
+FAILED tests/test_textops.py::test_split_sentences - TypeError: object of typ...
+FAILED tests/test_jobs.py::test_estimate_seconds - assert 5 == 1
+FAILED tests/test_jobs.py::test_queueing - TypeError: Job.__init__() missing ...
+FAILED tests/test_jobs.py::test_cleanup_and_reconcile - AttributeError: <modu...
+FAILED tests/test_jobs.py::test_speaker_helpers - AttributeError: module 'app...
+========================= 11 failed, 4 passed in 0.17s =========================

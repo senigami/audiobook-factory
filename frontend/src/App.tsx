@@ -1,19 +1,38 @@
 import { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
-import { Sidebar } from './components/Sidebar';
 import { Panel } from './components/Panel';
 import { PreviewModal } from './components/PreviewModal';
 import { VoicesTab } from './components/VoicesTab';
 import { SynthesisTab } from './components/SynthesisTab';
 import { LibraryTab } from './components/LibraryTab';
+import { ProjectLibrary } from './components/ProjectLibrary';
+import { ProjectView } from './components/ProjectView';
+import { GlobalQueue } from './components/GlobalQueue';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
 import type { Job } from './types';
 
 function App() {
+  const [queueCount, setQueueCount] = useState(0);
+  const [queueRefreshTrigger, setQueueRefreshTrigger] = useState(0);
+
+  const fetchQueueCount = async () => {
+    try {
+        const res = await fetch('/api/processing_queue');
+        const queueData = await res.json();
+        const active = queueData.filter((q: any) => q.status === 'queued' || q.status === 'running');
+        setQueueCount(active.length);
+    } catch(e) { console.error('Failed to get queue count', e); }
+  };
+
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
-  const { jobs, refreshJobs, testProgress } = useJobs(refetchHome);
-  const [activeTab, setActiveTab] = useState<'voices' | 'synthesis' | 'library'>('synthesis');
+  const { jobs, refreshJobs, testProgress } = useJobs(
+    () => { refetchHome(); setQueueRefreshTrigger(prev => prev + 1); }, 
+    () => { fetchQueueCount(); setQueueRefreshTrigger(prev => prev + 1); }, 
+    () => refetchHome()
+  );
+  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
@@ -23,6 +42,14 @@ function App() {
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // ...
+
+  useEffect(() => {
+     fetchQueueCount();
+     const interval = setInterval(fetchQueueCount, 3000);
+     return () => clearInterval(interval);
   }, []);
 
   const handleRefresh = async () => {
@@ -78,12 +105,7 @@ function App() {
         onTabChange={(tab) => setActiveTab(tab)}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
-        headerRight={
-          <Sidebar
-            paused={initialData?.paused || false}
-            onRefresh={handleRefresh}
-          />
-        }
+        queueCount={queueCount}
       >
         <div style={{
           flex: 1,
@@ -101,6 +123,32 @@ function App() {
                 testProgress={testProgress}
               />
             )}
+            {activeTab === 'library' && (
+              activeProjectId ? (
+                <ProjectView 
+                  projectId={activeProjectId} 
+                  jobs={jobs}
+                  speakerProfiles={initialData?.speaker_profiles || []}
+                  onBack={() => setActiveProjectId(null)} 
+                  onNavigateToQueue={() => setActiveTab('queue')}
+                  onOpenPreview={(filename) => setPreviewFilename(filename)}
+                  refreshTrigger={queueRefreshTrigger}
+                />
+              ) : (
+                <ProjectLibrary
+                  onSelectProject={setActiveProjectId}
+                />
+              )
+            )}
+            
+            {activeTab === 'queue' && (
+                <GlobalQueue 
+                    paused={initialData?.paused || false} 
+                    jobs={jobs}
+                    refreshTrigger={queueRefreshTrigger}
+                />
+            )}
+
             {activeTab === 'synthesis' && (
               <SynthesisTab
                 chapters={chaptersToShow}
@@ -120,7 +168,7 @@ function App() {
                 onOpenPreview={setPreviewFilename}
               />
             )}
-            {activeTab === 'library' && (
+            {activeTab === 'assembly' && (
               <LibraryTab
                 audiobooks={initialData?.audiobooks || []}
                 audiobookJob={audiobookJob}

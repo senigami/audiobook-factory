@@ -9,7 +9,7 @@ from json import JSONDecodeError
 from .models import Job
 from .config import BASE_DIR
 
-STATE_FILE = BASE_DIR / "state.json"
+STATE_FILE = Path(os.getenv("STATE_FILE", str(BASE_DIR / "state.json")))
 
 # IMPORTANT: RLock prevents deadlock when a function that holds the lock calls another that also locks.
 _STATE_LOCK = threading.RLock()
@@ -146,6 +146,54 @@ def update_job(job_id: str, **updates) -> None:
         j.update(updates)
         jobs[job_id] = j
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+
+        # Sync with SQLite DB if this job corresponds to a processing_queue item
+        if "status" in updates:
+            try:
+                from .db import update_queue_item
+                from .config import XTTS_OUT_DIR
+                import subprocess
+
+                audio_length = 0.0
+                if updates["status"] == "done":
+                    # Try to extract the true duration using ffprobe for the synchronized database record
+                    # We need the filename, which is usually constructed in DB as sqlite_{job_id}_{part}.mp3
+                    # But jobs.py usually tells us output_mp3 if it set it in updates, else we check the job itself
+                    output_file = updates.get("output_mp3", j.get("output_mp3"))
+                    if output_file:
+                        project_id = updates.get("project_id", j.get("project_id"))
+                        if project_id:
+                            from .config import get_project_audio_dir
+                            pdir = get_project_audio_dir(project_id)
+                        else:
+                            pdir = XTTS_OUT_DIR
+
+                        mp3_path = pdir / output_file
+                        if mp3_path.exists():
+                            try:
+                                result = subprocess.run(
+                                    ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(mp3_path)],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,
+                                    text=True,
+                                    timeout=2
+                                )
+                                audio_length = float(result.stdout.strip())
+                            except Exception as e:
+                                print(f"Warning: Could not get duration for {output_file}: {e}")
+
+                result_code = update_queue_item(job_id, updates["status"], audio_length_seconds=audio_length)
+
+                # print(f"DEBUG: SQLite sync for {job_id}: status={updates['status']}, len={audio_length}, result={result_code}")
+
+                try:
+                    from .web import broadcast_queue_update
+                    broadcast_queue_update()
+                except ImportError:
+                    pass
+
+            except Exception as e:
+                print(f"Warning: Failed to sync job status to SQLite for {job_id}: {e}")
 
         # Notify listeners
         for callback in _JOB_LISTENERS:

@@ -26,6 +26,7 @@ def terminate_all_subprocesses():
 def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
     import time
     import selectors
+    print(f"DEBUG: Running command: {cmd}")
     proc = subprocess.Popen(
         cmd, shell=True,
         stdout=subprocess.PIPE,

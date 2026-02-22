@@ -8,7 +8,7 @@ Audiobook Factory is a modern, self-hosted web dashboard for turning chapter-mar
 - **Auto-Tuning ETA**: Progress tracking that learns from your hardware's speed.
 - **Interactive Assembly**: Smart interface for renaming, reordering, and building final M4B files.
 
-![Audiobook Factory Dashboard](docs/assets/home.png)
+![Audiobook Factory Dashboard](docs/assets/home.jpg)
 
 > [!TIP]
 > **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://senigami.github.io/audiobook-factory/)

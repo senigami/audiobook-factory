@@ -68,17 +68,21 @@ export const PredictiveProgressBar: React.FC<PredictiveProgressBarProps> = ({
         <div style={{ width: '100%' }} data-testid="progress-bar">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
-                {showEta && displayedRemaining !== null && (
-                    <span style={{
-                        fontSize: '0.65rem',
-                        color: 'var(--accent)',
-                        fontWeight: 700,
-                        fontVariantNumeric: 'tabular-nums'
-                    }}>
-                        ETA: {formatTime(displayedRemaining)}
-                    </span>
-                )}
-                {!showEta && (
+                {showEta && displayedRemaining !== null ? (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            {Math.round(localProgress * 100)}%
+                        </span>
+                        <span style={{
+                            fontSize: '0.65rem',
+                            color: 'var(--accent)',
+                            fontWeight: 700,
+                            fontVariantNumeric: 'tabular-nums'
+                        }}>
+                            ETA: {formatTime(displayedRemaining)}
+                        </span>
+                    </div>
+                ) : (
                     <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent)' }}>
                         {Math.round(localProgress * 100)}%
                     </span>

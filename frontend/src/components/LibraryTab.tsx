@@ -190,7 +190,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
                                     </button>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <a href={`/out/audiobook/${b.filename}`} download className="btn-glass" style={{ flex: 1, textDecoration: 'none', fontSize: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '6px' }}>
+                                    <a href={b.url || `/out/audiobook/${b.filename}`} download className="btn-glass" style={{ flex: 1, textDecoration: 'none', fontSize: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', padding: '6px' }}>
                                         <Download size={14} /> Download
                                     </a>
                                 </div>

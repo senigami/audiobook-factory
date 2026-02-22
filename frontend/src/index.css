@@ -7,8 +7,11 @@
   --accent-active: #7c3aed;
   --accent-glow: rgba(139, 92, 246, 0.3);
   --success: #10b981;
+  --success-muted: rgba(16, 185, 129, 0.4);
   --error: #ef4444;
+  --error-muted: rgba(239, 68, 68, 0.4);
   --warning: #f59e0b;
+  --warning-muted: rgba(245, 158, 11, 0.4);
   --text-primary: #ffffff;
   --text-secondary: #cbd5e1;
   /* Lighter for better contrast */
@@ -18,6 +21,8 @@
   --glass: rgba(255, 255, 255, 0.02);
   --glass-hover: rgba(255, 255, 255, 0.06);
   --glass-active: rgba(255, 255, 255, 0.1);
+  --surface-light: #1a1a21;
+  --background: var(--bg);
   --header-height: 72px;
 }
 
@@ -33,7 +38,14 @@ body {
   min-height: 100vh;
   background-color: #0c0c0e;
   color: var(--text-primary);
-  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    "Outfit",
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -41,10 +53,10 @@ body {
 }
 
 body::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: -20px;
-  background-image: url('/background.png');
+  background-image: url("/background.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -54,11 +66,20 @@ body::before {
 }
 
 body::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.12) 0%, transparent 70%),
-    radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(139, 92, 246, 0.12) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(59, 130, 246, 0.08) 0%,
+      transparent 50%
+    );
   pointer-events: none;
   z-index: -1;
 }
@@ -204,7 +225,7 @@ button {
 }
 
 .engine-chunk {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 0.8rem;
   padding: 1rem;
   background: rgba(255, 255, 255, 0.02);
@@ -269,14 +290,16 @@ button {
 }
 
 .progress-bar-animated {
-  background-image: linear-gradient(45deg,
-      rgba(255, 255, 255, 0.15) 25%,
-      transparent 25%,
-      transparent 50%,
-      rgba(255, 255, 255, 0.15) 50%,
-      rgba(255, 255, 255, 0.15) 75%,
-      transparent 75%,
-      transparent);
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
   background-size: 40px 40px;
   animation: progress-stripes 1s linear infinite;
 }

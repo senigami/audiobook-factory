@@ -1,6 +1,79 @@
-import type { Job } from '../types';
+import type { Job, Project, Chapter } from '../types';
 
 export const api = {
+  // --- Projects ---
+  fetchProjects: async (): Promise<Project[]> => {
+    const res = await fetch('/api/projects');
+    return res.json();
+  },
+  fetchProject: async (id: string): Promise<Project> => {
+    const res = await fetch(`/api/projects/${id}`);
+    return res.json();
+  },
+  createProject: async (data: { name: string; series?: string; author?: string; cover?: File }): Promise<{ status: string; project_id: string }> => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    if (data.series) formData.append('series', data.series);
+    if (data.author) formData.append('author', data.author);
+    if (data.cover) formData.append('cover', data.cover);
+    const res = await fetch('/api/projects', { method: 'POST', body: formData });
+    return res.json();
+  },
+  updateProject: async (id: string, data: { name?: string; series?: string; author?: string; cover?: File }): Promise<any> => {
+    const formData = new FormData();
+    if (data.name) formData.append('name', data.name);
+    if (data.series) formData.append('series', data.series);
+    if (data.author) formData.append('author', data.author);
+    if (data.cover) formData.append('cover', data.cover);
+    const res = await fetch(`/api/projects/${id}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  deleteProject: async (projectId: string): Promise<any> => {
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  assembleProject: async (projectId: string, chapterIds?: string[]): Promise<any> => {
+    const formData = new FormData();
+    if (chapterIds) {
+        formData.append('chapter_ids', JSON.stringify(chapterIds));
+    }
+    const res = await fetch(`/api/projects/${projectId}/assemble`, { method: 'POST', body: formData });
+    return res.json();
+  },
+
+  // --- Chapters ---
+  fetchChapters: async (projectId: string): Promise<Chapter[]> => {
+    const res = await fetch(`/api/projects/${projectId}/chapters`);
+    return res.json();
+  },
+  createChapter: async (projectId: string, data: { title: string; text_content?: string; sort_order?: number; file?: File }): Promise<{status: string, chapter: Chapter}> => {
+    const formData = new FormData();
+    formData.append('title', data.title);
+    if (data.text_content) formData.append('text_content', data.text_content);
+    formData.append('sort_order', (data.sort_order || 0).toString());
+    if (data.file) formData.append('file', data.file);
+    const res = await fetch(`/api/projects/${projectId}/chapters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+  updateChapter: async (chapterId: string, data: { title?: string; text_content?: string }): Promise<{status: string, chapter: Chapter}> => {
+    const formData = new FormData();
+    if (data.title) formData.append('title', data.title);
+    if (data.text_content) formData.append('text_content', data.text_content);
+    const res = await fetch(`/api/chapters/${chapterId}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  deleteChapter: async (chapterId: string): Promise<{ status: string }> => {
+    const res = await fetch(`/api/chapters/${chapterId}`, { method: 'DELETE' });
+    return res.json();
+  },
+  reorderChapters: async (projectId: string, chapterIds: string[]): Promise<{ status: string }> => {
+    const formData = new FormData();
+    formData.append('chapter_ids', JSON.stringify(chapterIds));
+    const res = await fetch(`/api/projects/${projectId}/reorder_chapters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+
+  // --- Jobs ---
   fetchJobs: async (): Promise<Job[]> => {
     const res = await fetch('/api/jobs');
     return res.json();
@@ -28,13 +101,11 @@ export const api = {
     const res = await fetch(`/api/audiobook/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },
-  resetChapter: async (filename: string): Promise<any> => {
-    const formData = new FormData();
-    formData.append('chapter_file', filename);
-    const res = await fetch('/api/chapter/reset', { method: 'POST', body: formData });
+  resetChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/reset`, { method: 'POST' });
     return res.json();
   },
-  deleteChapter: async (filename: string): Promise<any> => {
+  deleteLegacyChapter: async (filename: string): Promise<any> => {
     const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}`, { method: 'DELETE' });
     return res.json();
   },
@@ -50,10 +121,46 @@ export const api = {
     const res = await fetch('/api/queue/cancel_pending', { method: 'POST' });
     return res.json();
   },
-  exportSample: async (filename: string): Promise<{ url: string; status?: string; message?: string }> => {
-    const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}/export-sample`, { method: 'POST' });
+  exportSample: async (filename: string, projectId?: string): Promise<{ url: string; status?: string; message?: string }> => {
+    const url = `/api/chapter/${encodeURIComponent(filename)}/export-sample${projectId ? `?project_id=${projectId}` : ''}`;
+    const res = await fetch(url, { method: 'POST' });
     return res.json();
   },
-  // Basic helper for home data (since the / route returns HTML, we might need a dedicated API endpoint for initial state)
-  // For now, we'll mimic the SSR data by calling specific APIs.
+
+  // --- Processing Queue ---
+  getProcessingQueue: async (): Promise<any[]> => {
+    const res = await fetch('/api/processing_queue');
+    return res.json();
+  },
+  addProcessingQueue: async (projectId: string, chapterId: string, splitPart: number = 0, speakerProfile?: string): Promise<any> => {
+    const formData = new FormData();
+    formData.append('project_id', projectId);
+    formData.append('chapter_id', chapterId);
+    formData.append('split_part', splitPart.toString());
+    if (speakerProfile) formData.append('speaker_profile', speakerProfile);
+    const res = await fetch('/api/processing_queue', { method: 'POST', body: formData });
+    return res.json();
+  },
+  fetchAudiobooks: async (): Promise<any> => {
+    const res = await fetch('/api/audiobooks');
+    return res.json();
+  },
+  reorderProcessingQueue: async (queueIds: string[]): Promise<any> => {
+    const formData = new FormData();
+    formData.append('queue_ids', queueIds.join(','));
+    const res = await fetch('/api/processing_queue/reorder', { method: 'PUT', body: formData });
+    return res.json();
+  },
+  removeProcessingQueue: async (queueId: string): Promise<any> => {
+    const res = await fetch(`/api/processing_queue/${encodeURIComponent(queueId)}`, { method: 'DELETE' });
+    return res.json();
+  },
+  clearProcessingQueue: async (): Promise<any> => {
+    const res = await fetch('/api/processing_queue', { method: 'DELETE' });
+    return res.json();
+  },
+  importLegacyData: async (): Promise<any> => {
+    const res = await fetch('/api/migration/import_legacy', { method: 'POST' });
+    return res.json();
+  }
 };
