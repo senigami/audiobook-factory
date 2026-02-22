@@ -21,6 +21,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [tempTitle, setTempTitle] = useState('');
   const [availableAudiobooks, setAvailableAudiobooks] = useState<Audiobook[]>([]);
   const [isAssemblyMode, setIsAssemblyMode] = useState(false);
   const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
@@ -268,14 +270,21 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const finishedAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'done');
 
   if (editingChapterId) {
-      return <ChapterEditor 
-          chapterId={editingChapterId} 
-          projectId={projectId} 
-          onBack={() => {
-              setEditingChapterId(null);
-              loadData();
-          }} 
-      />;
+      return (
+          <ChapterEditor 
+              chapterId={editingChapterId} 
+              projectId={projectId} 
+              speakerProfiles={speakerProfiles}
+              job={Object.values(jobs).find(j => j.project_id === projectId && j.chapter_file && j.chapter_file.startsWith(editingChapterId))}
+              onBack={() => {
+                  setEditingChapterId(null);
+                  loadData();
+              }}
+              onNavigateToQueue={onNavigateToQueue}
+              selectedVoice={selectedVoice}
+              onVoiceChange={setSelectedVoice}
+          />
+      );
   }
 
   // Calculate total active runtime
@@ -555,11 +564,69 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                 </div>
 
                 <div 
-                  onClick={() => { if (!isAssemblyMode) setEditingChapterId(chap.id); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1, cursor: isAssemblyMode ? 'default' : 'pointer', minWidth: '150px', flex: '1 1 0' }}
-                  title={isAssemblyMode ? "" : "Click to edit chapter"}
+                  title={isAssemblyMode ? "" : "Click to edit chapter. Click title to rename."}
+                  onClick={() => {
+                      if (!isAssemblyMode) {
+                          setEditingChapterId(chap.id);
+                      }
+                  }}
                 >
-                    <h4 style={{ fontWeight: 500, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chap.title}</h4>
+                    {editingTitleId === chap.id ? (
+                        <input
+                            autoFocus
+                            value={tempTitle}
+                            onChange={(e) => setTempTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (tempTitle.trim() !== chap.title) {
+                                        try {
+                                            await api.updateChapter(chap.id, { title: tempTitle.trim() });
+                                            loadData();
+                                        } catch (err) {
+                                            console.error('Failed to update title', err);
+                                        }
+                                    }
+                                    setEditingTitleId(null);
+                                } else if (e.key === 'Escape') {
+                                    setEditingTitleId(null);
+                                }
+                            }}
+                            onBlur={async () => {
+                                if (tempTitle.trim() !== chap.title) {
+                                    try {
+                                        await api.updateChapter(chap.id, { title: tempTitle.trim() });
+                                        loadData();
+                                    } catch (err) {
+                                        console.error('Failed to update title', err);
+                                    }
+                                }
+                                setEditingTitleId(null);
+                            }}
+                            style={{ 
+                                fontWeight: 500, fontSize: '0.95rem', background: 'var(--surface-light)',
+                                border: '1px solid var(--accent)', borderRadius: '4px', outline: 'none',
+                                color: 'var(--text-primary)', padding: '0 4px', width: '100%', maxWidth: '200px'
+                            }}
+                        />
+                    ) : (
+                        <h4 
+                            onClick={(e) => {
+                                if (!isAssemblyMode) {
+                                    e.stopPropagation();
+                                    setEditingTitleId(chap.id);
+                                    setTempTitle(chap.title);
+                                }
+                            }}
+                            title={isAssemblyMode ? "" : "Click to edit title"}
+                            style={{ fontWeight: 500, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'text' }}
+                        >
+                            {chap.title}
+                        </h4>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
                         {chap.audio_status === 'done' && <span title="Audio Generated"><CheckCircle size={14} color="var(--success)" /></span>}
                         {chap.audio_status === 'processing' && <span title="Generating Audio..."><Clock size={14} color="var(--warning)" /></span>}

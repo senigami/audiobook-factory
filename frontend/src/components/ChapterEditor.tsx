@@ -1,22 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api';
-import type { Chapter } from '../types';
+import type { Chapter, SpeakerProfile, Job } from '../types';
 
 interface ChapterEditorProps {
   chapterId: string;
   projectId: string;
+  speakerProfiles: SpeakerProfile[];
+  job?: Job;
+  selectedVoice?: string;
+  onVoiceChange?: (voice: string) => void;
   onBack: () => void;
+  onNavigateToQueue: () => void;
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, onBack }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue }) => {
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [localVoice, setLocalVoice] = useState<string>('');
   
+  const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
+  const handleVoiceChange = (voice: string) => {
+      if (onVoiceChange) onVoiceChange(voice);
+      setLocalVoice(voice);
+  };
+
   const [analysis, setAnalysis] = useState<any>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [editorTab, setEditorTab] = useState<'edit' | 'preview'>('edit');
@@ -147,11 +160,65 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                 </div>
             )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                {saving ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} color="var(--success-muted)" />}
-                {saving ? 'Saving...' : 'Saved'}
-            </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {speakerProfiles.length > 0 && (
+                <select
+                    value={selectedVoice}
+                    onChange={(e) => handleVoiceChange(e.target.value)}
+                    style={{
+                        padding: '0.4rem 2rem 0.4rem 0.8rem',
+                        borderRadius: '8px', border: '1px solid var(--border)',
+                        background: 'var(--surface-light)', color: 'var(--text-primary)',
+                        fontSize: '0.85rem', outline: 'none', cursor: 'pointer',
+                        appearance: 'none',
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center'
+                    }}
+                    title="Select Voice Profile for this chapter"
+                >
+                    <option value="">Default Voice</option>
+                    {speakerProfiles.map(sp => (
+                        <option key={sp.name} value={sp.name}>{sp.name}</option>
+                    ))}
+                </select>
+            )}
+
+            <button
+                onClick={async () => {
+                    if (chapter?.char_count && chapter.char_count > 50000) {
+                        if (!window.confirm(`This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Queue anyway?`)) return;
+                    }
+                    setSubmitting(true);
+                    try {
+                        const voiceToUse = selectedVoice || undefined;
+                        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
+                        onNavigateToQueue();
+                    } catch (e) {
+                        console.error("Failed to enqueue", e);
+                        alert("Failed to queue chapter.");
+                    } finally {
+                        setSubmitting(false);
+                    }
+                }}
+                disabled={submitting || (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing'}
+                className="btn-primary"
+                style={{
+                    padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    opacity: (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing' ? 0.3 : 1,
+                    cursor: (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing' ? 'not-allowed' : 'pointer'
+                }}
+                title={((job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing') ? "Already processing" : "Queue Chapter"}
+            >
+                {submitting ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
+                Queue
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} color="var(--success-muted)" />}
+                    {saving ? 'Saving...' : 'Saved'}
+                </span>
+            </div>
         </div>
       </header>
 
