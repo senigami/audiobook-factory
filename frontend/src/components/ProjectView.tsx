@@ -580,13 +580,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     );
                     
                     if (chap.audio_status === 'processing' && job) {
+                        const isRunning = job.status === 'running';
                         return (
                             <div style={{ width: '100%', maxWidth: '600px' }}>
                                 <PredictiveProgressBar 
                                     progress={job.progress || 0}
                                     startedAt={job.started_at}
                                     etaSeconds={job.eta_seconds}
-                                    label="Synthesizing..."
+                                    label={isRunning ? "Synthesizing..." : "Queued"}
                                 />
                             </div>
                         );
@@ -618,7 +619,18 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                   })()}
                   
                   <div style={{ display: 'flex', gap: '0.15rem', opacity: isAssemblyMode ? 0.3 : 1, pointerEvents: isAssemblyMode ? 'none' : 'auto', borderLeft: '1px solid var(--border)', paddingLeft: '1rem', marginLeft: '0.5rem' }}>
-                      <button onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--accent)' }} title="Add to Generation Queue">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleQueueChapter(chap); }} 
+                        className="btn-ghost" 
+                        disabled={chap.audio_status === 'processing'}
+                        style={{ 
+                          padding: '0.4rem', 
+                          color: 'var(--accent)',
+                          opacity: chap.audio_status === 'processing' ? 0.3 : 1,
+                          cursor: chap.audio_status === 'processing' ? 'not-allowed' : 'pointer'
+                        }} 
+                        title={chap.audio_status === 'processing' ? "Already in Queue" : "Add to Generation Queue"}
+                      >
                         <Zap size={16} />
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); setEditingChapterId(chap.id); }} className="btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-secondary)' }} title="Edit Text">

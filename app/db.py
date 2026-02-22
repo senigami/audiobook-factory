@@ -277,7 +277,17 @@ def clear_queue() -> int:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM processing_queue")
+
+            # 1. Update chapters associated with queued items to be 'unprocessed' again
+            # Only for items we are about to delete (status != 'running')
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed'
+                WHERE id IN (SELECT chapter_id FROM processing_queue WHERE status != 'running')
+            """)
+
+            # 2. Delete the queue items
+            cursor.execute("DELETE FROM processing_queue WHERE status != 'running'")
             conn.commit()
             return cursor.rowcount
 
@@ -337,6 +347,15 @@ def remove_from_queue(queue_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+
+            # 1. Reset chapter status before deletion
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed'
+                WHERE id IN (SELECT chapter_id FROM processing_queue WHERE id = ?)
+            """, (queue_id,))
+
+            # 2. Delete the queue item
             cursor.execute("DELETE FROM processing_queue WHERE id = ?", (queue_id,))
             conn.commit()
             return cursor.rowcount > 0

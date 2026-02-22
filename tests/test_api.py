@@ -148,3 +148,43 @@ def test_queue_uniqueness():
     q = get_queue()
     chapter_entries = [i for i in q if i["chapter_id"] == cid]
     assert len(chapter_entries) == 1
+
+def test_clear_queue_preserves_running():
+    """
+    Verifies that clearing the queue does not remove jobs with status 'running'.
+    """
+    from app.db import create_project, create_chapter, add_to_queue, update_queue_item, get_queue
+    from app.state import clear_all_jobs
+
+    clear_all_jobs()
+    pid = create_project("Clear Queue Test")
+
+    # 1. Add two chapters to queue
+    cid1 = create_chapter(project_id=pid, title="Running Chapter")
+    cid2 = create_chapter(project_id=pid, title="Queued Chapter")
+
+    qid1 = add_to_queue(pid, cid1)
+    qid2 = add_to_queue(pid, cid2)
+
+    # 2. Set one to 'running'
+    update_queue_item(qid1, "running")
+
+    # 3. Clear the queue
+    response = client.delete("/api/processing_queue")
+    assert response.status_code == 200
+    assert response.json()["cleared"] >= 1
+
+    # 4. Verify 'running' job remains, 'queued' job is gone
+    queue = get_queue()
+    remaining_ids = [item['id'] for item in queue]
+
+    assert qid1 in remaining_ids
+    assert qid2 not in remaining_ids
+
+    # 5. Verify chapter status reset
+    from app.db import get_chapter
+    chap1 = get_chapter(cid1)
+    chap2 = get_chapter(cid2)
+    assert chap1['audio_status'] == 'processing' # Still running
+    assert chap2['audio_status'] == 'unprocessed' # Reset from processing
+
