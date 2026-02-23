@@ -13,9 +13,11 @@ interface ChapterEditorProps {
   onVoiceChange?: (voice: string) => void;
   onBack: () => void;
   onNavigateToQueue: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev }) => {
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -119,6 +121,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
+  const handleNavigate = async (direction: 'next' | 'prev') => {
+      // Force save before navigating
+      await handleSave();
+      if (direction === 'next' && onNext) onNext();
+      if (direction === 'prev' && onPrev) onPrev();
+  };
+
   // Auto-save logic
   useEffect(() => {
     // Skip initial mount
@@ -135,16 +144,36 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
   return (
-    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: '0 0 2rem 0', margin: '-2.5rem -2.5rem 0 -2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
+    <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 72px)', margin: '-2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
       {/* Editor Header */}
       <header style={{ 
         display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.5rem', 
         borderBottom: '1px solid var(--border)', background: 'var(--surface)',
-        position: 'sticky', top: 0, zIndex: 10
+        flexShrink: 0
       }}>
-        <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem' }}>
+        <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem' }} title="Back to Project">
           <ArrowLeft size={18} />
         </button>
+        <div style={{ display: 'flex', gap: '0.25rem', borderRight: '1px solid var(--border)', paddingRight: '1rem' }}>
+          <button 
+            onClick={() => handleNavigate('prev')} 
+            disabled={!onPrev} 
+            className="btn-ghost" 
+            style={{ padding: '0.4rem', opacity: !onPrev ? 0.3 : 1, cursor: !onPrev ? 'not-allowed' : 'pointer' }}
+            title="Save & Previous Chapter"
+          >
+            ← Prev
+          </button>
+          <button 
+            onClick={() => handleNavigate('next')} 
+            disabled={!onNext} 
+            className="btn-ghost" 
+            style={{ padding: '0.4rem', opacity: !onNext ? 0.3 : 1, cursor: !onNext ? 'not-allowed' : 'pointer' }}
+            title="Save & Next Chapter"
+          >
+            Next →
+          </button>
+        </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
             <input 
                 value={title}
@@ -240,10 +269,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           
         {/* Left pane: Text Editor */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '1.5rem', overflowY: 'auto' }}>
-            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '1.5rem', overflow: 'hidden', minHeight: 0 }}>
+            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 {/* Tabs */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', flexShrink: 0 }}>
                     <button 
                         onClick={() => setEditorTab('edit')} 
                         className={editorTab === 'edit' ? 'btn-primary' : 'btn-ghost'}
@@ -283,7 +312,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             color: 'var(--text-primary)',
                             outline: 'none',
                             resize: 'none',
-                            fontFamily: 'system-ui, -apple-system, sans-serif'
+                            fontFamily: 'system-ui, -apple-system, sans-serif',
+                            overflowY: 'auto'
                         }}
                     />
                 ) : (

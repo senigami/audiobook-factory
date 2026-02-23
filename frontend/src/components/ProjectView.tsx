@@ -316,6 +316,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const finishedAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'done');
 
   if (editingChapterId) {
+      const activeIdx = chapters.findIndex(c => c.id === editingChapterId);
+      const prevChapterId = activeIdx > 0 ? chapters[activeIdx - 1].id : null;
+      const nextChapterId = activeIdx !== -1 && activeIdx < chapters.length - 1 ? chapters[activeIdx + 1].id : null;
+
       return (
           <ChapterEditor 
               chapterId={editingChapterId} 
@@ -329,6 +333,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
               onNavigateToQueue={onNavigateToQueue}
               selectedVoice={selectedVoice}
               onVoiceChange={setSelectedVoice}
+              onNext={nextChapterId ? () => setEditingChapterId(nextChapterId) : undefined}
+              onPrev={prevChapterId ? () => setEditingChapterId(prevChapterId) : undefined}
           />
       );
   }
