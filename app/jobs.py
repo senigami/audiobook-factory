@@ -382,9 +382,6 @@ def worker_loop(q: "queue.Queue[str]"):
                 # We'll use these to track if we need to broadcast an update
                 new_progress = None
                 new_log = None
-
-                if s: print(f"DEBUG: worker output for {jid}: {s}")
-
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
                     current_p = getattr(j, 'progress', 0.0)
@@ -587,7 +584,7 @@ def worker_loop(q: "queue.Queue[str]"):
                                 processed_text = current_text.strip()
                                 if j.safe_mode:
                                     processed_text = sanitize_for_xtts(processed_text)
-                                    processed_text = safe_split_long_sentences(processed_text, limit=SENT_CHAR_LIMIT)
+                                    processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
                                 script.append({
                                     "text": processed_text,
                                     "speaker_wav": current_sw
@@ -601,7 +598,7 @@ def worker_loop(q: "queue.Queue[str]"):
                         processed_text = current_text.strip()
                         if j.safe_mode:
                             processed_text = sanitize_for_xtts(processed_text)
-                            processed_text = safe_split_long_sentences(processed_text, limit=SENT_CHAR_LIMIT)
+                            processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
                         script.append({
                             "text": processed_text,
                             "speaker_wav": current_sw
@@ -610,6 +607,7 @@ def worker_loop(q: "queue.Queue[str]"):
                     # Write script to tmp file
                     script_path = pdir / f"{j.id}_script.json"
                     script_path.write_text(json.dumps(script), encoding="utf-8")
+                    on_output(f"[script] Mode: processing {len(script)} merged chunks from {len(segments_data)} segments.\n")
 
                     try:
                         rc = xtts_generate_script(

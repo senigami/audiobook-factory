@@ -191,3 +191,4 @@ state.json
 /frontend/coverage
 audiobook_factory.db
 /projects
+/voices
