@@ -850,6 +850,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     <div>
                         <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'block' }}>Chapter Title *</label>
                         <input
+                            autoFocus
                             required
                             value={newTitle}
                             onChange={e => setNewTitle(e.target.value)}
@@ -931,6 +932,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     <div>
                         <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'block' }}>Project Name *</label>
                         <input
+                            autoFocus
                             required
                             value={editProjectData.name}
                             onChange={e => setEditProjectData({...editProjectData, name: e.target.value})}

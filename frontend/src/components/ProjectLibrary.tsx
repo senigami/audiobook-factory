@@ -268,6 +268,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                     <div>
                                         <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Title *</label>
                                         <input
+                                            autoFocus
                                             required
                                             value={title}
                                             onChange={e => setTitle(e.target.value)}
