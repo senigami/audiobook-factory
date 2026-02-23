@@ -13,6 +13,7 @@ class Job:
     created_at: float
 
     project_id: Optional[str] = None
+    chapter_id: Optional[str] = None
 
     started_at: Optional[float] = None
     finished_at: Optional[float] = None

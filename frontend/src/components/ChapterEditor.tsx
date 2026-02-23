@@ -333,7 +333,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         Production
                     </button>
                 </div>
-
+                {editorTab === 'edit' ? (
                     <textarea 
                         value={text}
                         onChange={e => setText(e.target.value)}

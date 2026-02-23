@@ -79,6 +79,7 @@ export interface Job {
   status: Status;
   created_at: number;
   project_id?: string;
+  chapter_id?: string;
   started_at?: number;
   finished_at?: number;
   safe_mode: boolean;

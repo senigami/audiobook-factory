@@ -10,7 +10,7 @@ from typing import Dict, Optional
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
 from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR
-from .engines import xtts_generate, wav_to_mp3, assemble_audiobook
+from .engines import xtts_generate, xtts_generate_script, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
 assembly_queue: "queue.Queue[str]" = queue.Queue()
@@ -528,6 +528,9 @@ def worker_loop(q: "queue.Queue[str]"):
 
             elif j.engine == "xtts":
                 from .config import get_project_audio_dir
+                from .db import get_connection
+                import json
+
                 if j.project_id:
                     pdir = get_project_audio_dir(j.project_id)
                 else:
@@ -536,20 +539,76 @@ def worker_loop(q: "queue.Queue[str]"):
                 out_wav = pdir / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = pdir / f"{Path(j.chapter_file).stem}.mp3"
 
+                # Check for segment-level character assignments
+                segments_data = []
+                if j.chapter_id:
+                    with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT s.text_content, s.character_id, c.speaker_profile_name
+                            FROM chapter_segments s
+                            LEFT JOIN characters c ON s.character_id = c.id
+                            WHERE s.chapter_id = ?
+                            ORDER BY s.segment_order
+                        """, (j.chapter_id,))
+                        segments_data = cursor.fetchall()
+
                 # Resolve speaker WAVs and settings from profile
-                sw = get_speaker_wavs(j.speaker_profile)
+                default_sw = get_speaker_wavs(j.speaker_profile)
                 spk_settings = get_speaker_settings(j.speaker_profile)
                 speed = spk_settings["speed"]
 
-                rc = xtts_generate(
-                    text=text,
-                    out_wav=out_wav,
-                    safe_mode=j.safe_mode,
-                    on_output=on_output,
-                    cancel_check=cancel_check,
-                    speaker_wav=sw,
-                    speed=speed
-                )
+                has_custom_characters = any(s['character_id'] for s in segments_data) if segments_data else False
+
+                if has_custom_characters:
+                    on_output("Detected segment-level character assignments. Using script mode.\n")
+                    script = []
+                    for s in segments_data:
+                        if not s['text_content']: continue
+
+                        # Use the specific character speaker if assigned, else fallback
+                        if s['character_id'] and s['speaker_profile_name']:
+                            sw = get_speaker_wavs(s['speaker_profile_name'])
+                        else:
+                            sw = default_sw
+
+                        processed_text = s['text_content']
+                        if j.safe_mode:
+                            from .textops import sanitize_for_xtts, safe_split_long_sentences
+                            processed_text = sanitize_for_xtts(processed_text)
+                            processed_text = safe_split_long_sentences(processed_text)
+
+                        script.append({
+                            "text": processed_text,
+                            "speaker_wav": sw
+                        })
+
+                    # Write script to tmp file
+                    script_path = pdir / f"{j.id}_script.json"
+                    script_path.write_text(json.dumps(script), encoding="utf-8")
+
+                    try:
+                        rc = xtts_generate_script(
+                            script_json_path=script_path,
+                            out_wav=out_wav,
+                            on_output=on_output,
+                            cancel_check=cancel_check,
+                            speed=speed
+                        )
+                    finally:
+                        if script_path.exists():
+                            script_path.unlink()
+                else:
+                    # Original single-speaker mode
+                    rc = xtts_generate(
+                        text=text,
+                        out_wav=out_wav,
+                        safe_mode=j.safe_mode,
+                        on_output=on_output,
+                        cancel_check=cancel_check,
+                        speaker_wav=default_sw,
+                        speed=speed
+                    )
             else:
                 update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Unknown engine: {j.engine}", log="".join(logs))
                 continue

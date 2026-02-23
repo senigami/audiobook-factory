@@ -134,6 +134,23 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
     return run_cmd_stream(cmd, on_output, cancel_check)
 
 
+def xtts_generate_script(script_json_path: Path, out_wav: Path, on_output, cancel_check, speed: float = 1.0) -> int:
+    if not XTTS_ENV_ACTIVATE.exists():
+        on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
+        return 1
+
+    cmd = (
+        f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
+        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
+        f"--script_json {shlex.quote(str(script_json_path))} "
+        f"--language en "
+        f"--repetition_penalty 2.0 "
+        f"--speed {speed} "
+        f"--out_path {shlex.quote(str(out_wav))}"
+    )
+    return run_cmd_stream(cmd, on_output, cancel_check)
+
+
 def get_audio_duration(file_path: Path) -> float:
     """Uses ffprobe to get the duration of an audio file in seconds."""
     cmd = [

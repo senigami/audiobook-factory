@@ -1687,6 +1687,7 @@ def api_add_to_queue(
             j = Job(
                 id=qid, 
                 project_id=project_id,
+                chapter_id=chapter_id,
                 engine="xtts",
                 chapter_file=temp_filename, 
                 status="queued",
