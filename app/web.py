@@ -443,7 +443,7 @@ import json  # noqa: E402
 async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
     try:
         ids_list = json.loads(chapter_ids)
-        success = reorder_chapters(project_id, ids_list)
+        success = reorder_chapters(ids_list)
         if success:
             return JSONResponse({"status": "success"})
         return JSONResponse({"status": "error", "message": "Failed to reorder"}, status_code=500)

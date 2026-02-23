@@ -173,15 +173,27 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
     return `${hrs}h ${remMins}m`;
   };
 
+  // Use a ref to store pending reorder timeout so we can debounce
+  const reorderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleReorder = async (reorderedChapters: Chapter[]) => {
     setChapters(reorderedChapters);
-    try {
-        await api.reorderChapters(projectId, reorderedChapters.map(c => c.id));
-        // We do a silent save, no need to reload all data if UI is optimistic
-    } catch (e) {
-        console.error("Failed to save chapter order", e);
-        loadData(); // revert on failure
+    
+    // Clear previous timeout
+    if (reorderTimeoutRef.current) {
+        clearTimeout(reorderTimeoutRef.current);
     }
+    
+    // Debounce the actual API call by 500ms
+    reorderTimeoutRef.current = setTimeout(async () => {
+        try {
+            await api.reorderChapters(projectId, reorderedChapters.map(c => c.id));
+            // We do a silent save, no need to reload all data if UI is optimistic
+        } catch (e) {
+            console.error("Failed to save chapter order", e);
+            loadData(); // revert on failure
+        }
+    }, 500);
   };
 
   const handleQueueChapter = async (chap: Chapter) => {

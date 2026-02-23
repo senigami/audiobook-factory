@@ -89,12 +89,26 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const handleSave = async (manualTitle?: string, manualText?: string) => {
+    if (!chapter) return;
     setSaving(true);
     try {
-      const payload = { 
-        title: manualTitle !== undefined ? manualTitle : title, 
-        text_content: manualText !== undefined ? manualText : text 
-      };
+      const finalTitle = manualTitle !== undefined ? manualTitle : title;
+      const finalText = manualText !== undefined ? manualText : text;
+      
+      const payload: any = {};
+      let changed = false;
+      
+      if (finalTitle !== chapter.title) {
+          payload.title = finalTitle;
+          changed = true;
+      }
+      if (finalText !== chapter.text_content) {
+          payload.text_content = finalText;
+          changed = true;
+      }
+      
+      if (!changed) return;
+
       await api.updateChapter(chapterId, payload);
       // We don't necessarily need to reload everything, but maybe update the local chapter object
       setChapter(prev => prev ? { ...prev, ...payload } : null);
@@ -131,13 +145,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem' }}>
           <ArrowLeft size={18} />
         </button>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
             <input 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 style={{
                     fontSize: '1.25rem', fontWeight: 600, background: 'transparent', border: 'none', 
-                    color: 'var(--text-primary)', outline: 'none', width: '100%', maxWidth: '400px',
+                    color: 'var(--text-primary)', outline: 'none', width: '100%',
                     padding: '0.25rem'
                 }}
             />
