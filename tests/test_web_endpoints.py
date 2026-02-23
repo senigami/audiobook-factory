@@ -51,7 +51,30 @@ def test_chapter_endpoints():
     res = client.post("/api/analyze_text", data={"text_content": "A" * 500})
     assert res.status_code == 200
 
+    # Add another chapter for reordering
+    res = client.post(f"/api/projects/{pid}/chapters", data={"title": "C2", "text_content": "second chapter", "sort_order": 1})
+    assert res.status_code == 200
+    cid2 = res.json()["chapter"]["id"]
+
+    # test reorder API
+    ids_list = [cid2, cid] # reverse order
+    import json
+    res = client.post(f"/api/projects/{pid}/reorder_chapters", data={"chapter_ids": json.dumps(ids_list)})
+    assert res.status_code == 200
+
+    # verify order
+    res = client.get(f"/api/projects/{pid}/chapters")
+    chapters = res.json()
+    assert chapters[0]["id"] == cid2
+    assert chapters[1]["id"] == cid
+
+    # reset audio
+    res = client.post(f"/api/chapters/{cid}/reset")
+    assert res.status_code == 200
+
     res = client.delete(f"/api/chapters/{cid}")
+    assert res.status_code == 200
+    res = client.delete(f"/api/chapters/{cid2}")
     assert res.status_code == 200
 
     res = client.delete(f"/api/projects/{pid}")

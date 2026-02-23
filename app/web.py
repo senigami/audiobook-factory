@@ -569,10 +569,24 @@ def set_default_speaker(name: str = Form(...)):
 
 @app.post("/api/chapter/{filename}/export-sample")
 async def export_sample(filename: str, project_id: Optional[str] = None):
-    wav_path, mp3_path = xtts_outputs_for(filename, project_id=project_id)
-    source = mp3_path if mp3_path.exists() else wav_path
+    source = None
+    if project_id:
+        from .db import get_chapter
+        from .config import get_project_audio_dir
+        # For new projects, filename passed is actually chapter_id
+        chapter = get_chapter(filename)
+        if chapter and chapter.get('audio_file_path'):
+            p_audio_dir = get_project_audio_dir(project_id)
+            source = p_audio_dir / chapter['audio_file_path']
+            if not source.exists():
+                source = None
 
-    if not source.exists():
+    # Fallback to legacy logic
+    if not source:
+        wav_path, mp3_path = xtts_outputs_for(filename, project_id=project_id)
+        source = mp3_path if mp3_path.exists() else wav_path
+
+    if not source or not source.exists():
         return JSONResponse({"status": "error", "message": "Audio not found for this chapter. Generate it first."}, status_code=404)
 
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
