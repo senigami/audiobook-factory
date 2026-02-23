@@ -69,6 +69,34 @@ def init_db():
                 )
             """)
 
+            # Characters table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS characters (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    speaker_profile_name TEXT,
+                    default_emotion TEXT,
+                    FOREIGN KEY (project_id) REFERENCES projects (id)
+                )
+            """)
+
+            # Chapter Segments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chapter_segments (
+                    id TEXT PRIMARY KEY,
+                    chapter_id TEXT NOT NULL,
+                    segment_order INTEGER NOT NULL,
+                    text_content TEXT NOT NULL,
+                    character_id TEXT,
+                    audio_file_path TEXT,
+                    audio_status TEXT DEFAULT 'unprocessed',
+                    audio_generated_at REAL,
+                    FOREIGN KEY (chapter_id) REFERENCES chapters (id),
+                    FOREIGN KEY (character_id) REFERENCES characters (id)
+                )
+            """)
+
             conn.commit()
 
 # --- Project Functions ---
@@ -99,6 +127,83 @@ def list_projects() -> List[Dict[str, Any]]:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM projects ORDER BY updated_at DESC")
             return [dict(row) for row in cursor.fetchall()]
+
+def update_project(project_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            fields.append("updated_at = ?")
+            values.append(time.time())
+            values.append(project_id)
+
+            cursor.execute(f"UPDATE projects SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def delete_project(project_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Delete related characters
+            cursor.execute("DELETE FROM characters WHERE project_id = ?", (project_id,))
+            # Delete related segments implicitly if we delete chapters, or explicitly
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id IN (SELECT id FROM chapters WHERE project_id = ?)", (project_id,))
+            cursor.execute("DELETE FROM processing_queue WHERE project_id = ?", (project_id,))
+            cursor.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
+            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+# --- Character Functions ---
+def create_character(project_id: str, name: str, speaker_profile_name: Optional[str] = None, default_emotion: Optional[str] = None) -> str:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            char_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO characters (id, project_id, name, speaker_profile_name, default_emotion)
+                VALUES (?, ?, ?, ?, ?)
+            """, (char_id, project_id, name, speaker_profile_name, default_emotion))
+            conn.commit()
+            return char_id
+
+def get_characters(project_id: str) -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM characters WHERE project_id = ? ORDER BY name ASC", (project_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_character(character_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(character_id)
+            cursor.execute(f"UPDATE characters SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def delete_character(character_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Nullify assignments in segments
+            cursor.execute("UPDATE chapter_segments SET character_id = NULL WHERE character_id = ?", (character_id,))
+            cursor.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
 def update_project(project_id: str, **updates) -> bool:
     if not updates: return False
@@ -179,6 +284,8 @@ def delete_chapter(chapter_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+            cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
             cursor.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
             conn.commit()
             return cursor.rowcount > 0
@@ -193,6 +300,7 @@ def reorder_chapters(chapter_ids: List[str]) -> bool:
             return True
 
 def reset_chapter_audio(chapter_id: str) -> bool:
+    """Resets the audio generation status of a chapter to unprocessed."""
     from .config import get_project_audio_dir
     with _db_lock:
         with get_connection() as conn:
@@ -229,6 +337,86 @@ def reset_chapter_audio(chapter_id: str) -> bool:
 
             conn.commit()
             return True
+
+# --- Chapter Segment Functions ---
+
+def get_chapter_segments(chapter_id: str) -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM chapter_segments WHERE chapter_id = ? ORDER BY segment_order ASC", (chapter_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_segment(segment_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(segment_id)
+            cursor.execute(f"UPDATE chapter_segments SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def sync_chapter_segments(chapter_id: str, text_content: str):
+    """
+    Parses the text into sentences (segments) and syncs the chapter_segments table.
+    Attempts to preserve IDs and assignments for sentences that haven't changed.
+    """
+    from .textops import split_sentences, preprocess_text
+
+    # Pre-parse the text to avoid hidden formatting issues breaking the diff
+    clean = preprocess_text(text_content)
+    # Split into actual sentences
+    sentences = [s.strip() for s, _, _ in split_sentences(clean) if s.strip()]
+
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Fetch existing segments
+            cursor.execute("SELECT * FROM chapter_segments WHERE chapter_id = ? ORDER BY segment_order ASC", (chapter_id,))
+            existing_segments = [dict(row) for row in cursor.fetchall()]
+
+            # Simple matching strategy: if text matches exactly, keep it.
+            existing_texts = {seg['text_content']: seg for seg in existing_segments}
+
+            # Delete all existing segments for this chapter
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+
+            # Re-insert in order, preserving IDs and attributes if an exact text match is found
+            for i, text in enumerate(sentences):
+                old_seg = existing_texts.get(text)
+
+                if old_seg:
+                    # Reuse old segment attributes
+                    seg_id = old_seg['id']
+                    char_id = old_seg['character_id']
+                    audio_path = old_seg['audio_file_path']
+                    audio_status = old_seg['audio_status']
+                    audio_gen_at = old_seg['audio_generated_at']
+
+                    # Ensure we only reuse an old segment once
+                    del existing_texts[text]
+                else:
+                    # New segment
+                    seg_id = str(uuid.uuid4())
+                    char_id = None
+                    audio_path = None
+                    audio_status = 'unprocessed'
+                    audio_gen_at = None
+
+                cursor.execute("""
+                    INSERT INTO chapter_segments 
+                    (id, chapter_id, segment_order, text_content, character_id, audio_file_path, audio_status, audio_generated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (seg_id, chapter_id, i, text, char_id, audio_path, audio_status, audio_gen_at))
+
+            conn.commit()
 
 # --- Processing Queue Functions ---
 def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:

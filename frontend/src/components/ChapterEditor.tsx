@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Mic, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api';
-import type { Chapter, SpeakerProfile, Job } from '../types';
+import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
 
 interface ChapterEditorProps {
   chapterId: string;
@@ -26,6 +26,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [submitting, setSubmitting] = useState(false);
   const [localVoice, setLocalVoice] = useState<string>('');
   
+  const [segments, setSegments] = useState<ChapterSegment[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  
   const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
   const handleVoiceChange = (voice: string) => {
       if (onVoiceChange) onVoiceChange(voice);
@@ -34,7 +38,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
   const [analysis, setAnalysis] = useState<any>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [editorTab, setEditorTab] = useState<'edit' | 'preview'>('edit');
+  const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production'>('edit');
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -67,6 +71,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         setTitle(target.title);
         setText(target.text_content || '');
       }
+
+      // Fetch segments and characters
+      const [segs, chars] = await Promise.all([
+        api.fetchSegments(chapterId),
+        api.fetchCharacters(projectId)
+      ]);
+      setSegments(segs);
+      setCharacters(chars);
     } catch (e) {
       console.error(e);
     } finally {
@@ -124,11 +136,22 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
-  const handleNavigate = async (direction: 'next' | 'prev') => {
+  const handleAssignCharacter = async (segmentId: string, charId: string | null) => {
+    try {
+      await api.updateSegment(segmentId, { character_id: charId });
+      // Update local state to show change immediately
+      setSegments(prev => prev.map(s => s.id === segmentId ? { ...s, character_id: charId } : s));
+    } catch (e) {
+      console.error("Failed to assign character", e);
+      alert("Failed to assign character.");
+    }
+  };
+
+  const handleNavigate = async (dir: 'next' | 'prev') => {
       // Force save before navigating
       await handleSave();
-      if (direction === 'next' && onNext) onNext();
-      if (direction === 'prev' && onPrev) onPrev();
+      if (dir === 'next' && onNext) onNext();
+      if (dir === 'prev' && onPrev) onPrev();
   };
 
   // Auto-save logic
@@ -299,9 +322,18 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     >
                         Preview Safe Text
                     </button>
+                    <button 
+                        onClick={() => {
+                            setEditorTab('production');
+                            handleSave();
+                        }} 
+                        className={editorTab === 'production' ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
+                    >
+                        Production
+                    </button>
                 </div>
 
-                {editorTab === 'edit' ? (
                     <textarea 
                         value={text}
                         onChange={e => setText(e.target.value)}
@@ -321,7 +353,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             overflowY: 'auto'
                         }}
                     />
-                ) : (
+                ) : editorTab === 'preview' ? (
                     <div style={{ 
                         flex: 1, 
                         background: 'var(--bg)', 
@@ -348,10 +380,140 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     whiteSpace: 'pre-wrap',
                                     wordBreak: 'break-all'
                                 }}>
-                                    {line}|
+                                    {line}
                                 </p>
                             </div>
                         ))}
+                    </div>
+                ) : (
+                    <div style={{ 
+                        flex: 1, 
+                        background: 'var(--bg)', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: '12px', 
+                        padding: '1.5rem', 
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', background: 'rgba(139, 92, 246, 0.1)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--accent)' }}>
+                            <Info size={16} color="var(--accent)" />
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>
+                                <strong>Production Mode:</strong> Map sentences to characters. This will override the default chapter voice for those sentences.
+                            </p>
+                        </div>
+                        
+                        {segments.map((seg, idx) => {
+                            const currentCharacter = characters.find(c => c.id === seg.character_id);
+                            const isActive = activeSegmentId === seg.id;
+                            
+                            return (
+                                <div 
+                                    key={seg.id} 
+                                    style={{ 
+                                        padding: '1rem', 
+                                        background: isActive ? 'rgba(139, 92, 246, 0.05)' : 'var(--surface-light)', 
+                                        borderRadius: '10px', 
+                                        border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.75rem',
+                                        transition: 'all 0.2s ease',
+                                        cursor: 'default'
+                                    }}
+                                    onClick={() => setActiveSegmentId(seg.id)}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>#{idx + 1}</span>
+                                            {currentCharacter ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem' }}>
+                                                    <User size={12} />
+                                                    {currentCharacter.name}
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface)', color: 'var(--text-muted)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', border: '1px solid var(--border)' }}>
+                                                    <Mic size={12} />
+                                                    Default Chapter Voice
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            {seg.audio_status === 'done' && (
+                                                <span style={{ fontSize: '0.7rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <CheckCircle size={12} /> Generated
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
+                                        {seg.text_content}
+                                    </p>
+                                    
+                                    {isActive && (
+                                        <motion.div 
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            style={{ 
+                                                marginTop: '0.5rem', 
+                                                paddingTop: '0.75rem', 
+                                                borderTop: '1px solid var(--border)',
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: '0.5rem'
+                                            }}
+                                        >
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleAssignCharacter(seg.id, null);
+                                                }}
+                                                className="btn-ghost"
+                                                style={{ 
+                                                    fontSize: '0.75rem', 
+                                                    padding: '0.4rem 0.8rem', 
+                                                    background: !seg.character_id ? 'var(--surface-light)' : 'transparent',
+                                                    border: !seg.character_id ? '1px solid var(--accent)' : '1px solid var(--border)'
+                                                }}
+                                            >
+                                                Default
+                                            </button>
+                                            {characters.map(char => (
+                                                <button 
+                                                    key={char.id}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleAssignCharacter(seg.id, char.id);
+                                                    }}
+                                                    className="btn-ghost"
+                                                    style={{ 
+                                                        fontSize: '0.75rem', 
+                                                        padding: '0.4rem 0.8rem', 
+                                                        background: seg.character_id === char.id ? 'var(--accent)' : 'transparent',
+                                                        color: seg.character_id === char.id ? 'white' : 'var(--text-primary)',
+                                                        border: seg.character_id === char.id ? '1px solid var(--accent)' : '1px solid var(--border)'
+                                                    }}
+                                                >
+                                                    {char.name}
+                                                </button>
+                                            ))}
+                                            <div style={{ flex: 1 }} />
+                                            {/* Future: Regenerate button for this segment */}
+                                        </motion.div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        
+                        {segments.length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                <AlertTriangle size={32} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                                <p>No segments found. Save the chapter text to generate segments.</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

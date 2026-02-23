@@ -391,6 +391,11 @@ async def api_create_chapter(
             actual_text = content.decode('latin-1', errors='replace')
 
     cid = create_chapter(project_id, title, actual_text, sort_order)
+
+    if actual_text:
+        from .db import sync_chapter_segments
+        sync_chapter_segments(cid, actual_text)
+
     new_chapter = get_chapter(cid)
     return JSONResponse({"status": "success", "chapter": new_chapter})
 
@@ -420,6 +425,9 @@ async def api_update_chapter_details(
 
     if updates:
         update_chapter(chapter_id, **updates)
+        if "text_content" in updates:
+            from .db import sync_chapter_segments
+            sync_chapter_segments(chapter_id, updates["text_content"])
 
     return JSONResponse({"status": "success", "chapter": get_chapter(chapter_id)})
 
@@ -437,6 +445,76 @@ def api_reset_chapter_audio(chapter_id: str):
     if success:
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+# --- Chapter Segments API ---
+
+@app.get("/api/chapters/{chapter_id}/segments")
+def api_list_segments(chapter_id: str):
+    from .db import get_chapter_segments
+    return JSONResponse({"status": "success", "segments": get_chapter_segments(chapter_id)})
+
+@app.put("/api/segments/{segment_id}")
+def api_update_segment(
+    segment_id: str,
+    character_id: Optional[str] = Form(None),
+    audio_status: Optional[str] = Form(None)
+):
+    updates = {}
+    if character_id is not None:
+        # allow clearing character
+        updates["character_id"] = character_id if character_id != "" else None
+    if audio_status is not None:
+        updates["audio_status"] = audio_status
+
+    if updates:
+        from .db import update_segment
+        update_segment(segment_id, **updates)
+
+    return JSONResponse({"status": "success"})
+
+# --- Characters API ---
+
+@app.get("/api/projects/{project_id}/characters")
+def api_list_characters(project_id: str):
+    from .db import get_characters
+    return JSONResponse({"status": "success", "characters": get_characters(project_id)})
+
+@app.post("/api/projects/{project_id}/characters")
+def api_create_character(
+    project_id: str,
+    name: str = Form(...),
+    speaker_profile_name: Optional[str] = Form(None),
+    default_emotion: Optional[str] = Form(None)
+):
+    from .db import create_character
+    char_id = create_character(project_id, name, speaker_profile_name, default_emotion)
+    return JSONResponse({"status": "success", "character_id": char_id})
+
+@app.put("/api/characters/{character_id}")
+def api_update_character(
+    character_id: str,
+    name: Optional[str] = Form(None),
+    speaker_profile_name: Optional[str] = Form(None),
+    default_emotion: Optional[str] = Form(None)
+):
+    updates = {}
+    if name is not None: updates["name"] = name
+    if speaker_profile_name is not None: updates["speaker_profile_name"] = speaker_profile_name
+    if default_emotion is not None: updates["default_emotion"] = default_emotion
+
+    if updates:
+        from .db import update_character
+        update_character(character_id, **updates)
+
+    return JSONResponse({"status": "success"})
+
+@app.delete("/api/characters/{character_id}")
+def api_delete_character(character_id: str):
+    from .db import delete_character
+    success = delete_character(character_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Character not found"}, status_code=404)
 
 import json  # noqa: E402
 @app.post("/api/projects/{project_id}/reorder_chapters")

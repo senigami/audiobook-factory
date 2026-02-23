@@ -1,0 +1,184 @@
+import React, { useState, useEffect } from 'react';
+import { Character, SpeakerProfile } from '../types';
+import { api } from '../api';
+import { Plus, Trash2, Save, User as UserIcon } from 'lucide-react';
+
+interface CharactersTabProps {
+  projectId: string;
+  speakerProfiles: SpeakerProfile[];
+}
+
+export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speakerProfiles }) => {
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // New character form
+  const [newName, setNewName] = useState('');
+  const [newVoice, setNewVoice] = useState('');
+
+  const loadCharacters = async () => {
+    setLoading(true);
+    try {
+      const chars = await api.fetchCharacters(projectId);
+      setCharacters(chars);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCharacters();
+  }, [projectId]);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    
+    try {
+      await api.createCharacter(projectId, newName.trim(), newVoice || undefined);
+      setNewName('');
+      setNewVoice('');
+      await loadCharacters();
+    } catch (e) {
+      console.error("Failed to create character", e);
+    }
+  };
+
+  const handleUpdateVoice = async (id: string, newProfile: string) => {
+    try {
+      // Optimistic update
+      setCharacters(prev => prev.map(c => c.id === id ? { ...c, speaker_profile_name: newProfile || null } : c));
+      await api.updateCharacter(id, undefined, newProfile || "");
+    } catch (e) {
+      console.error("Failed to update character voice", e);
+      loadCharacters(); // Revert on failure
+    }
+  };
+  
+  const handleUpdateName = async (id: string, newNameStr: string) => {
+      if (!newNameStr.trim()) return;
+      try {
+          await api.updateCharacter(id, newNameStr.trim());
+      } catch (e) {
+          console.error("Failed to update character name", e);
+      }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this character? All assigned sentences will revert to the default narrator.")) return;
+    try {
+      await api.deleteCharacter(id);
+      setCharacters(prev => prev.filter(c => c.id !== id));
+    } catch (e) {
+      console.error("Failed to delete character", e);
+    }
+  };
+
+  return (
+    <div className="animate-in" style={{ padding: '0.5rem 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <UserIcon size={20} />
+            Characters & Voices
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+            Map character names to specific voice profiles. You can then assign sentences to these characters in the Production editor.
+          </p>
+        </div>
+      </div>
+
+      {/* Add New */}
+      <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem', marginBottom: '2rem' }}>
+        <form onSubmit={handleAdd} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Character Name
+            </label>
+            <input
+              type="text"
+              className="input-field"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="e.g. Narrator, Sally, The Wizard..."
+              required
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Voice Profile
+            </label>
+            <div className="select-wrapper">
+              <select
+                className="input-field"
+                value={newVoice}
+                onChange={e => setNewVoice(e.target.value)}
+              >
+                <option value="">Unassigned (Default Narrator)</option>
+                {speakerProfiles.map(p => (
+                  <option key={p.name} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button type="submit" className="btn-primary" disabled={!newName.trim()} title="Create Character">
+            <Plus size={16} /> Add
+          </button>
+        </form>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>Loading characters...</div>
+      ) : characters.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '3rem', background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', borderStyle: 'dashed' }}>
+          <UserIcon size={32} color="var(--text-muted)" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+          <p style={{ color: 'var(--text-muted)' }}>No characters created yet.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', opacity: 0.8, marginTop: '0.5rem' }}>Add characters to quickly assign specific voices to lines of dialog.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '0.8rem' }}>
+          {characters.map(char => (
+            <div key={char.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface)', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              
+              <div style={{ flex: 1 }}>
+                  <input 
+                      type="text" 
+                      defaultValue={char.name}
+                      onBlur={(e) => { if (e.target.value !== char.name) handleUpdateName(char.id, e.target.value); }}
+                      className="input-field"
+                      style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: '1rem', color: 'var(--text)', boxShadow: 'none' }}
+                  />
+              </div>
+
+              <div style={{ width: '300px' }} className="select-wrapper">
+                <select
+                  className="input-field"
+                  value={char.speaker_profile_name || ''}
+                  onChange={e => handleUpdateVoice(char.id, e.target.value)}
+                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: 'var(--surface-light)' }}
+                >
+                  <option value="">Default Narrator</option>
+                  {speakerProfiles.map(p => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button 
+                onClick={() => handleDelete(char.id)}
+                className="btn-danger"
+                style={{ padding: '0.4rem', opacity: 0.6 }}
+                title="Delete Character"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
