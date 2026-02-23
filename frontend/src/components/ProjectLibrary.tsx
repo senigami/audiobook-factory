@@ -21,6 +21,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const loadProjects = async () => {
@@ -40,11 +41,32 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
 
     const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setCoverFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => setCoverPreview(reader.result as string);
-            reader.readAsDataURL(file);
+        if (file) handleFileSelection(file);
+    };
+
+    const handleFileSelection = (file: File) => {
+        setCoverFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setCoverPreview(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+            handleFileSelection(file);
         }
     };
 
@@ -236,13 +258,17 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
                                 <div
                                     onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
                                     className="hover-lift"
                                     style={{
                                         width: '120px',
                                         height: '120px',
                                         flexShrink: 0,
                                         borderRadius: '8px',
-                                        border: '2px dashed var(--border)',
+                                        border: isDragging ? '2px solid var(--accent)' : '2px dashed var(--border)',
+                                        background: isDragging ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface)',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
@@ -250,15 +276,24 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         cursor: 'pointer',
                                         overflow: 'hidden',
                                         position: 'relative',
-                                        background: 'var(--surface)',
+                                        transition: 'all 0.2s ease'
                                     }}
                                 >
                                     {coverPreview ? (
-                                        <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Cover Preview" />
+                                        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                            <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Cover Preview" />
+                                            {isDragging && (
+                                                <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <ImageIcon size={32} color="white" />
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : (
                                         <div style={{ textAlign: 'center', padding: '0.5rem' }}>
-                                            <ImageIcon size={24} style={{ margin: '0 auto 0.25rem auto', opacity: 0.5 }} />
-                                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Add Cover</p>
+                                            <ImageIcon size={24} style={{ margin: '0 auto 0.25rem auto', opacity: isDragging ? 1 : 0.5, color: isDragging ? 'var(--accent)' : 'inherit' }} />
+                                            <p style={{ fontSize: '0.65rem', color: isDragging ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                                {isDragging ? 'Drop Image' : 'Add Cover'}
+                                            </p>
                                         </div>
                                     )}
                                 </div>

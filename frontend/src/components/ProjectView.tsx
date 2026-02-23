@@ -38,6 +38,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [newTitle, setNewTitle] = useState('');
   const [editProjectData, setEditProjectData] = useState({ name: '', series: '', author: '' });
   const [editCover, setEditCover] = useState<File | null>(null);
+  const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null);
+  const [isDraggingEditCover, setIsDraggingEditCover] = useState(false);
   const editCoverInputRef = useRef<HTMLInputElement>(null);
   const [newText, setNewText] = useState('');
   const [newFile, setNewFile] = useState<File | null>(null);
@@ -91,6 +93,37 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEditCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleEditCoverSelection(file);
+  };
+
+  const handleEditCoverSelection = (file: File) => {
+      setEditCover(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setEditCoverPreview(reader.result as string);
+      reader.readAsDataURL(file);
+  };
+
+  const handleEditCoverDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDraggingEditCover(true);
+  };
+
+  const handleEditCoverDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDraggingEditCover(false);
+  };
+
+  const handleEditCoverDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDraggingEditCover(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file && file.type.startsWith('image/')) {
+          handleEditCoverSelection(file);
+      }
   };
 
   const handleUpdateProject = async (e: React.FormEvent) => {
@@ -970,27 +1003,81 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     
                     <div>
                         <label style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'block' }}>Update Cover Art (Optional)</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <input 
-                                type="file" 
-                                ref={editCoverInputRef} 
-                                onChange={e => setEditCover(e.target.files?.[0] || null)}
-                                accept="image/*"
-                                style={{ display: 'none' }}
-                            />
-                            <button 
-                                type="button" 
+                        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                            <div
                                 onClick={() => editCoverInputRef.current?.click()}
-                                className="btn-ghost"
-                                style={{ border: '1px dashed var(--border)', padding: '0.75rem 1.5rem', flex: 1 }}
+                                onDragOver={handleEditCoverDragOver}
+                                onDragLeave={handleEditCoverDragLeave}
+                                onDrop={handleEditCoverDrop}
+                                style={{
+                                    width: '100px',
+                                    height: '100px',
+                                    flexShrink: 0,
+                                    borderRadius: '8px',
+                                    border: isDraggingEditCover ? '2px solid var(--accent)' : '2px dashed var(--border)',
+                                    background: isDraggingEditCover ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface-light)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    overflow: 'hidden',
+                                    position: 'relative',
+                                    transition: 'all 0.2s ease'
+                                }}
                             >
-                                {editCover ? editCover.name : 'Choose New Image...'}
-                            </button>
-                            {editCover && (
-                                <button type="button" onClick={() => setEditCover(null)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }}>
-                                    <Trash2 size={16} />
-                                </button>
-                            )}
+                                {editCoverPreview ? (
+                                    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                        <img src={editCoverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="New Cover Preview" />
+                                        {isDraggingEditCover && (
+                                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <ImageIcon size={24} color="white" />
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: '0.5rem' }}>
+                                        <ImageIcon size={20} style={{ margin: '0 auto 0.25rem auto', opacity: isDraggingEditCover ? 1 : 0.5, color: isDraggingEditCover ? 'var(--accent)' : 'inherit' }} />
+                                        <p style={{ fontSize: '0.6rem', color: isDraggingEditCover ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                            {isDraggingEditCover ? 'Drop' : 'New Cover'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <input 
+                                    type="file" 
+                                    ref={editCoverInputRef} 
+                                    onChange={handleEditCoverChange}
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => editCoverInputRef.current?.click()}
+                                        className="btn-ghost"
+                                        style={{ border: '1px solid var(--border)', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    >
+                                        Choose File...
+                                    </button>
+                                    {editCover && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => { setEditCover(null); setEditCoverPreview(null); }} 
+                                            className="btn-ghost" 
+                                            style={{ padding: '0.5rem', color: 'var(--error-muted)' }}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                                {editCover && (
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        Selected: {editCover.name}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     </div>
                     
