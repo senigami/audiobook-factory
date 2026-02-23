@@ -102,7 +102,14 @@ function App() {
     <div className="app-container">
       <Layout
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+        onTabChange={(tab) => {
+          if (tab === 'library-root') {
+            setActiveProjectId(null);
+            setActiveTab('library');
+          } else {
+            setActiveTab(tab as any);
+          }
+        }}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}

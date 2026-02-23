@@ -43,7 +43,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           {/* Logo Section */}
           <div
             style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
-            onClick={() => onTabChange('library')}
+            onClick={() => onTabChange('library-root')}
           >
             <div style={{
               position: 'relative',

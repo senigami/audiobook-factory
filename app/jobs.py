@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
-from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR
+from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, SENT_CHAR_LIMIT
 from .engines import xtts_generate, xtts_generate_script, wav_to_mp3, assemble_audiobook
 
 job_queue: "queue.Queue[str]" = queue.Queue()
@@ -563,24 +563,48 @@ def worker_loop(q: "queue.Queue[str]"):
                 if has_custom_characters:
                     on_output("Detected segment-level character assignments. Using script mode.\n")
                     script = []
-                    for s in segments_data:
-                        if not s['text_content']: continue
 
-                        # Use the specific character speaker if assigned, else fallback
+                    current_sw = None
+                    current_text = ""
+
+                    from .textops import sanitize_for_xtts, safe_split_long_sentences
+
+                    for s in segments_data:
+                        if not s['text_content'] or not s['text_content'].strip():
+                            continue
+
+                        # Resolve speaker for this segment
                         if s['character_id'] and s['speaker_profile_name']:
                             sw = get_speaker_wavs(s['speaker_profile_name'])
                         else:
                             sw = default_sw
 
-                        processed_text = s['text_content']
-                        if j.safe_mode:
-                            from .textops import sanitize_for_xtts, safe_split_long_sentences
-                            processed_text = sanitize_for_xtts(processed_text)
-                            processed_text = safe_split_long_sentences(processed_text)
+                        # Merge if same voice
+                        if current_sw is not None and sw == current_sw:
+                            current_text += " " + s['text_content'].strip()
+                        else:
+                            if current_sw is not None:
+                                processed_text = current_text.strip()
+                                if j.safe_mode:
+                                    processed_text = sanitize_for_xtts(processed_text)
+                                    processed_text = safe_split_long_sentences(processed_text, limit=SENT_CHAR_LIMIT)
+                                script.append({
+                                    "text": processed_text,
+                                    "speaker_wav": current_sw
+                                })
 
+                            current_sw = sw
+                            current_text = s['text_content'].strip()
+
+                    # Add last one
+                    if current_sw is not None:
+                        processed_text = current_text.strip()
+                        if j.safe_mode:
+                            processed_text = sanitize_for_xtts(processed_text)
+                            processed_text = safe_split_long_sentences(processed_text, limit=SENT_CHAR_LIMIT)
                         script.append({
                             "text": processed_text,
-                            "speaker_wav": sw
+                            "speaker_wav": current_sw
                         })
 
                     # Write script to tmp file
