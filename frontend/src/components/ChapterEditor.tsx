@@ -92,32 +92,35 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
   const handleSave = async (manualTitle?: string, manualText?: string) => {
     if (!chapter) return;
+    
+    const finalTitle = manualTitle !== undefined ? manualTitle : title;
+    const finalText = manualText !== undefined ? manualText : text;
+    
+    // Check if anything actually changed before showing "Saving..."
+    let changed = false;
+    const payload: any = {};
+    
+    if (finalTitle !== chapter.title) {
+        payload.title = finalTitle;
+        changed = true;
+    }
+    if (finalText !== chapter.text_content) {
+        payload.text_content = finalText;
+        changed = true;
+    }
+    
+    if (!changed) return;
+
     setSaving(true);
     try {
-      const finalTitle = manualTitle !== undefined ? manualTitle : title;
-      const finalText = manualText !== undefined ? manualText : text;
-      
-      const payload: any = {};
-      let changed = false;
-      
-      if (finalTitle !== chapter.title) {
-          payload.title = finalTitle;
-          changed = true;
-      }
-      if (finalText !== chapter.text_content) {
-          payload.text_content = finalText;
-          changed = true;
-      }
-      
-      if (!changed) return;
-
       await api.updateChapter(chapterId, payload);
       // We don't necessarily need to reload everything, but maybe update the local chapter object
       setChapter(prev => prev ? { ...prev, ...payload } : null);
     } catch (e) {
       console.error(e);
     } finally {
-      setSaving(false);
+      // Add a tiny delay so the "Saving..." UI is actually visible to the user as feedback
+      setTimeout(() => setSaving(false), 500);
     }
   };
 
@@ -134,7 +137,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     if (loading) return;
 
     const timer = setTimeout(() => {
-        handleSave();
+        handleSave(title, text);
     }, 1500); // 1.5s debounce for auto-save
 
     return () => clearTimeout(timer);
@@ -142,6 +145,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading editor...</div>;
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
+
+  const hasUnsavedChanges = title !== chapter.title || text !== (chapter.text_content || '');
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 72px)', margin: '-2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
@@ -151,7 +156,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         borderBottom: '1px solid var(--border)', background: 'var(--surface)',
         flexShrink: 0
       }}>
-        <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem' }} title="Back to Project">
+        <button onClick={async () => { await handleSave(); onBack(); }} className="btn-ghost" style={{ padding: '0.5rem' }} title="Save & Back to Project">
           <ArrowLeft size={18} />
         </button>
         <div style={{ display: 'flex', gap: '0.25rem', borderRight: '1px solid var(--border)', paddingRight: '1rem' }}>
@@ -257,9 +262,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {saving ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} color="var(--success-muted)" />}
-                    {saving ? 'Saving...' : 'Saved'}
+                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success-muted)" />)}
+                    {saving ? 'Saving...' : (hasUnsavedChanges ? 'Unsaved' : 'Saved')}
                 </span>
             </div>
         </div>
