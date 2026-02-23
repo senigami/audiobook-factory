@@ -41,7 +41,7 @@ describe('ProjectView', () => {
             }
         ])
 
-        render(<ProjectView projectId="1" jobs={{}} speakerProfiles={[]} onBack={vi.fn()} onNavigateToQueue={vi.fn()} />)
+        render(<ProjectView projectId="1" jobs={{}} speakerProfiles={[]} onBack={vi.fn()} onNavigateToQueue={vi.fn()} onOpenPreview={vi.fn()} />)
 
         await waitFor(() => {
             expect(screen.getByText('Test Project')).toBeTruthy()
