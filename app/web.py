@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 import re
@@ -14,11 +15,15 @@ from .jobs import set_paused
 from .config import (
     BASE_DIR, CHAPTER_DIR, UPLOAD_DIR, REPORT_DIR,
     XTTS_OUT_DIR, PART_CHAR_LIMIT, AUDIOBOOK_DIR, VOICES_DIR, COVER_DIR,
-    SAMPLES_DIR, ASSETS_DIR
+    SAMPLES_DIR, ASSETS_DIR, PROJECTS_DIR
 )
 from .state import get_jobs, get_settings, update_settings, clear_all_jobs, update_job
 from .models import Job
 from .jobs import enqueue, cancel as cancel_job, paused, requeue, clear_job_queue
+from .db import (
+    create_project, get_project, list_projects, update_project, delete_project,
+    list_chapters as db_list_chapters, get_chapter, create_chapter, update_chapter, delete_chapter, reorder_chapters
+)
 from .textops import (
     split_by_chapter_markers, write_chapters_to_folder,
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
@@ -28,13 +33,15 @@ from .textops import (
 app = FastAPI()
 
 # Ensure required directories exist before mounting
-for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR]:
+for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR, PROJECTS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
 app.mount("/out/voices", StaticFiles(directory=str(VOICES_DIR)), name="out_voices")
 app.mount("/out/samples", StaticFiles(directory=str(SAMPLES_DIR)), name="out_samples")
+app.mount("/out/covers", StaticFiles(directory=str(COVER_DIR)), name="out_covers")
+app.mount("/projects", StaticFiles(directory=str(PROJECTS_DIR)), name="projects")
 
 # Serve React build if it exists
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
@@ -60,8 +67,8 @@ class ConnectionManager:
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
-            except Exception:
-                # print(f"DEBUG: Broadcast failed for a connection: {e}")
+            except Exception as e:
+                print(f"DEBUG: Broadcast failed for a connection: {e}")
                 if connection in self.active_connections:
                     self.active_connections.remove(connection)
 
@@ -70,6 +77,12 @@ manager = ConnectionManager()
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    # Ensure loop is captured if it wasn't already
+    if not _main_loop[0]:
+        try:
+            _main_loop[0] = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
     try:
         while True:
             # We don't expect messages FROM client for now, but need to keep it open
@@ -82,10 +95,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # We'll use a globally accessible loop variable for the bridge
+# This is usually the main thread's event loop
 _main_loop = [None]
 
 def broadcast_test_progress(name: str, progress: float, started_at: float = None):
-    import asyncio
     loop = _main_loop[0]
     if loop and loop.is_running():
         msg = {"type": "test_progress", "name": name, "progress": progress}
@@ -95,9 +108,40 @@ def broadcast_test_progress(name: str, progress: float, started_at: float = None
             manager.broadcast(msg),
             loop
         )
+    else:
+        print(f"DEBUG: Skipping test_progress broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
+
+def broadcast_queue_update():
+    """Notify all clients that the processing queue has changed."""
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "queue_updated"}),
+            loop
+        )
+    else:
+        print(f"DEBUG: Skipping queue_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
+
+def broadcast_pause_state(paused: bool):
+    """Notify all clients of a change in pause status."""
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "pause_updated", "paused": paused}),
+            loop
+        )
+    else:
+        print(f"DEBUG: Skipping pause_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
 @app.on_event("startup")
 def startup_event():
+    # Capture the main thread's loop for the bridge
+    try:
+        _main_loop[0] = asyncio.get_running_loop()
+        print(f"INFO: Startup captured loop {id(_main_loop[0])}")
+    except RuntimeError:
+        pass
+
     # Re-populate in-memory queue from state on restart
     existing = get_jobs()
     count = 0
@@ -117,8 +161,12 @@ def startup_event():
     if count > 0:
         print(f"recovered {count} jobs from state")
 
+    # 2. Reconcile DB queue with what's actually still in memory/state
+    from .db import reconcile_queue_status
+    active_ids = list(get_jobs().keys()) # Only jobs that still exist in state.json
+    reconcile_queue_status(active_ids)
+
     # Register bridge between state updates and WebSocket broadcast
-    import asyncio
     from .state import add_job_listener
 
     def job_update_bridge(job_id, updates):
@@ -168,7 +216,7 @@ def is_react_dev_active():
     except:
         return False
 
-def list_chapters():
+def legacy_list_chapters():
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
     return sorted(CHAPTER_DIR.glob("*.txt"))
 
@@ -182,25 +230,48 @@ def output_exists(engine: str, chapter_file: str) -> bool:
         return (XTTS_OUT_DIR / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
     return False
 
-def xtts_outputs_for(chapter_file: str):
+def xtts_outputs_for(chapter_file: str, project_id: Optional[str] = None):
+    from .config import get_project_audio_dir
     stem = Path(chapter_file).stem
-    wav = XTTS_OUT_DIR / f"{stem}.wav"
-    mp3 = XTTS_OUT_DIR / f"{stem}.mp3"
+    if project_id:
+        pdir = get_project_audio_dir(project_id)
+    else:
+        pdir = XTTS_OUT_DIR
+    wav = pdir / f"{stem}.wav"
+    mp3 = pdir / f"{stem}.mp3"
     return wav, mp3
 
 
+@app.get("/api/audiobooks")
+def api_list_audiobooks():
+    return list_audiobooks()
+
 def list_audiobooks():
-    if not AUDIOBOOK_DIR.exists(): return []
     res = []
-    # Sort m4b files by modification time or name, here we use name reverse
-    m4b_files = sorted(AUDIOBOOK_DIR.glob("*.m4b"), reverse=True)
+
+    # 1. Gather all m4b files (Legacy & Project-specific)
+    m4b_files = []
+    if AUDIOBOOK_DIR.exists():
+        for p in AUDIOBOOK_DIR.glob("*.m4b"):
+            m4b_files.append((p, f"/out/audiobook/{p.name}"))
+
+    if PROJECTS_DIR.exists():
+        for proj_dir in PROJECTS_DIR.iterdir():
+            if proj_dir.is_dir():
+                m4b_dir = proj_dir / "m4b"
+                if m4b_dir.exists():
+                    for p in m4b_dir.glob("*.m4b"):
+                        m4b_files.append((p, f"/projects/{proj_dir.name}/m4b/{p.name}"))
+
+    # Sort by modification time reverse
+    m4b_files.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
 
     import subprocess
     import shlex
-    for p in m4b_files:
-        item = {"filename": p.name, "title": p.name, "cover_url": None}
+    for p, url in m4b_files:
+        item = {"filename": p.name, "title": p.name, "cover_url": None, "url": url}
 
-        # 1. Try to extract embedded title
+        # Try to extract embedded title
         try:
             probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
             title_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
@@ -210,18 +281,10 @@ def list_audiobooks():
         except:
             pass
 
-        # 2. Look for existing cover file
-        found_img = False
-        for ext in [".jpg", ".jpeg", ".png", ".webp"]:
-            c_path = p.with_suffix(ext)
-            if c_path.exists():
-                item["cover_url"] = f"/out/audiobook/{p.stem}{ext}"
-                found_img = True
-                break
-
-        # 2. If not found, try to extract it from the m4b metadata
-        if not found_img:
-            target_jpg = p.with_suffix(".jpg")
+        target_jpg = AUDIOBOOK_DIR / f"{p.stem}.jpg"
+        if target_jpg.exists() and target_jpg.stat().st_size > 0:
+            item["cover_url"] = f"/out/audiobook/{p.stem}.jpg"
+        else:
             # This extracts the 'attached_pic' which is mapped as a video stream in m4b
             cmd = f"ffmpeg -y -i {shlex.quote(str(p))} -map 0:v -c copy -frames:v 1 {shlex.quote(str(target_jpg))}"
             try:
@@ -232,9 +295,205 @@ def list_audiobooks():
             except:
                 # If extraction fails (e.g. no embedded cover), just skip
                 pass
-
         res.append(item)
     return res
+
+# --- Projects API ---
+@app.get("/api/projects")
+def api_list_projects():
+    return JSONResponse(list_projects())
+
+@app.get("/api/projects/{project_id}")
+def api_get_project(project_id: str):
+    p = get_project(project_id)
+    if not p:
+        return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+    return JSONResponse(p)
+
+@app.post("/api/projects")
+async def api_create_project(
+    name: str = Form(...),
+    series: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    cover: Optional[UploadFile] = File(None)
+):
+    COVER_DIR.mkdir(parents=True, exist_ok=True)
+    cover_path = None
+    if cover:
+        ext = Path(cover.filename).suffix
+        cover_filename = f"{uuid.uuid4().hex}{ext}"
+        cover_p = COVER_DIR / cover_filename
+        content = await cover.read()
+        cover_p.write_bytes(content)
+        cover_path = f"/out/covers/{cover_filename}"
+
+    pid = create_project(name, series, author, cover_path)
+    return JSONResponse({"status": "success", "project_id": pid})
+
+@app.put("/api/projects/{project_id}")
+async def api_update_project(
+    project_id: str,
+    name: Optional[str] = Form(None),
+    series: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    cover: Optional[UploadFile] = File(None)
+):
+    p = get_project(project_id)
+    if not p:
+        return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+
+    updates = {}
+    if name is not None: updates["name"] = name
+    if series is not None: updates["series"] = series
+    if author is not None: updates["author"] = author
+
+    if cover:
+        COVER_DIR.mkdir(parents=True, exist_ok=True)
+        ext = Path(cover.filename).suffix
+        cover_filename = f"{uuid.uuid4().hex}{ext}"
+        cover_p = COVER_DIR / cover_filename
+        content = await cover.read()
+        cover_p.write_bytes(content)
+        updates["cover_image_path"] = f"/out/covers/{cover_filename}"
+
+    if updates:
+        update_project(project_id, **updates)
+
+    return JSONResponse({"status": "success", "project_id": project_id})
+
+@app.delete("/api/projects/{project_id}")
+def api_delete_project(project_id: str):
+    success = delete_project(project_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
+# --------------------
+
+# --- Chapters API ---
+@app.get("/api/projects/{project_id}/chapters")
+def api_list_project_chapters(project_id: str):
+    return JSONResponse(db_list_chapters(project_id))
+
+@app.post("/api/projects/{project_id}/chapters")
+async def api_create_chapter(
+    project_id: str,
+    title: str = Form(...),
+    text_content: Optional[str] = Form(""),
+    sort_order: int = Form(0),
+    file: Optional[UploadFile] = File(None)
+):
+    actual_text = text_content or ""
+    if file:
+        content = await file.read()
+        try:
+            actual_text = content.decode('utf-8')
+        except UnicodeDecodeError:
+            actual_text = content.decode('latin-1', errors='replace')
+
+    cid = create_chapter(project_id, title, actual_text, sort_order)
+    new_chapter = get_chapter(cid)
+    return JSONResponse({"status": "success", "chapter": new_chapter})
+
+def compute_chapter_metrics(text: str):
+    from .jobs import BASELINE_XTTS_CPS
+    char_count = len(text)
+    word_count = len(text.split())
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+    return char_count, word_count, pred_seconds
+
+@app.put("/api/chapters/{chapter_id}")
+async def api_update_chapter_details(
+    chapter_id: str,
+    title: Optional[str] = Form(None),
+    text_content: Optional[str] = Form(None)
+):
+    updates = {}
+    if title is not None: 
+        updates["title"] = title
+
+    if text_content is not None: 
+        updates["text_content"] = text_content
+        char_count, word_count, pred_seconds = compute_chapter_metrics(text_content)
+        updates["char_count"] = char_count
+        updates["word_count"] = word_count
+        updates["predicted_audio_length"] = pred_seconds
+
+    if updates:
+        update_chapter(chapter_id, **updates)
+
+    return JSONResponse({"status": "success", "chapter": get_chapter(chapter_id)})
+
+@app.delete("/api/chapters/{chapter_id}")
+def api_delete_chapter_record(chapter_id: str):
+    success = delete_chapter(chapter_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+@app.post("/api/chapters/{chapter_id}/reset")
+def api_reset_chapter_audio(chapter_id: str):
+    from .db import reset_chapter_audio
+    success = reset_chapter_audio(chapter_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+import json  # noqa: E402
+@app.post("/api/projects/{project_id}/reorder_chapters")
+async def api_reorder_chapters(project_id: str, chapter_ids: str = Form(...)):
+    try:
+        ids_list = json.loads(chapter_ids)
+        success = reorder_chapters(ids_list)
+        if success:
+            return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "error", "message": "Failed to reorder"}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.post("/api/analyze_text")
+async def api_analyze_text(text_content: str = Form(...)):
+    from .jobs import BASELINE_XTTS_CPS
+    from .config import SENT_CHAR_LIMIT
+
+    char_count = len(text_content)
+    word_count = len(text_content.split())
+    sent_count = text_content.count('.') + text_content.count('?') + text_content.count('!')
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+
+    raw_hits = find_long_sentences(text_content)
+    cleaned_text = clean_text_for_tts(text_content)
+    split_text = safe_split_long_sentences(cleaned_text)
+
+    # Pack the sentences into engine-sized chunks for preview
+    packed_text = pack_text_to_limit(split_text, pad=True)
+
+    # We still check for long sentences after splitting (just to log uncleanable)
+    cleaned_hits = find_long_sentences(split_text)
+
+    uncleanable = len(cleaned_hits)
+    auto_fixed = len(raw_hits) - uncleanable
+
+    uncleanable_sentences = []
+    for idx, clen, start, end, s in cleaned_hits:
+        uncleanable_sentences.append({
+            "length": clen,
+            "text": s
+        })
+
+    return JSONResponse({
+        "status": "success",
+        "char_count": char_count,
+        "word_count": word_count,
+        "sent_count": sent_count,
+        "predicted_seconds": pred_seconds,
+        "raw_long_sentences": len(raw_hits),
+        "auto_fixed": auto_fixed,
+        "uncleanable": uncleanable,
+        "uncleanable_sentences": uncleanable_sentences,
+        "threshold": SENT_CHAR_LIMIT,
+        "safe_text": packed_text
+    })
+# --------------------
 
 @app.get("/")
 def api_welcome():
@@ -262,7 +521,7 @@ def api_home():
     # 2. Re-fetch settings so they include the potential new default
     settings = get_settings()
 
-    chapters = [p.name for p in list_chapters()]
+    chapters = [p.name for p in legacy_list_chapters()]
     jobs = {j.chapter_file: asdict(j) for j in get_jobs().values()}
 
     # status sets logic
@@ -309,11 +568,25 @@ def set_default_speaker(name: str = Form(...)):
     return {"status": "success", "default_speaker_profile": name}
 
 @app.post("/api/chapter/{filename}/export-sample")
-async def export_sample(filename: str):
-    wav_path, mp3_path = xtts_outputs_for(filename)
-    source = mp3_path if mp3_path.exists() else wav_path
+async def export_sample(filename: str, project_id: Optional[str] = None):
+    source = None
+    if project_id:
+        from .db import get_chapter
+        from .config import get_project_audio_dir
+        # For new projects, filename passed is actually chapter_id
+        chapter = get_chapter(filename)
+        if chapter and chapter.get('audio_file_path'):
+            p_audio_dir = get_project_audio_dir(project_id)
+            source = p_audio_dir / chapter['audio_file_path']
+            if not source.exists():
+                source = None
 
-    if not source.exists():
+    # Fallback to legacy logic
+    if not source:
+        wav_path, mp3_path = xtts_outputs_for(filename, project_id=project_id)
+        source = mp3_path if mp3_path.exists() else wav_path
+
+    if not source or not source.exists():
         return JSONResponse({"status": "error", "message": "Audio not found for this chapter. Generate it first."}, status_code=404)
 
     SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
@@ -388,7 +661,7 @@ def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
     existing = get_jobs()
     active = {(j.engine, j.chapter_file) for j in existing.values() if j.status == "running"}
 
-    for p in list_chapters():
+    for p in legacy_list_chapters():
         c = p.name
         if output_exists("xtts", c):
             continue
@@ -452,11 +725,13 @@ def start_xtts_queue_get():
 @app.post("/queue/pause")
 def pause_queue():
     set_paused(True)
+    broadcast_pause_state(True)
     return JSONResponse({"status": "ok", "message": "Queue paused"})
 
 @app.post("/queue/resume")
 def resume_queue():
     set_paused(False)
+    broadcast_pause_state(False)
     return JSONResponse({"status": "ok", "message": "Queue resumed"})
 
 @app.post("/api/queue/cancel_pending")
@@ -883,7 +1158,7 @@ def reset_chapter(chapter_file: str = Form(...)):
     return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
 
 @app.delete("/api/chapter/{filename}")
-def delete_chapter(filename: str):
+def api_delete_legacy_chapter(filename: str):
     path = CHAPTER_DIR / filename
     stem = path.stem
 
@@ -1143,7 +1418,7 @@ def api_jobs():
             j['progress'] = max(j.get('progress', 0.0), time_prog)
 
     # Auto-discovery
-    chapters = [p.name for p in list_chapters()]
+    chapters = [p.name for p in legacy_list_chapters()]
     for c in chapters:
         # If we already have a job record, don't override it unless it's not 'done'
         # and we find a finished file.
@@ -1261,6 +1536,124 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
 
     return JSONResponse({"status": "success", "custom_title": new_title})
 
+# --- Processing Queue API ---
+from .db import get_queue, add_to_queue, reorder_queue, remove_from_queue, clear_queue as db_clear_queue  # noqa: E402
+
+@app.get("/api/processing_queue")
+def api_get_queue():
+    queue_items = get_queue()
+    all_jobs = get_jobs()
+
+    # Merge live job progress from state.json using qid
+    for item in queue_items:
+        job = all_jobs.get(item['id'])
+        if job:
+            item['progress'] = job.progress
+            item['eta_seconds'] = job.eta_seconds
+            item['started_at'] = job.started_at
+            item['log'] = job.log
+            # Re-sync status if DB is stale but job is running
+            if job.status == 'running' and item['status'] != 'running':
+                item['status'] = 'running'
+
+    return JSONResponse(queue_items)
+
+@app.post("/api/migration/import_legacy")
+def api_import_legacy():
+    from .migration import import_legacy_filesystem_data
+    try:
+        result = import_legacy_filesystem_data()
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+@app.post("/api/processing_queue")
+def api_add_to_queue(
+    project_id: str = Form(...), 
+    chapter_id: str = Form(...), 
+    split_part: int = Form(0),
+    speaker_profile: Optional[str] = Form(None)
+):
+    try:
+        active_profile = speaker_profile or get_settings().get("default_speaker_profile")
+        if not active_profile:
+            return JSONResponse({"status": "error", "message": "No speaker profile selected and no default set. Please choose a voice first."}, status_code=400)
+
+        qid = add_to_queue(project_id, chapter_id, split_part)
+
+        # TO INTEGRATE WITH LEGACY WORKER AND PRESERVE SSE:
+        # Fetch chapter title & text from SQLite
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title, text_content FROM chapters WHERE id = ?", (chapter_id,))
+            c_item = cursor.fetchone()
+
+        if c_item:
+            title, text_content = c_item
+            # Write a text file for the worker into the project-specific text folder!
+            from .config import get_project_text_dir
+            text_dir = get_project_text_dir(project_id)
+
+            temp_filename = f"{chapter_id}_{split_part}.txt"
+            temp_path = text_dir / temp_filename
+            temp_path.write_text(text_content or "", encoding="utf-8", errors="replace")
+
+            # Create legacy Job
+            settings = get_settings()
+            from .models import Job
+            from .state import put_job
+            from .jobs import enqueue
+            import time
+
+            j = Job(
+                id=qid, 
+                project_id=project_id,
+                engine="xtts",
+                chapter_file=temp_filename, 
+                status="queued",
+                created_at=time.time(),
+                safe_mode=bool(settings.get("safe_mode", True)),
+                make_mp3=True,
+                bypass_pause=False,
+                custom_title=title, # Ensures frontend shows the chapter title globally
+                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile")
+            )
+            put_job(j)
+            enqueue(j)
+            broadcast_queue_update()
+
+        return JSONResponse({"status": "success", "queue_id": qid})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.put("/api/processing_queue/reorder")
+def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
+    try:
+        q_list = [q.strip() for q in queue_ids.split(",") if q.strip()]
+        success = reorder_queue(q_list)
+        if success:
+            broadcast_queue_update()
+            return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "error", "message": "Failed to reorder queue"}, status_code=500)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.delete("/api/processing_queue/{queue_id}")
+def api_remove_from_queue(queue_id: str):
+    success = remove_from_queue(queue_id)
+    if success:
+        broadcast_queue_update()
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Item not found"}, status_code=404)
+
+@app.delete("/api/processing_queue")
+def api_clear_queue():
+    count = db_clear_queue()
+    broadcast_queue_update()
+    return JSONResponse({"status": "success", "cleared": count})
+# -----------------------------
+
 @app.post("/queue/clear")
 def clear_history():
     """Wipe job history, empty the in-memory queue, and stop processes."""
@@ -1298,3 +1691,74 @@ def api_preview(chapter_file: str, processed: bool = False):
         text = pack_text_to_limit(text, pad=True)
 
     return JSONResponse({"text": text, "analysis": analysis})
+
+@app.post("/api/projects/{project_id}/assemble")
+def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
+    from .db import get_project, get_chapters
+    from .jobs import enqueue
+    from .state import put_job
+    from .models import Job
+    import time
+    import json
+
+    project = get_project(project_id)
+    if not project:
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+
+    chapters = get_chapters(project_id)
+    if not chapters:
+        return JSONResponse({"error": "No chapters found in project"}, status_code=400)
+
+    selected_ids = []
+    if chapter_ids:
+        try:
+            selected_ids = json.loads(chapter_ids)
+        except:
+            pass
+
+    if selected_ids:
+        chapters = [c for c in chapters if c['id'] in selected_ids]
+
+    if not chapters:
+        return JSONResponse({"error": "No valid chapters selected for assembly"}, status_code=400)
+
+    chapter_list = []
+    for c in chapters:
+        if c['audio_status'] == 'done' and c['audio_file_path']:
+            chapter_list.append({
+                'filename': c['audio_file_path'],
+                'title': c['title']
+            })
+        else:
+            return JSONResponse({
+                "error": f"Chapter '{c['title']}' is not processed yet or audio is missing. All chapters must be processed before assembly."
+            }, status_code=400)
+
+    book_title = project['name']
+
+    # Create the job
+    import uuid
+    jid = uuid.uuid4().hex[:12]
+    j = Job(
+        id=jid,
+        project_id=project_id,
+        engine="audiobook",
+        chapter_file=book_title, # For audiobook, chapter_file works as the Book Title
+        status="queued",
+        created_at=time.time(),
+        safe_mode=False,
+        make_mp3=False,
+        bypass_pause=True,
+        author_meta=project.get('author', ''),
+        narrator_meta="Generated by Audiobook Factory",
+        chapter_list=chapter_list,
+        cover_path=project.get('cover_image_path', None)
+    )
+
+    put_job(j)
+    enqueue(j)
+
+    from .state import update_job
+    update_job(jid, status="queued") # Trigger SSE broadcast immediately
+
+    return JSONResponse({"status": "success", "job_id": jid})

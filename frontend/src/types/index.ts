@@ -1,6 +1,49 @@
 export type Engine = 'xtts' | 'audiobook';
 export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
+export interface Project {
+  id: string;
+  name: string;
+  series: string | null;
+  author: string | null;
+  cover_image_path: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface Chapter {
+  id: string;
+  project_id: string;
+  title: string;
+  text_content: string;
+  sort_order: number;
+  audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
+  audio_file_path: string | null;
+  text_last_modified: number | null;
+  audio_generated_at: number | null;
+  char_count: number;
+  word_count: number;
+  sent_count: number;
+  predicted_audio_length: number;
+  audio_length_seconds: number;
+}
+
+export interface ProcessingQueueItem {
+  id: string;
+  project_id: string;
+  chapter_id: string;
+  split_part: number;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  created_at: number;
+  completed_at: number | null;
+  chapter_title?: string;
+  project_name?: string;
+  progress?: number;
+  eta_seconds?: number;
+  started_at?: number;
+  log?: string;
+}
+
 export interface SpeakerProfile {
   name: string;
   wav_count: number;
@@ -16,6 +59,7 @@ export interface Job {
   chapter_file: string;
   status: Status;
   created_at: number;
+  project_id?: string;
   started_at?: number;
   finished_at?: number;
   safe_mode: boolean;
@@ -44,6 +88,7 @@ export interface Audiobook {
   filename: string;
   title: string;
   cover_url: string | null;
+  url?: string;
 }
 
 export interface AssemblyChapter {

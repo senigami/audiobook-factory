@@ -26,6 +26,7 @@ def terminate_all_subprocesses():
 def run_cmd_stream(cmd: str, on_output, cancel_check) -> int:
     import time
     import selectors
+    print(f"DEBUG: Running command: {cmd}")
     proc = subprocess.Popen(
         cmd, shell=True,
         stdout=subprocess.PIPE,
@@ -139,8 +140,8 @@ def get_audio_duration(file_path: Path) -> float:
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1', str(file_path)
     ]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         return float(result.stdout.strip())
     except Exception:
         return 0.0

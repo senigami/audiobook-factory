@@ -50,11 +50,17 @@ def test_api_active_job():
     response = client.get("/api/active_job")
     assert response.status_code == 200
 
-def test_backfill_surgical_logic(temp_chapter):
+def test_backfill_surgical_logic(temp_chapter, monkeypatch):
     from app.config import XTTS_OUT_DIR
     from app.state import put_job, get_jobs, delete_jobs
     from app.models import Job
     import time
+
+    def mock_wav_to_mp3(wav_path, mp3_path):
+        mp3_path.write_text("fake mp3 content")
+        return 0
+
+    monkeypatch.setattr("app.engines.wav_to_mp3", mock_wav_to_mp3)
 
     # 1. Force a job into state for our temp chapter
     jid = "test_backfill_jid"
@@ -99,6 +105,114 @@ def test_backfill_surgical_logic(temp_chapter):
     assert job.status == "done"
 
     # Cleanup files
-    if wav_path.exists(): wav_path.unlink()
     if mp3_path.exists(): mp3_path.unlink()
     delete_jobs([jid])
+
+def test_queue_uniqueness():
+    """
+    Verifies that a chapter cannot be added to the queue more than once concurrently.
+    """
+    from app.db import create_project, create_chapter, get_queue
+    from app.state import clear_all_jobs
+    import uuid
+
+    # 1. Setup clean environment
+    clear_all_jobs()
+
+    # 2. Create mock project and chapter
+    pid = create_project("Queue Uniqueness Test")
+    cid = create_chapter(project_id=pid, title="Unique Chapter")
+
+    # 3. Add to queue first time
+    res1 = client.post("/api/processing_queue", data={
+        "project_id": pid,
+        "chapter_id": cid,
+        "split_part": 0,
+        "speaker_profile": "test_profile"
+    })
+    assert res1.status_code == 200
+
+    # 4. Attempt to add to queue second time
+    res2 = client.post("/api/processing_queue", data={
+        "project_id": pid,
+        "chapter_id": cid,
+        "split_part": 0,
+        "speaker_profile": "test_profile"
+    })
+
+    # Should succeed, but return the exact same queue_id instead of a new one
+    assert res2.status_code == 200
+    assert res1.json()["queue_id"] == res2.json()["queue_id"]
+
+    # 5. Verify the actual queue only has 1 physical row
+    q = get_queue()
+    chapter_entries = [i for i in q if i["chapter_id"] == cid]
+    assert len(chapter_entries) == 1
+
+def test_clear_queue_preserves_running():
+    """
+    Verifies that clearing the queue does not remove jobs with status 'running'.
+    """
+    from app.db import create_project, create_chapter, add_to_queue, update_queue_item, get_queue
+    from app.state import clear_all_jobs
+
+    clear_all_jobs()
+    pid = create_project("Clear Queue Test")
+
+    # 1. Add two chapters to queue
+    cid1 = create_chapter(project_id=pid, title="Running Chapter")
+    cid2 = create_chapter(project_id=pid, title="Queued Chapter")
+
+    qid1 = add_to_queue(pid, cid1)
+    qid2 = add_to_queue(pid, cid2)
+
+    # 2. Set one to 'running'
+    update_queue_item(qid1, "running")
+
+    # 3. Clear the queue
+    response = client.delete("/api/processing_queue")
+    assert response.status_code == 200
+    assert response.json()["cleared"] >= 1
+
+    # 4. Verify 'running' job remains, 'queued' job is gone
+    queue = get_queue()
+    remaining_ids = [item['id'] for item in queue]
+
+    assert qid1 in remaining_ids
+    assert qid2 not in remaining_ids
+
+    # 5. Verify chapter status reset
+    from app.db import get_chapter
+    chap1 = get_chapter(cid1)
+    chap2 = get_chapter(cid2)
+    assert chap1['audio_status'] == 'processing' # Still running
+    assert chap2['audio_status'] == 'unprocessed' # Reset from processing
+
+def test_chapter_text_last_modified():
+    from app.db import create_project, create_chapter, update_chapter, get_chapter
+    import time
+
+    pid = create_project("Test Modified")
+    cid = create_chapter(project_id=pid, title="Original Title", text_content="Original text")
+
+    chap1 = get_chapter(cid)
+    original_time = chap1['text_last_modified']
+
+    # Wait a tiny bit to ensure timestamp would be different if updated
+    time.sleep(0.01)
+
+    # 1. Update only the title
+    update_chapter(cid, title="New Title")
+    chap2 = get_chapter(cid)
+    assert chap2['title'] == "New Title"
+    assert chap2['text_last_modified'] == original_time # Should NOT have changed
+
+    # Wait a tiny bit again
+    time.sleep(0.01)
+
+    # 2. Update the text content
+    update_chapter(cid, text_content="New text")
+    chap3 = get_chapter(cid)
+    assert chap3['text_content'] == "New text"
+    assert chap3['text_last_modified'] > original_time # SHOULD have changed
+

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText, Video, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Music, Pencil, Save, X, Trash2, MoreVertical, Play, FileText, Video, Loader2, Download } from 'lucide-react';
 import type { Job, Status } from '../types';
 import { api } from '../api';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
@@ -64,7 +64,12 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
 
   const getAudioSrc = () => {
     const stem = filename.replace('.txt', '');
-    const prefix = '/out/xtts/';
+    let prefix = '/out/xtts/';
+    
+    // If it's a project job, use the project-specific audio mount
+    if (job?.project_id) {
+        prefix = `/projects/${job.project_id}/audio/`;
+    }
 
     if (makeMp3) {
       if (statusInfo?.isXttsMp3) return `${prefix}${stem}.mp3`;
@@ -75,12 +80,13 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
     }
 
     if (job?.status === 'done') {
-      if (makeMp3) {
-        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
-        if (job.output_wav) return `${prefix}${job.output_wav}`;
-      } else {
-        if (job.output_wav) return `${prefix}${job.output_wav}`;
-        if (job.output_mp3) return `${prefix}${job.output_mp3}`;
+      const audioFile = makeMp3 
+        ? (job.output_mp3 || job.output_wav)
+        : (job.output_wav || job.output_mp3);
+        
+      if (audioFile) {
+        const itemPrefix = job.project_id ? `/projects/${job.project_id}/audio/` : prefix;
+        return `${itemPrefix}${audioFile}`;
       }
     }
     return null;
@@ -203,7 +209,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 onClick={e => e.stopPropagation()}
               >
                 <button
-                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav)}
+                  disabled={!!(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running')}
                   onClick={async () => {
                     setShowMenu(false);
                     try {
@@ -223,10 +229,14 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                     alignItems: 'center',
                     gap: '8px',
                     justifyContent: 'flex-start',
-                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 0.5 : 1,
-                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? 'not-allowed' : 'pointer'
+                    opacity: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running') ? 0.5 : 1,
+                    cursor: (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav || status === 'queued' || status === 'running') ? 'not-allowed' : 'pointer'
                   }}
-                  title={(statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : "Synthesize just this one chapter"}
+                  title={
+                    (status === 'queued' || status === 'running') ? "Already queued or processing. Please wait or cancel first." :
+                    (statusInfo?.isXttsMp3 || statusInfo?.isXttsWav) ? "Audio already generated. Reset to re-process." : 
+                    "Synthesize just this one chapter"
+                  }
                 >
                   <Play size={12} /> Process Synthesis
                 </button>
@@ -276,6 +286,17 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                   {isExporting ? <Loader2 size={12} className="animate-spin" /> : <Video size={12} />}
                   {isExporting ? 'Generating Video...' : 'Export Video Sample'}
                 </button>
+                {getAudioSrc() && (
+                  <a 
+                    href={getAudioSrc()!}
+                    download={getAudioSrc()!.split('/').pop()}
+                    className="btn-ghost" 
+                    style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start', textDecoration: 'none', color: 'inherit' }}
+                    onClick={() => setShowMenu(false)}
+                  >
+                    <Download size={12} /> Download Audio
+                  </a>
+                )}
                 <button
                   onClick={async () => {
                     setShowMenu(false);

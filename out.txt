@@ -1,0 +1,77 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /Users/stevendunn/GitHub-Steven/audiobook-factory/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/stevendunn/GitHub-Steven/audiobook-factory
+configfile: pytest.ini
+plugins: anyio-4.12.1, typeguard-4.5.0, cov-7.0.0
+collecting ... collected 4 items
+
+tests/test_web_endpoints.py::test_crud_projects PASSED                   [ 25%]
+tests/test_web_endpoints.py::test_chapter_endpoints FAILED               [ 50%]
+tests/test_web_endpoints.py::test_missing_entities FAILED                [ 75%]
+tests/test_web_endpoints.py::test_reports PASSED                         [100%]
+ERROR: Coverage failure: total of 22 is less than fail-under=60
+
+
+=================================== FAILURES ===================================
+____________________________ test_chapter_endpoints ____________________________
+
+    def test_chapter_endpoints():
+        res = client.post("/api/projects", data={"name": "ChapProj"})
+        pid = res.json()["project_id"]
+    
+        # create chapter
+        res = client.post(f"/api/projects/{pid}/chapters", data={"title": "C1", "text_content": "hello world", "sort_order": 0})
+        assert res.status_code == 200
+        cid = res.json()["chapter"]["id"]
+    
+        # get list
+        res = client.get(f"/api/projects/{pid}/chapters")
+        assert len(res.json()) >= 1
+    
+        # updated chapter text
+        res = client.put(f"/api/chapters/{cid}", data={"title": "C1", "text_content": "updated world"})
+        assert res.status_code == 200
+    
+        # test analyze
+        res = client.post(f"/api/analyze_long", data={"text": "A" * 500})
+>       assert res.status_code == 200
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_web_endpoints.py:52: AssertionError
+____________________________ test_missing_entities _____________________________
+
+    def test_missing_entities():
+        # missing project
+        assert client.get("/api/projects/999").status_code == 404
+        client.put("/api/projects/999", data={"name": "x"}) # not necessarily 404 depending on how it's written
+        client.delete("/api/projects/999")
+>       assert client.get("/api/projects/999/chapters").status_code == 404
+E       AssertionError: assert 200 == 404
+E        +  where 200 = <Response [200 OK]>.status_code
+E        +    where <Response [200 OK]> = get('/api/projects/999/chapters')
+E        +      where get = <starlette.testclient.TestClient object at 0x10b6a7150>.get
+
+tests/test_web_endpoints.py:62: AssertionError
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.11.14-final-0 _______________
+
+Name               Stmts   Miss  Cover   Missing
+------------------------------------------------
+app/config.py         35     12    66%   17-19, 22-24, 27-29, 32-34
+app/db.py            229    101    56%   177-182, 185-191, 195-208, 211-223, 226-231, 234-261, 264-269, 273-294, 297-309, 316, 327-368
+app/engines.py       192    174     9%   15-24, 27-91, 94-100, 103-134, 139-147, 151-162, 177-287, 302-322
+app/jobs.py          336    299    11%   25-30, 34-39, 42-44, 49-55, 59, 63-66, 69-72, 75, 79-84, 88-109, 122-194, 201-211, 216-247, 252-617
+app/migration.py      37     37     0%   1-79
+app/models.py         30      0   100%
+app/state.py         140    113    19%   20, 24, 39-41, 48-70, 74-75, 79-80, 84-86, 90-94, 98-105, 109-113, 117-128, 132-136, 140-194, 198-204, 208-211
+app/textops.py       197    179     9%   52-57, 60-72, 75-117, 121-122, 125-138, 141-150, 153-191, 194-201, 220-260, 269-300, 308-320, 328-353
+app/web.py          1074    866    19%   55-56, 60-61, 66-72, 78-87, 94-100, 107-110, 117-120, 128-190, 194-195, 199-207, 210-211, 214-215, 218-221, 224-232, 237, 240-289, 313-318, 341-347, 377-381, 404-407, 411-415, 420-427, 431-459, 477, 491-514, 531-539, 543-544, 548-568, 572-597, 605-618, 622-679, 684, 689-691, 695-697, 702-711, 721-755, 760-798, 806-844, 848-862, 866-882, 886-900, 907-959, 963-997, 1001-1021, 1026-1073, 1077-1078, 1082-1086, 1090-1120, 1124-1151, 1158-1193, 1196-1259, 1265-1320, 1333-1348, 1355, 1360-1426, 1431-1446, 1451-1459, 1464-1499, 1506-1521, 1525-1530, 1539-1590, 1594-1602, 1606-1610, 1614-1616, 1622-1625, 1630-1655, 1659-1726
+------------------------------------------------
+TOTAL               2270   1781    22%
+FAIL Required test coverage of 60% not reached. Total coverage: 21.54%
+=========================== short test summary info ============================
+FAILED tests/test_web_endpoints.py::test_chapter_endpoints - assert 404 == 200
+FAILED tests/test_web_endpoints.py::test_missing_entities - AssertionError: a...
+========================= 2 failed, 2 passed in 0.41s ==========================

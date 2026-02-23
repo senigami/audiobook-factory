@@ -61,7 +61,7 @@ def main():
     try:
         if os.path.exists(latent_file):
             print(f"Loading cached latents for {speaker_id}...", file=sys.stderr)
-            latents = torch.load(latent_file, map_location=device)
+            latents = torch.load(latent_file, map_location=device, weights_only=False)
             gpt_cond_latent = latents["gpt_cond_latent"]
             speaker_embedding = latents["speaker_embedding"]
         else:
@@ -75,15 +75,8 @@ def main():
                 "speaker_embedding": speaker_embedding
             }, latent_file)
 
-        # Inject into the model's speaker manager to avoid KeyError in tts.tts()
-        if not hasattr(tts.synthesizer.tts_model, 'speaker_manager'):
-            # Some versions might have it nested or different
-            pass
-        else:
-            tts.synthesizer.tts_model.speaker_manager.speakers[speaker_id] = {
-                "gpt_cond_latent": gpt_cond_latent,
-                "speaker_embedding": speaker_embedding
-            }
+        # We don't inject into speaker_manager anymore to prevent shape errors.
+        # We will directly call `xtts_model.inference` which bypasses the TTS wrapper.
     except Exception as e:
         print(f"Warning: Latent caching/injection failed: {e}. Falling back to standard processing.", file=sys.stderr)
         speaker_id = None # Fallback to using speaker_wav every time
@@ -111,15 +104,17 @@ def main():
             for i, sentence in enumerate(sentences):
                 # We use tts() which returns a list of floats
                 if speaker_id:
-                    # Call synthesizer directly because tts.tts() named 'speed' argument is not forwarded
-                    wav_chunk = tts.synthesizer.tts(
+                    # Call inference directly to use cached latents properly
+                    out_dict = tts.synthesizer.tts_model.inference(
                         text=sentence,
-                        speaker_name=speaker_id,
-                        language_name=args.language,
+                        language=args.language,
+                        gpt_cond_latent=gpt_cond_latent,
+                        speaker_embedding=speaker_embedding,
+                        temperature=args.temperature,
                         speed=args.speed,
-                        repetition_penalty=args.repetition_penalty,
-                        temperature=args.temperature
+                        repetition_penalty=args.repetition_penalty
                     )
+                    wav_chunk = out_dict['wav']
                 else:
                     wav_chunk = tts.synthesizer.tts(
                         text=sentence,

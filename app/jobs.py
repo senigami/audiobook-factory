@@ -84,16 +84,25 @@ def format_seconds(seconds: int) -> str:
     return f"{m}m {s}s"
 
 
-def _output_exists(engine: str, chapter_file: str, make_mp3: bool = True) -> bool:
+def _output_exists(engine: str, chapter_file: str, project_id: Optional[str] = None, make_mp3: bool = True) -> bool:
     stem = Path(chapter_file).stem
     if engine == "audiobook":
+        if project_id:
+            from .config import get_project_m4b_dir
+            return (get_project_m4b_dir(project_id) / f"{chapter_file}.m4b").exists()
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
 
     if engine == "xtts":
-        mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
-        wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
+        if project_id:
+            from .config import get_project_audio_dir
+            pdir = get_project_audio_dir(project_id)
+            mp3 = (pdir / f"{stem}.mp3").exists() or (XTTS_OUT_DIR / f"{stem}.mp3").exists()
+            wav = (pdir / f"{stem}.wav").exists() or (XTTS_OUT_DIR / f"{stem}.wav").exists()
+        else:
+            pdir = XTTS_OUT_DIR
+            mp3 = (pdir / f"{stem}.mp3").exists()
+            wav = (pdir / f"{stem}.wav").exists()
     else:
-        # Fallback for unexpected engine names
         return False
 
     if make_mp3:
@@ -115,16 +124,25 @@ def cleanup_and_reconcile():
     all_jobs = get_jobs()
 
     # 1. Prune missing text files & missing audiobooks
-    chapters_disk = {p.name for p in (CHAPTER_DIR.glob("*.txt"))}
     stale_ids = []
     for jid, j in all_jobs.items():
         if j.engine != "audiobook":
-            if j.chapter_file not in chapters_disk:
+            if j.project_id:
+                from .config import get_project_text_dir
+                text_path = get_project_text_dir(j.project_id) / j.chapter_file
+                if not text_path.exists():
+                    text_path = CHAPTER_DIR / j.chapter_file
+            else:
+                text_path = CHAPTER_DIR / j.chapter_file
+
+            if not text_path.exists():
+                print(f"DEBUG: Pruning stale job {jid} - text file missing at project dir and legacy {CHAPTER_DIR}")
                 stale_ids.append(jid)
         else:
             # For audiobooks, if the m4b is gone AND it's marked done, it's stale.
             # Do NOT prune queued or running jobs just because the file isn't there yet!
             if j.status == "done" and not (AUDIOBOOK_DIR / f"{j.chapter_file}.m4b").exists():
+                print(f"DEBUG: Pruning stale audiobook job {jid} - M4B missing")
                 stale_ids.append(jid)
 
     if stale_ids:
@@ -137,47 +155,55 @@ def cleanup_and_reconcile():
     for jid, j in all_jobs.items():
         if j.status == "done":
             if j.engine == "audiobook":
-                continue # Audiobook pruning is handled in Part 1
+                continue 
 
-            # Check if ANY output exists (WAV or MP3)
-            # If make_mp3 is True, we only consider it truly 'done' if the MP3 exists.
-            has_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
-            has_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
+            # Use _output_exists to check the correct path based on project_id
+            exists = _output_exists(
+                j.engine, 
+                j.chapter_file, 
+                project_id=j.project_id, 
+                make_mp3=j.make_mp3
+            )
 
-            if j.make_mp3:
-                if not has_mp3.exists() and not has_wav.exists():
-                    # Both gone! Must re-run.
-                    update_job(jid,
-                               status="queued",
-                               output_mp3=None,
-                               output_wav=None,
-                               progress=0.0,
-                               started_at=None,
-                               finished_at=None,
-                               eta_seconds=None,
-                               log="",
-                               error=None,
-                               warning_count=0)
-                    reset_ids.append(jid)
-                elif not has_mp3.exists() and has_wav.exists():
-                    # WAV exists, MP3 missing.
-                    # Clear output_mp3 so UI knows it's gone, but keep status=done/wav
-                    # so backfill can catch it.
-                    update_job(jid, output_mp3=None)
+            if not exists:
+                print(f"DEBUG: Resetting job {jid} - audio missing (checked project_id={j.project_id})")
+                update_job(jid,
+                           status="queued",
+                           output_mp3=None,
+                           output_wav=None,
+                           progress=0.0,
+                           started_at=None,
+                           finished_at=None,
+                           eta_seconds=None,
+                           log="Reconcliation: Output missing, resetting to queued.",
+                           error=None,
+                           warning_count=0)
+                reset_ids.append(jid)
             else:
-                if not has_wav.exists():
-                    update_job(jid,
-                               status="queued",
-                               output_mp3=None,
-                               output_wav=None,
-                               progress=0.0,
-                               started_at=None,
-                               finished_at=None,
-                               eta_seconds=None,
-                               log="",
-                               error=None,
-                               warning_count=0)
-                    reset_ids.append(jid)
+                # Forward-sync to chapters table in case the DB got out of sync or lost the queue item
+                try:
+                    from .db import update_queue_item
+                    audio_length = 0.0
+                    from .config import get_project_audio_dir
+                    pdir = get_project_audio_dir(j.project_id) if j.project_id else XTTS_OUT_DIR
+                    output_file = j.output_mp3 or j.output_wav
+                    if output_file:
+                        import subprocess
+                        audio_path = pdir / output_file
+                        if audio_path.exists():
+                            try:
+                                result = subprocess.run(
+                                    ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path)],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,
+                                    text=True,
+                                    timeout=2
+                                )
+                                audio_length = float(result.stdout.strip())
+                            except Exception: pass
+                    update_queue_item(jid, "done", audio_length_seconds=audio_length)
+                except Exception as e:
+                    print(f"Warning: Failed to forward-sync job {jid} to SQLite: {e}")
 
     # 3. Requeue the reset jobs so the worker picks them up
     for rid in reset_ids:
@@ -261,9 +287,14 @@ def worker_loop(q: "queue.Queue[str]"):
             header = []
 
             if j.engine != "audiobook":
-                chapter_path = CHAPTER_DIR / j.chapter_file
-                if chapter_path.exists():
-                    text = chapter_path.read_text(encoding="utf-8", errors="replace")
+                if j.project_id:
+                    from .config import get_project_text_dir
+                    text_path = get_project_text_dir(j.project_id) / j.chapter_file
+                else:
+                    text_path = CHAPTER_DIR / j.chapter_file
+
+                if text_path.exists():
+                    text = text_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
                     perf = get_performance_metrics()
                     cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
@@ -280,7 +311,11 @@ def worker_loop(q: "queue.Queue[str]"):
                 ]
             else:
                 # Audiobook identity
-                src_dir = XTTS_OUT_DIR
+                if j.project_id:
+                    from .config import get_project_audio_dir
+                    src_dir = get_project_audio_dir(j.project_id)
+                else:
+                    src_dir = XTTS_OUT_DIR
 
                 if j.chapter_list:
                     audio_files = [c['filename'] for c in j.chapter_list]
@@ -328,11 +363,11 @@ def worker_loop(q: "queue.Queue[str]"):
             j._last_broadcast_p = 0.0 # Track what we just sent in update_job above
 
             # --- Safety Checks ---
-            if j.engine != "audiobook" and not chapter_path.exists():
-                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error="Chapter file not found.")
+            if j.engine != "audiobook" and not text_path.exists():
+                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Chapter file not found: {j.chapter_file}")
                 continue
 
-            if _output_exists(j.engine, j.chapter_file):
+            if _output_exists(j.engine, j.chapter_file, project_id=j.project_id, make_mp3=j.make_mp3):
                 update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
                 continue
 
@@ -347,6 +382,8 @@ def worker_loop(q: "queue.Queue[str]"):
                 # We'll use these to track if we need to broadcast an update
                 new_progress = None
                 new_log = None
+
+                if s: print(f"DEBUG: worker output for {jid}: {s}")
 
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
@@ -445,9 +482,15 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # --- Generate WAV or Audiobook ---
             if j.engine == "audiobook":
-                src_dir = XTTS_OUT_DIR
-                title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
-                out_file = AUDIOBOOK_DIR / f"{title}.m4b"
+                from .config import get_project_audio_dir, get_project_m4b_dir
+                if j.project_id:
+                    src_dir = get_project_audio_dir(j.project_id)
+                    title = j.chapter_file 
+                    out_file = get_project_m4b_dir(j.project_id) / f"{title}.m4b"
+                else:
+                    src_dir = XTTS_OUT_DIR
+                    title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
+                    out_file = AUDIOBOOK_DIR / f"{title}.m4b"
 
                 # Collect custom titles from all jobs
                 chapter_titles = {
@@ -484,8 +527,14 @@ def worker_loop(q: "queue.Queue[str]"):
                 continue
 
             elif j.engine == "xtts":
-                out_wav = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.wav"
-                out_mp3 = XTTS_OUT_DIR / f"{Path(j.chapter_file).stem}.mp3"
+                from .config import get_project_audio_dir
+                if j.project_id:
+                    pdir = get_project_audio_dir(j.project_id)
+                else:
+                    pdir = XTTS_OUT_DIR
+
+                out_wav = pdir / f"{Path(j.chapter_file).stem}.wav"
+                out_mp3 = pdir / f"{Path(j.chapter_file).stem}.mp3"
 
                 # Resolve speaker WAVs and settings from profile
                 sw = get_speaker_wavs(j.speaker_profile)
