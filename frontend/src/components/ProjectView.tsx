@@ -22,6 +22,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [loading, setLoading] = useState(true);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const skipBlurSaveId = useRef<string | null>(null);
   const [tempTitle, setTempTitle] = useState('');
   const [availableAudiobooks, setAvailableAudiobooks] = useState<Audiobook[]>([]);
   const [isAssemblyMode, setIsAssemblyMode] = useState(false);
@@ -578,31 +579,57 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                             value={tempTitle}
                             onChange={(e) => setTempTitle(e.target.value)}
                             onClick={(e) => e.stopPropagation()}
-                            onKeyDown={async (e) => {
+                            onKeyDown={(e) => {
+                                const saveMyTitle = () => {
+                                    if (tempTitle.trim() !== chap.title) {
+                                        api.updateChapter(chap.id, { title: tempTitle.trim() })
+                                            .then(() => loadData())
+                                            .catch(err => console.error('Failed to update title', err));
+                                    }
+                                };
+                                
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    if (tempTitle.trim() !== chap.title) {
-                                        try {
-                                            await api.updateChapter(chap.id, { title: tempTitle.trim() });
-                                            loadData();
-                                        } catch (err) {
-                                            console.error('Failed to update title', err);
-                                        }
-                                    }
+                                    skipBlurSaveId.current = chap.id;
+                                    saveMyTitle();
                                     setEditingTitleId(null);
                                 } else if (e.key === 'Escape') {
+                                    skipBlurSaveId.current = chap.id;
                                     setEditingTitleId(null);
+                                } else if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    skipBlurSaveId.current = chap.id;
+                                    saveMyTitle();
+                                    if (idx > 0) {
+                                        setEditingTitleId(chapters[idx - 1].id);
+                                        setTempTitle(chapters[idx - 1].title);
+                                    } else {
+                                        setEditingTitleId(null);
+                                    }
+                                } else if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    skipBlurSaveId.current = chap.id;
+                                    saveMyTitle();
+                                    if (idx < chapters.length - 1) {
+                                        setEditingTitleId(chapters[idx + 1].id);
+                                        setTempTitle(chapters[idx + 1].title);
+                                    } else {
+                                        setEditingTitleId(null);
+                                    }
                                 }
                             }}
-                            onBlur={async () => {
+                            onBlur={() => {
+                                if (skipBlurSaveId.current === chap.id) {
+                                    skipBlurSaveId.current = null;
+                                    return;
+                                }
                                 if (tempTitle.trim() !== chap.title) {
-                                    try {
-                                        await api.updateChapter(chap.id, { title: tempTitle.trim() });
-                                        loadData();
-                                    } catch (err) {
-                                        console.error('Failed to update title', err);
-                                    }
+                                    api.updateChapter(chap.id, { title: tempTitle.trim() })
+                                        .then(() => loadData())
+                                        .catch(err => console.error('Failed to update title', err));
                                 }
                                 setEditingTitleId(null);
                             }}
