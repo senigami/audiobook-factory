@@ -77,6 +77,7 @@ def init_db():
                     name TEXT NOT NULL,
                     speaker_profile_name TEXT,
                     default_emotion TEXT,
+                    color TEXT DEFAULT '#8b5cf6',
                     FOREIGN KEY (project_id) REFERENCES projects (id)
                 )
             """)
@@ -161,15 +162,15 @@ def delete_project(project_id: str) -> bool:
             return cursor.rowcount > 0
 
 # --- Character Functions ---
-def create_character(project_id: str, name: str, speaker_profile_name: Optional[str] = None, default_emotion: Optional[str] = None) -> str:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
             char_id = str(uuid.uuid4())
+            color = updates.get('color', '#8b5cf6')
             cursor.execute("""
-                INSERT INTO characters (id, project_id, name, speaker_profile_name, default_emotion)
-                VALUES (?, ?, ?, ?, ?)
-            """, (char_id, project_id, name, speaker_profile_name, default_emotion))
+                INSERT INTO characters (id, project_id, name, speaker_profile_name, default_emotion, color)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (char_id, project_id, name, speaker_profile_name, default_emotion, color))
             conn.commit()
             return char_id
 

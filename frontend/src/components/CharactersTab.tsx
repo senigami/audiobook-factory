@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Character, SpeakerProfile } from '../types';
+import type { Character, SpeakerProfile } from '../types';
 import { api } from '../api';
-import { Plus, Trash2, Save, User as UserIcon } from 'lucide-react';
+import { Plus, Trash2, User as UserIcon } from 'lucide-react';
 
 interface CharactersTabProps {
   projectId: string;
@@ -80,7 +80,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
     <div className="animate-in" style={{ padding: '0.5rem 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <UserIcon size={20} />
             Characters & Voices
           </h2>
@@ -149,7 +149,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                       defaultValue={char.name}
                       onBlur={(e) => { if (e.target.value !== char.name) handleUpdateName(char.id, e.target.value); }}
                       className="input-field"
-                      style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: '1rem', color: 'var(--text)', boxShadow: 'none' }}
+                      style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', boxShadow: 'none' }}
                   />
               </div>
 
@@ -158,7 +158,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                   className="input-field"
                   value={char.speaker_profile_name || ''}
                   onChange={e => handleUpdateVoice(char.id, e.target.value)}
-                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: 'var(--surface-light)' }}
+                  style={{ width: '100%' }}
                 >
                   <option value="">Default Narrator</option>
                   {speakerProfiles.map(p => (

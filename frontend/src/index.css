@@ -23,6 +23,7 @@
   --glass-active: rgba(255, 255, 255, 0.1);
   --surface-light: #1a1a21;
   --background: var(--bg);
+  --text: var(--text-primary);
   --header-height: 72px;
 }
 
@@ -166,6 +167,17 @@ button {
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+  border: 1px solid var(--error-muted);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--error-muted);
+  color: #ffffff;
+}
+
 .glass-panel {
   background: rgba(23, 23, 28, 0.6);
   backdrop-filter: blur(25px);
@@ -212,6 +224,38 @@ button {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.input-field {
+  background: var(--surface-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.input-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.select-glass {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.select-glass:hover {
+  background: var(--glass-hover);
 }
 
 /* Scrollbar */

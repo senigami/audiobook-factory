@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Mic, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info } from 'lucide-react';
+
 import { api } from '../api';
 import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
 
@@ -29,6 +29,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+  const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
   
   const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
   const handleVoiceChange = (voice: string) => {
@@ -37,7 +39,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const [analysis, setAnalysis] = useState<any>(null);
-  const [analyzing, setAnalyzing] = useState(false);
   const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production'>('edit');
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,7 +53,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         return;
     }
     
-    setAnalyzing(true);
+    
+    // setAnalyzing(true);
     typingTimeoutRef.current = setTimeout(() => {
         analyzeText(text);
     }, 1000);
@@ -98,7 +100,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     } catch (e) {
       console.error("Analysis failed", e);
     } finally {
-      setAnalyzing(false);
+      // setAnalyzing(false);
     }
   };
 
@@ -139,12 +141,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const handleAssignCharacter = async (segmentId: string, charId: string | null) => {
     try {
       await api.updateSegment(segmentId, { character_id: charId });
-      // Update local state to show change immediately
       setSegments(prev => prev.map(s => s.id === segmentId ? { ...s, character_id: charId } : s));
     } catch (e) {
       console.error("Failed to assign character", e);
-      alert("Failed to assign character.");
     }
+  };
+
+  const handleBulkAssign = async (segmentId: string) => {
+    if (!selectedCharacterId) return;
+    await handleAssignCharacter(segmentId, selectedCharacterId);
   };
 
   const handleNavigate = async (dir: 'next' | 'prev') => {
@@ -385,264 +390,203 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             </div>
                         ))}
                     </div>
-                ) : (
+        ) : (
+          <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '1rem' }}>
+            {/* Main Production View (Movie Sheet) */}
+            <div style={{ 
+              flex: 1, 
+              background: 'var(--bg)', 
+              border: '1px solid var(--border)', 
+              borderRadius: '12px', 
+              padding: '2rem', 
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.25rem'
+            }}>
+              {segments.map((seg) => {
+                const char = characters.find(c => c.id === seg.character_id);
+                const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
+                const isHovered = hoveredSegmentId === seg.id;
+                
+                return (
+                  <div 
+                    key={seg.id}
+                    onMouseEnter={() => setHoveredSegmentId(seg.id)}
+                    onMouseLeave={() => setHoveredSegmentId(null)}
+                    onClick={() => {
+                        if (selectedCharacterId) {
+                            handleBulkAssign(seg.id);
+                        } else {
+                            setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
+                        }
+                    }}
+                    style={{ 
+                      display: 'flex',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '4px',
+                      background: isSelectedCharLines ? `${char?.color || '#8b5cf6'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
+                      borderLeft: `4px solid ${char ? char.color : 'transparent'}`,
+                      cursor: selectedCharacterId ? 'copy' : 'pointer',
+                      transition: 'all 0.1s ease',
+                      gap: '2rem'
+                    }}
+                  >
+                    {/* Character/Voice column */}
                     <div style={{ 
-                        flex: 1, 
-                        background: 'var(--bg)', 
-                        border: '1px solid var(--border)', 
-                        borderRadius: '12px', 
-                        padding: '1.5rem', 
-                        overflowY: 'auto',
+                        width: '140px', 
+                        flexShrink: 0, 
+                        fontSize: '0.8rem', 
+                        fontWeight: 700,
+                        color: char ? char.color : 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem'
+                        flexDirection: 'column'
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', background: 'rgba(139, 92, 246, 0.1)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--accent)' }}>
-                            <Info size={16} color="var(--accent)" />
-                            <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>
-                                <strong>Production Mode:</strong> Map sentences to characters. This will override the default chapter voice for those sentences.
-                            </p>
-                        </div>
-                        
-                        {segments.map((seg, idx) => {
-                            const currentCharacter = characters.find(c => c.id === seg.character_id);
-                            const isActive = activeSegmentId === seg.id;
-                            
-                            return (
-                                <div 
-                                    key={seg.id} 
-                                    style={{ 
-                                        padding: '1rem', 
-                                        background: isActive ? 'rgba(139, 92, 246, 0.05)' : 'var(--surface-light)', 
-                                        borderRadius: '10px', 
-                                        border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '0.75rem',
-                                        transition: 'all 0.2s ease',
-                                        cursor: 'default'
-                                    }}
-                                    onClick={() => setActiveSegmentId(seg.id)}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>#{idx + 1}</span>
-                                            {currentCharacter ? (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem' }}>
-                                                    <User size={12} />
-                                                    {currentCharacter.name}
-                                                </div>
-                                            ) : (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface)', color: 'var(--text-muted)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', border: '1px solid var(--border)' }}>
-                                                    <Mic size={12} />
-                                                    Default Chapter Voice
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            {seg.audio_status === 'done' && (
-                                                <span style={{ fontSize: '0.7rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <CheckCircle size={12} /> Generated
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    <p style={{ fontSize: '0.95rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                                        {seg.text_content}
-                                    </p>
-                                    
-                                    {isActive && (
-                                        <motion.div 
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: 'auto' }}
-                                            style={{ 
-                                                marginTop: '0.5rem', 
-                                                paddingTop: '0.75rem', 
-                                                borderTop: '1px solid var(--border)',
-                                                display: 'flex',
-                                                flexWrap: 'wrap',
-                                                gap: '0.5rem'
-                                            }}
-                                        >
-                                            <button 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleAssignCharacter(seg.id, null);
-                                                }}
-                                                className="btn-ghost"
-                                                style={{ 
-                                                    fontSize: '0.75rem', 
-                                                    padding: '0.4rem 0.8rem', 
-                                                    background: !seg.character_id ? 'var(--surface-light)' : 'transparent',
-                                                    border: !seg.character_id ? '1px solid var(--accent)' : '1px solid var(--border)'
-                                                }}
-                                            >
-                                                Default
-                                            </button>
-                                            {characters.map(char => (
-                                                <button 
-                                                    key={char.id}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleAssignCharacter(seg.id, char.id);
-                                                    }}
-                                                    className="btn-ghost"
-                                                    style={{ 
-                                                        fontSize: '0.75rem', 
-                                                        padding: '0.4rem 0.8rem', 
-                                                        background: seg.character_id === char.id ? 'var(--accent)' : 'transparent',
-                                                        color: seg.character_id === char.id ? 'white' : 'var(--text-primary)',
-                                                        border: seg.character_id === char.id ? '1px solid var(--accent)' : '1px solid var(--border)'
-                                                    }}
-                                                >
-                                                    {char.name}
-                                                </button>
-                                            ))}
-                                            <div style={{ flex: 1 }} />
-                                            {/* Future: Regenerate button for this segment */}
-                                        </motion.div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        
-                        {segments.length === 0 && (
-                            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                                <AlertTriangle size={32} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                <p>No segments found. Save the chapter text to generate segments.</p>
+                        {char?.name || 'NARRATOR'}
+                        <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
+                            {char?.speaker_profile_name || 'Chapter Default'}
+                        </span>
+                    </div>
+
+                    {/* Text column */}
+                    <div style={{ flex: 1 }}>
+                        <p style={{ 
+                            fontSize: '1rem', 
+                            color: 'var(--text-primary)', 
+                            margin: 0, 
+                            lineHeight: 1.6,
+                            opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.5 : 1
+                        }}>
+                            {seg.text_content}
+                        </p>
+                    </div>
+
+                    {/* Quick status/actions */}
+                    <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        {seg.audio_status === 'done' && (
+                            <div title="Audio Generated" style={{ color: 'var(--success-muted)' }}>
+                                <CheckCircle size={14} />
                             </div>
                         )}
+                        {activeSegmentId === seg.id && !selectedCharacterId && (
+                           <div style={{ display: 'flex', gap: '4px' }}>
+                               <button 
+                                 className="btn-ghost" 
+                                 style={{ padding: '2px 4px', fontSize: '0.7rem' }}
+                                 onClick={(e) => {
+                                     e.stopPropagation();
+                                     handleAssignCharacter(seg.id, null);
+                                 }}
+                               >
+                                   Reset
+                               </button>
+                           </div>
+                        )}
                     </div>
-                )}
+                  </div>
+                );
+              })}
+              
+              {segments.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <AlertTriangle size={32} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                  <p>No segments found. Save the chapter text to generate segments.</p>
+                </div>
+              )}
             </div>
-        </div>
 
-        {/* Right pane: Analysis & Feedback */}
-        <div style={{ 
-            width: '400px', borderLeft: '1px solid var(--border)', background: 'var(--surface)', 
-            padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', 
-            overflowY: 'auto' 
-        }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    Engine Feedback
-                    {analyzing && <RefreshCw size={14} className="animate-spin text-muted" />}
-                </span>
-            </h3>
-
-            {analysis ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{analysis.word_count.toLocaleString()}</div>
-                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Words</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{analysis.char_count.toLocaleString()}</div>
-                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Chars</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>{(analysis.sent_count || 0).toLocaleString()}</div>
-                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Sentences</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.75rem', textAlign: 'center' }}>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent)' }}>
-                                {Math.floor(analysis.predicted_seconds / 60)}m {analysis.predicted_seconds % 60}s
+            {/* Right Sidebar: Characters */}
+            <div style={{ 
+              width: '320px', 
+              marginLeft: '1rem',
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '1rem' 
+            }}>
+                <div className="glass-panel" style={{ padding: '1rem', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                        <User size={16} />
+                        Characters
+                    </h3>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }}>
+                        <button 
+                            onClick={() => setSelectedCharacterId(null)}
+                            style={{ 
+                                padding: '0.75rem', 
+                                borderRadius: '8px', 
+                                border: '1px solid var(--border)',
+                                background: selectedCharacterId === null ? 'var(--surface-light)' : 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                color: 'var(--text-primary)',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--text-muted)' }} />
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>None / Default</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Stop bulk assignment</div>
                             </div>
-                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Est. Audio</div>
-                        </div>
-                    </div>
+                        </button>
 
-                    <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Long Sentences</h4>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                            <span>Raw Long Sentences</span>
-                            <span style={{ fontWeight: 600 }}>{analysis.raw_long_sentences}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                            <span>Auto-Fixed (Safe Mode)</span>
-                            <span style={{ color: 'var(--success-muted)', fontWeight: 600 }}>{analysis.auto_fixed}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-                            <span style={{ color: analysis.uncleanable > 0 ? 'var(--error)' : 'var(--text-primary)' }}>Action Required</span>
-                            <span style={{ 
-                                color: analysis.uncleanable > 0 ? 'white' : 'var(--success-muted)', 
-                                background: analysis.uncleanable > 0 ? 'var(--error)' : 'transparent',
-                                padding: analysis.uncleanable > 0 ? '2px 8px' : '0',
-                                borderRadius: '12px',
-                                fontWeight: 700 
-                            }}>
-                                {analysis.uncleanable}
-                            </span>
-                        </div>
-                    </div>
-
-                    <AnimatePresence>
-                        {analysis.uncleanable > 0 && (
-                            <motion.div 
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                style={{
-                                    border: '1px solid var(--error-muted)',
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    borderRadius: '12px',
-                                    padding: '1rem',
+                        {characters.map(char => (
+                            <button 
+                                key={char.id}
+                                onClick={() => setSelectedCharacterId(char.id)}
+                                style={{ 
+                                    padding: '0.75rem', 
+                                    borderRadius: '8px', 
+                                    border: selectedCharacterId === char.id ? `2px solid ${char.color}` : '1px solid var(--border)',
+                                    background: selectedCharacterId === char.id ? `${char.color}15` : 'transparent',
                                     display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.75rem'
+                                    alignItems: 'center',
+                                    gap: '0.75rem',
+                                    color: 'var(--text-primary)',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
                                 }}
                             >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--error)' }}>
-                                    <AlertTriangle size={16} />
-                                    <h4 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Uncleanable Sentences</h4>
+                                <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: char.color }} />
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{char.name}</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{char.speaker_profile_name || 'No voice'}</div>
                                 </div>
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                                    These sentences exceed {analysis.threshold} characters and could crash the TTS engine. Please split them manually.
-                                </p>
-                                
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                    {analysis.uncleanable_sentences.map((s: any, idx: number) => (
-                                        <div key={idx} style={{ background: 'var(--surface)', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--error-muted)', marginBottom: '4px', fontWeight: 600 }}>
-                                                {s.length} chars
-                                            </div>
-                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontStyle: 'italic', wordBreak: 'break-word' }}>
-                                                "{s.text.substring(0, 100)}{s.text.length > 100 ? '...' : ''}"
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        )}
+                            </button>
+                        ))}
+                    </div>
 
-                        {analysis.uncleanable === 0 && text.trim().length > 0 && (
-                            <motion.div 
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem',
-                                    background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)',
-                                    borderRadius: '12px', color: 'var(--success)'
-                                }}
-                            >
-                                <CheckCircle size={18} />
-                                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Engine safe!</span>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <Info size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                        Select a character to bulk-assign lines by clicking them in the script.
+                    </div>
                 </div>
-            ) : (
-                <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '2rem', fontSize: '0.9rem' }}>
-                    Type text to see analysis...
-                </div>
-            )}
-        </div>
 
+                <div className="glass-panel" style={{ padding: '1rem' }}>
+                    <h4 style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>Chapter Stats</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                         <div style={{ background: 'var(--surface)', padding: '0.5rem', borderRadius: '4px', textAlign: 'center' }}>
+                             <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{chapter.word_count}</div>
+                             <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>WORDS</div>
+                         </div>
+                         <div style={{ background: 'var(--surface)', padding: '0.5rem', borderRadius: '4px', textAlign: 'center' }}>
+                             <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{segments.length}</div>
+                             <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>LINES</div>
+                         </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  );
+  </div>
+</div>
+);
 };

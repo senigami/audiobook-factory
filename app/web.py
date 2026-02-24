@@ -484,10 +484,11 @@ def api_create_character(
     project_id: str,
     name: str = Form(...),
     speaker_profile_name: Optional[str] = Form(None),
-    default_emotion: Optional[str] = Form(None)
+    default_emotion: Optional[str] = Form(None),
+    color: Optional[str] = Form(None)
 ):
     from .db import create_character
-    char_id = create_character(project_id, name, speaker_profile_name, default_emotion)
+    char_id = create_character(project_id, name, speaker_profile_name, default_emotion, color=color)
     return JSONResponse({"status": "success", "character_id": char_id})
 
 @app.put("/api/characters/{character_id}")
@@ -495,12 +496,14 @@ def api_update_character(
     character_id: str,
     name: Optional[str] = Form(None),
     speaker_profile_name: Optional[str] = Form(None),
-    default_emotion: Optional[str] = Form(None)
+    default_emotion: Optional[str] = Form(None),
+    color: Optional[str] = Form(None)
 ):
     updates = {}
     if name is not None: updates["name"] = name
     if speaker_profile_name is not None: updates["speaker_profile_name"] = speaker_profile_name
     if default_emotion is not None: updates["default_emotion"] = default_emotion
+    if color is not None: updates["color"] = color
 
     if updates:
         from .db import update_character

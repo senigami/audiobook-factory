@@ -47,20 +47,22 @@ export const api = {
     const data = await res.json();
     return data.characters || [];
   },
-  createCharacter: async (projectId: string, name: string, speaker_profile_name?: string, default_emotion?: string): Promise<{status: string, character_id: string}> => {
+  createCharacter: async (projectId: string, name: string, speaker_profile_name?: string, default_emotion?: string, color?: string): Promise<{status: string, character_id: string}> => {
     const formData = new FormData();
     formData.append('name', name);
     if (speaker_profile_name) formData.append('speaker_profile_name', speaker_profile_name);
     if (default_emotion) formData.append('default_emotion', default_emotion);
+    if (color) formData.append('color', color);
     const res = await fetch(`/api/projects/${projectId}/characters`, { method: 'POST', body: formData });
     return res.json();
   },
-  updateCharacter: async (characterId: string, name?: string, speaker_profile_name?: string, default_emotion?: string): Promise<{status: string}> => {
+  updateCharacter: async (characterId: string, name?: string, speaker_profile_name?: string, default_emotion?: string, color?: string): Promise<{status: string}> => {
     const formData = new FormData();
     if (name) formData.append('name', name);
     // Allowing empty strings to clear the profile
     if (speaker_profile_name !== undefined) formData.append('speaker_profile_name', speaker_profile_name);
     if (default_emotion !== undefined) formData.append('default_emotion', default_emotion);
+    if (color !== undefined) formData.append('color', color);
     const res = await fetch(`/api/characters/${characterId}`, { method: 'PUT', body: formData });
     return res.json();
   },
