@@ -15,6 +15,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   // New character form
   const [newName, setNewName] = useState('');
   const [newVoice, setNewVoice] = useState('');
+  const [newColor, setNewColor] = useState('#8b5cf6');
 
   const loadCharacters = async () => {
     setLoading(true);
@@ -37,9 +38,10 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
     if (!newName.trim()) return;
     
     try {
-      await api.createCharacter(projectId, newName.trim(), newVoice || undefined);
+      await api.createCharacter(projectId, newName.trim(), newVoice || undefined, undefined, newColor);
       setNewName('');
       setNewVoice('');
+      setNewColor('#8b5cf6');
       await loadCharacters();
     } catch (e) {
       console.error("Failed to create character", e);
@@ -64,6 +66,16 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
       } catch (e) {
           console.error("Failed to update character name", e);
       }
+  };
+
+  const handleUpdateColor = async (id: string, color: string) => {
+    try {
+      setCharacters(prev => prev.map(c => c.id === id ? { ...c, color } : c));
+      await api.updateCharacter(id, undefined, undefined, undefined, color);
+    } catch (e) {
+      console.error("Failed to update character color", e);
+      loadCharacters();
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -93,6 +105,18 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
       {/* Add New */}
       <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem', marginBottom: '2rem' }}>
         <form onSubmit={handleAdd} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+          <div style={{ width: '60px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Color
+            </label>
+            <input
+              type="color"
+              className="input-field"
+              value={newColor}
+              onChange={e => setNewColor(e.target.value)}
+              style={{ padding: '0', height: '38px', cursor: 'pointer' }}
+            />
+          </div>
           <div style={{ flex: 1 }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Character Name
@@ -143,6 +167,21 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
           {characters.map(char => (
             <div key={char.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface)', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
               
+              <input 
+                type="color"
+                value={char.color || '#8b5cf6'}
+                onChange={(e) => handleUpdateColor(char.id, e.target.value)}
+                style={{ 
+                    width: '32px', 
+                    height: '32px', 
+                    padding: 0, 
+                    border: '1px solid var(--border)', 
+                    background: 'none', 
+                    cursor: 'pointer',
+                    borderRadius: '6px'
+                }}
+              />
+
               <div style={{ flex: 1 }}>
                   <input 
                       type="text" 

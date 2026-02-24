@@ -147,6 +147,17 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
+  const handleUpdateCharacterColor = async (id: string, color: string) => {
+    try {
+      setCharacters(prev => prev.map(c => c.id === id ? { ...c, color } : c));
+      await api.updateCharacter(id, undefined, undefined, undefined, color);
+    } catch (e) {
+      console.error("Failed to update character color", e);
+      const chars = await api.fetchCharacters(projectId);
+      setCharacters(chars);
+    }
+  };
+
   const handleBulkAssign = async (segmentId: string) => {
     if (!selectedCharacterId) return;
     await handleAssignCharacter(segmentId, selectedCharacterId);
@@ -553,7 +564,22 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     transition: 'all 0.2s'
                                 }}
                             >
-                                <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: char.color }} />
+                                <input 
+                                    type="color"
+                                    value={char.color || '#8b5cf6'}
+                                    onChange={(e) => handleUpdateCharacterColor(char.id, e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ 
+                                        width: '16px', 
+                                        height: '16px', 
+                                        padding: 0, 
+                                        border: '1px solid var(--border)', 
+                                        background: 'none', 
+                                        cursor: 'pointer',
+                                        borderRadius: '2px',
+                                        flexShrink: 0
+                                    }}
+                                />
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{char.name}</div>
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{char.speaker_profile_name || 'No voice'}</div>
