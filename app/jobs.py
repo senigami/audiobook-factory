@@ -298,6 +298,7 @@ def worker_loop(q: "queue.Queue[str]"):
                     chars = len(text)
                 elif j.segment_ids or j.is_bake:
                     # For segments/bake, use total length of segments in DB as a proxy
+                    from .db import get_connection
                     with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute("SELECT SUM(LENGTH(text_content)) FROM chapter_segments WHERE chapter_id = ?", (j.chapter_id,))
@@ -570,22 +571,47 @@ def worker_loop(q: "queue.Queue[str]"):
                             missing_segs.append(s)
 
                     if missing_segs:
-                        on_output(f"Smart Bake: {len(missing_segs)} segments need generation before stitching.\n")
-                        # 2. Generate missing segments
-                        for idx, s in enumerate(missing_segs):
-                            if cancel_check(): break
-                            sid = s['id']
-                            on_output(f"[Bake-Gen {idx+1}/{len(missing_segs)}] Generating segment {sid}...\n")
+                        # Group missing segments by speaker and proximity for combined generation
+                        missing_groups = []
+                        if missing_segs:
+                            current_group = [missing_segs[0]]
+                            for i in range(1, len(missing_segs)):
+                                prev = missing_segs[i-1]
+                                curr = missing_segs[i]
 
-                            # Get character profile (already have it from get_chapter_segments)
-                            char_profile = s.get('speaker_profile_name')
+                                # Check if they are actually consecutive in the full chapter list
+                                prev_full_idx = next((idx for idx, s in enumerate(segs) if s['id'] == prev['id']), -1)
+                                curr_full_idx = next((idx for idx, s in enumerate(segs) if s['id'] == curr['id']), -1)
+
+                                current_len = sum(len(s['text_content']) for s in current_group)
+
+                                if curr['character_id'] == prev['character_id'] and \
+                                   curr_full_idx == prev_full_idx + 1 and \
+                                   (current_len + len(curr['text_content']) < 250):
+                                    current_group.append(curr)
+                                else:
+                                    missing_groups.append(current_group)
+                                    current_group = [curr]
+                            missing_groups.append(current_group)
+
+                        on_output(f"Smart Bake: {len(missing_segs)} segments need generation. Grouped into {len(missing_groups)} batches.\n")
+                        # 2. Generate missing groups
+                        for g_idx, group in enumerate(missing_groups):
+                            if cancel_check(): break
+
+                            # Combine text for the group
+                            combined_text = " ".join([s['text_content'].strip() for s in group])
+                            sid = group[0]['id']
+                            on_output(f"[Bake-Batch {g_idx+1}/{len(missing_groups)}] Generating batch starting with {sid} ({len(group)} segments)...\n")
+
+                            # Get character profile from first segment in group
+                            char_profile = group[0].get('speaker_profile_name')
                             sw = get_speaker_wavs(char_profile) or default_sw
                             spk_set = get_speaker_settings(char_profile)
                             seg_speed = spk_set['speed']
 
                             seg_out = pdir / f"seg_{sid}.wav"
-                            text = s['text_content']
-                            processed_text = text.strip()
+                            processed_text = combined_text
                             if j.safe_mode:
                                 processed_text = sanitize_for_xtts(processed_text)
                                 processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
@@ -601,12 +627,14 @@ def worker_loop(q: "queue.Queue[str]"):
                             )
 
                             if rc == 0 and seg_out.exists():
-                                update_segment(sid, audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
+                                for s in group:
+                                    update_segment(s['id'], audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
                             else:
-                                update_segment(sid, audio_status='error')
+                                for s in group:
+                                    update_segment(s['id'], audio_status='error')
 
                             # Progress: 0 to 0.9 for generation
-                            prog = ((idx + 1) / len(missing_segs)) * 0.9
+                            prog = ((g_idx + 1) / len(missing_groups)) * 0.9
                             update_job(jid, progress=prog)
 
                     # 3. Final Stitch
@@ -616,16 +644,19 @@ def worker_loop(q: "queue.Queue[str]"):
                     # Refresh segment statuses
                     fresh_segs = get_chapter_segments(j.chapter_id)
                     segment_paths = []
+                    last_path = None
                     for s in fresh_segs:
                         if s['audio_status'] == 'done' and s['audio_file_path']:
                             spath = pdir / s['audio_file_path']
-                            if spath.exists():
+                            if spath.exists() and spath != last_path:
                                 segment_paths.append(spath)
+                                last_path = spath
 
                     if not segment_paths:
                         update_job(jid, status="failed", error="No valid audio segments found to stitch.", finished_at=time.time())
                         continue
 
+                    from .engines import get_audio_duration
                     rc = stitch_segments(pdir, segment_paths, out_wav, on_output, cancel_check)
                     if rc == 0 and out_wav.exists():
                         duration = get_audio_duration(out_wav)
@@ -638,62 +669,82 @@ def worker_loop(q: "queue.Queue[str]"):
 
                 # NEW: Handle Granular Segment Generation
                 if j.segment_ids:
-                    on_output(f"Generating {len(j.segment_ids)} segments for Chapter {j.chapter_id}...\n")
-                    from .db import get_connection, update_segment
+                    on_output(f"Processing generation for {len(j.segment_ids)} requested segments...\n")
+                    from .db import get_connection, update_segment, get_chapter_segments
                     from .textops import sanitize_for_xtts, safe_split_long_sentences
                     from .config import SENT_CHAR_LIMIT
 
-                    total = len(j.segment_ids)
-                    for idx, sid in enumerate(j.segment_ids):
+                    # Fetch all segments for this chapter to determine proximity
+                    all_segs = get_chapter_segments(j.chapter_id)
+                    requested_ids = set(j.segment_ids)
+                    segs_to_gen = [s for s in all_segs if s['id'] in requested_ids]
+
+                    if not segs_to_gen:
+                        on_output("No valid segments found to generate.\n")
+                        update_job(jid, status="done", progress=1.0)
+                        continue
+
+                    # Group consecutive segments by speaker
+                    gen_groups = []
+                    if segs_to_gen:
+                        current_group = [segs_to_gen[0]]
+                        for i in range(1, len(segs_to_gen)):
+                            prev = segs_to_gen[i-1]
+                            curr = segs_to_gen[i]
+
+                            # Check if they are consecutive in the full chapter list
+                            prev_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == prev['id']), -1)
+                            curr_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == curr['id']), -1)
+
+                            current_len = sum(len(s['text_content']) for s in current_group)
+
+                            if curr['character_id'] == prev['character_id'] and \
+                               curr_full_idx == prev_full_idx + 1 and \
+                               (current_len + len(curr['text_content']) < 250):
+                                current_group.append(curr)
+                            else:
+                                gen_groups.append(current_group)
+                                current_group = [curr]
+                        gen_groups.append(current_group)
+
+                    total_groups = len(gen_groups)
+                    for g_idx, group in enumerate(gen_groups):
                         if cancel_check(): break
 
-                        # Fetch segment details from DB
-                        with get_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                SELECT s.text_content, s.character_id, c.speaker_profile_name
-                                FROM chapter_segments s
-                                LEFT JOIN characters c ON s.character_id = c.id
-                                WHERE s.id = ?
-                            """, (sid,))
-                            row = cursor.fetchone()
+                        combined_text = " ".join([s['text_content'].strip() for s in group])
+                        first_sid = group[0]['id']
+                        on_output(f"[Batch {g_idx+1}/{total_groups}] Synthesizing batch starting with {first_sid} ({len(group)} segments)...\n")
 
-                        if not row:
-                            on_output(f"Segment {sid} not found in DB, skipping.\n")
-                            continue
-
-                        text, char_id, char_profile = row['text_content'], row['character_id'], row['speaker_profile_name']
+                        # Resolve character profile
+                        char_profile = group[0].get('speaker_profile_name')
                         sw = get_speaker_wavs(char_profile) or default_sw
                         spk_set = get_speaker_settings(char_profile)
                         seg_speed = spk_set['speed']
 
-                        seg_out = pdir / f"seg_{sid}.wav"
-
-                        processed_text = text.strip()
+                        seg_out = pdir / f"seg_{first_sid}.wav"
+                        processed_text = combined_text
                         if j.safe_mode:
                             processed_text = sanitize_for_xtts(processed_text)
                             processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
 
-                        on_output(f"[{idx+1}/{total}] Synthesizing segment {sid}...\n")
-
                         rc = xtts_generate(
                             text=processed_text,
                             out_wav=seg_out,
-                            safe_mode=False, # Already handled above
-                            on_output=lambda x: None, # Stay quiet unless error
+                            safe_mode=False,
+                            on_output=lambda x: None,
                             cancel_check=cancel_check,
                             speaker_wav=sw,
                             speed=seg_speed
                         )
 
                         if rc == 0 and seg_out.exists():
-                            update_segment(sid, audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
+                            for s in group:
+                                update_segment(s['id'], audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
                         else:
-                            update_segment(sid, audio_status='error')
+                            for s in group:
+                                update_segment(s['id'], audio_status='error')
 
-                        # Update job progress
-                        p = (idx + 1) / total
-                        update_job(jid, progress=p)
+                        update_job(jid, progress=(g_idx + 1) / total_groups)
 
                     update_job(jid, status="done", finished_at=time.time(), progress=1.0)
                     continue

@@ -40,6 +40,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const [analysis, setAnalysis] = useState<any>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production' | 'performance'>('edit');
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [generatingSegmentIds, setGeneratingSegmentIds] = useState<Set<string>>(new Set());
@@ -59,8 +60,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         return;
     }
     
-    
-    // setAnalyzing(true);
+    setAnalyzing(true);
     typingTimeoutRef.current = setTimeout(() => {
         analyzeText(text);
     }, 1000);
@@ -106,7 +106,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     } catch (e) {
       console.error("Analysis failed", e);
     } finally {
-      // setAnalyzing(false);
+      setAnalyzing(false);
     }
   };
 
@@ -417,7 +417,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                 const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
                                 segments.forEach(seg => {
                                     const lastGroup = groups[groups.length - 1];
-                                    if (lastGroup && lastGroup.characterId === seg.character_id) {
+                                    const currentGroupLen = lastGroup ? lastGroup.segments.reduce((sum, s) => sum + s.text_content.length, 0) : 0;
+                                    
+                                    if (lastGroup && 
+                                        lastGroup.characterId === seg.character_id && 
+                                        (currentGroupLen + seg.text_content.length < 250)) {
                                         lastGroup.segments.push(seg);
                                     } else {
                                         groups.push({
@@ -516,7 +520,20 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             ? `/projects/${projectId}/audio/${seg.audio_file_path}`
                                             : `/out/xtts/${seg.audio_file_path}`;
                                         const audio = new Audio(url);
-                                        audio.onended = () => playFromIndex(idx + 1);
+                                        audio.onended = () => {
+                                            // Find next segment that has a DIFFERENT audio file
+                                            let nextIdx = idx + 1;
+                                            while (nextIdx < playbackQueueRef.current.length) {
+                                                const nextId = playbackQueueRef.current[nextIdx];
+                                                const nextSeg = segments.find(s => s.id === nextId);
+                                                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
+                                                    nextIdx++;
+                                                } else {
+                                                    break;
+                                                }
+                                            }
+                                            playFromIndex(nextIdx);
+                                        };
                                         audio.onerror = () => playFromIndex(idx + 1);
                                         audio.play().catch(e => {
                                             console.error("Playback failed", e);
@@ -584,25 +601,26 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             </div>
                                             <div style={{ flex: 1, color: 'var(--text-secondary)', lineHeight: '1.7', fontSize: '1.05rem', marginTop: '0.2rem' }}>
                                                 {group.segments.map(s => {
-                                                    const isPlaying = playingSegmentId === s.id;
-                                                    const isGenerating = generatingSegmentIds.has(s.id) || s.audio_status === 'processing';
-                                                    const hasAudio = s.audio_file_path && s.audio_status === 'done';
-                                                    
+                                                    const playingSegment = segments.find(ps => ps.id === playingSegmentId);
+                                                    const isPlaying = playingSegmentId === s.id || (playingSegment && playingSegment.audio_file_path && s.audio_file_path === playingSegment.audio_file_path);
+                                                    const hasAudio = s.audio_status === 'done' && s.audio_file_path;
+                                                    const isGenerating = s.audio_status === 'processing' || generatingSegmentIds.has(s.id);
+
                                                     return (
                                                         <span 
                                                             key={s.id} 
                                                             onClick={() => playSegment(s.id, allSegmentIds)}
                                                             style={{ 
                                                                 background: isPlaying ? `${char?.color || '#ffffff'}44` : 'transparent',
-                                                                borderRadius: '6px', padding: '2px 4px', margin: '0 -2px',
-                                                                transition: 'all 0.3s ease',
-                                                                color: isPlaying ? 'var(--text-primary)' : (hasAudio ? 'var(--text-secondary)' : 'var(--text-muted)'),
+                                                                borderRadius: '4px',
+                                                                padding: '0 4px',
+                                                                margin: '0 -2px',
                                                                 cursor: 'pointer',
-                                                                position: 'relative',
-                                                                display: 'inline-block',
-                                                                borderBottom: isGenerating ? `1px dashed ${char?.color || 'var(--accent)'}` : 'none'
+                                                                color: isPlaying ? 'var(--text-primary)' : 'inherit',
+                                                                transition: 'all 0.1s ease',
+                                                                display: 'inline-block'
                                                             }}
-                                                            title={hasAudio ? 'Click to play' : (isGenerating ? 'Generating audio...' : 'Needs generation (click to play/auto-gen)')}
+                                                            title={hasAudio ? "Click to play" : "Needs generation"}
                                                         >
                                                             {s.text_content}{' '}
                                                             {isGenerating && (
@@ -622,9 +640,24 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         </div>
                         <div style={{ height: '2rem', flexShrink: 0 }} /> {/* Bottom padding */}
                     </div>
+                ) : editorTab === 'preview' ? (
+                    <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '2rem', overflowY: 'auto' }}>
+                        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                            <h3 style={{ marginBottom: '1.5rem', opacity: 0.8 }}>Preview Safe Text</h3>
+                            <div style={{ 
+                                fontSize: '1.1rem', 
+                                lineHeight: '1.8', 
+                                color: 'var(--text-secondary)',
+                                whiteSpace: 'pre-wrap',
+                                fontFamily: 'serif' 
+                            }}>
+                                {analysis?.safe_text || (analyzing ? "Analyzing text..." : "No analysis available.")}
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '1rem', gap: '1rem' }}>
-            {/* Main Production View (Movie Sheet) */}
+            {/* Main Production View (Grouped Movie Sheet) */}
             <div style={{ 
               flex: 1, 
               background: 'var(--bg)', 
@@ -634,92 +667,119 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              gap: '0.25rem'
+              gap: '1rem' // Slightly more gap between groups
             }}>
-              {segments.map((seg) => {
-                const char = characters.find(c => c.id === seg.character_id);
-                const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
-                const isHovered = hoveredSegmentId === seg.id;
-                
-                return (
-                  <div 
-                    key={seg.id}
-                    onMouseEnter={() => setHoveredSegmentId(seg.id)}
-                    onMouseLeave={() => setHoveredSegmentId(null)}
-                    onClick={() => {
-                        if (selectedCharacterId) {
-                            handleBulkAssign(seg.id);
-                        } else {
-                            setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
-                        }
-                    }}
-                    style={{ 
-                      display: 'flex',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '4px',
-                      background: isSelectedCharLines ? `${char?.color || '#8b5cf6'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
-                      borderLeft: `4px solid ${char ? char.color : 'transparent'}`,
-                      cursor: selectedCharacterId ? 'copy' : 'pointer',
-                      transition: 'all 0.1s ease',
-                      gap: '2rem'
-                    }}
-                  >
-                    {/* Character/Voice column */}
-                    <div style={{ 
-                        width: '140px', 
-                        flexShrink: 0, 
-                        fontSize: '0.8rem', 
-                        fontWeight: 700,
-                        color: char ? char.color : 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        display: 'flex',
-                        flexDirection: 'column'
-                    }}>
-                        {char?.name || 'NARRATOR'}
-                        <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
-                            {char?.speaker_profile_name || 'Chapter Default'}
-                        </span>
-                    </div>
+              {(() => {
+                const prodGroups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
+                segments.forEach(seg => {
+                    const lastGroup = prodGroups[prodGroups.length - 1];
+                    const currentGroupLen = lastGroup ? lastGroup.segments.reduce((sum, s) => sum + s.text_content.length, 0) : 0;
+                    
+                    if (lastGroup && 
+                        lastGroup.characterId === seg.character_id && 
+                        (currentGroupLen + seg.text_content.length < 250)) {
+                        lastGroup.segments.push(seg);
+                    } else {
+                        prodGroups.push({ characterId: seg.character_id, segments: [seg] });
+                    }
+                });
 
-                    {/* Text column */}
-                    <div style={{ flex: 1 }}>
-                        <p style={{ 
-                            fontSize: '1rem', 
-                            color: 'var(--text-primary)', 
-                            margin: 0, 
-                            lineHeight: 1.6,
-                            opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.5 : 1
+                return prodGroups.map((group, gidx) => {
+                    const char = characters.find(c => c.id === group.characterId);
+                    const isSelectedCharGroup = selectedCharacterId && group.characterId === selectedCharacterId;
+                    
+                    return (
+                        <div key={gidx} style={{
+                            display: 'flex',
+                            gap: '2rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            background: isSelectedCharGroup ? `${char?.color || '#8b5cf6'}10` : 'transparent',
+                            borderLeft: `4px solid ${char?.color || 'transparent'}`,
+                            transition: 'all 0.1s ease',
                         }}>
-                            {seg.text_content}
-                        </p>
-                    </div>
-
-                    {/* Quick status/actions */}
-                    <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                        {seg.audio_status === 'done' && (
-                            <div title="Audio Generated" style={{ color: 'var(--success-muted)' }}>
-                                <CheckCircle size={14} />
+                             {/* Character Column */}
+                             <div style={{ 
+                                width: '140px', 
+                                flexShrink: 0, 
+                                fontSize: '0.8rem', 
+                                fontWeight: 700,
+                                color: char ? char.color : 'var(--text-muted)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                                display: 'flex',
+                                flexDirection: 'column'
+                            }}>
+                                {char?.name || 'NARRATOR'}
+                                <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
+                                    {char?.speaker_profile_name || 'Chapter Default'}
+                                </span>
                             </div>
-                        )}
-                        {activeSegmentId === seg.id && !selectedCharacterId && (
-                           <div style={{ display: 'flex', gap: '4px' }}>
-                               <button 
-                                 className="btn-ghost" 
-                                 style={{ padding: '2px 4px', fontSize: '0.7rem' }}
-                                 onClick={(e) => {
-                                     e.stopPropagation();
-                                     handleAssignCharacter(seg.id, null);
-                                 }}
-                               >
-                                   Reset
-                               </button>
-                           </div>
-                        )}
-                    </div>
-                  </div>
-                );
-              })}
+
+                            {/* Grouped Text Column */}
+                            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '0 4px' }}>
+                                {group.segments.map(seg => {
+                                    const isHovered = hoveredSegmentId === seg.id;
+                                    const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
+                                    
+                                    return (
+                                        <span 
+                                            key={seg.id}
+                                            onMouseEnter={() => setHoveredSegmentId(seg.id)}
+                                            onMouseLeave={() => setHoveredSegmentId(null)}
+                                            onClick={() => {
+                                                if (selectedCharacterId) {
+                                                    handleBulkAssign(seg.id);
+                                                } else {
+                                                    setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
+                                                }
+                                            }}
+                                            style={{ 
+                                                fontSize: '1rem', 
+                                                color: 'var(--text-primary)', 
+                                                lineHeight: 1.6,
+                                                opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.3 : 1,
+                                                cursor: selectedCharacterId ? 'copy' : 'pointer',
+                                                background: isHovered ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                                borderRadius: '3px',
+                                                padding: '0 2px',
+                                                position: 'relative'
+                                            }}
+                                        >
+                                            {seg.text_content}{' '}
+                                            {seg.audio_status === 'done' && (
+                                                <div style={{ 
+                                                    display: 'inline-block', 
+                                                    width: '4px', height: '4px', 
+                                                    borderRadius: '50%', background: 'var(--success-muted)', 
+                                                    marginLeft: '2px', verticalAlign: 'middle' 
+                                                }} />
+                                            )}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Quick Actions (Reset etc) */}
+                            <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                {group.segments.some(s => s.id === activeSegmentId) && !selectedCharacterId && (
+                                    <button 
+                                        className="btn-ghost" 
+                                        style={{ padding: '2px 4px', fontSize: '0.7rem' }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const activeSeg = group.segments.find(s => s.id === activeSegmentId);
+                                            if (activeSeg) handleAssignCharacter(activeSeg.id, null);
+                                        }}
+                                    >
+                                        Reset
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                });
+              })()}
               
               {segments.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>

@@ -331,6 +331,7 @@ def generate_video_sample(
     else:
         logo_filter = '-map 0:v '
 
+    cmd = f"ffmpeg -y {inputs} {logo_filter} -map 1:a -c:v libx264 -c:a copy -t {max_duration} -shortest {shlex.quote(str(output_video))}"
     return run_cmd_stream(cmd, on_output, cancel_check)
 
 def stitch_segments(

@@ -162,6 +162,7 @@ def delete_project(project_id: str) -> bool:
             return cursor.rowcount > 0
 
 # --- Character Functions ---
+def create_character(project_id: str, name: str, speaker_profile_name: Optional[str] = None, default_emotion: str = "Neutral", **updates) -> str:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -206,32 +207,6 @@ def delete_character(character_id: str) -> bool:
             conn.commit()
             return cursor.rowcount > 0
 
-def update_project(project_id: str, **updates) -> bool:
-    if not updates: return False
-    with _db_lock:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            fields = []
-            values = []
-            for k, v in updates.items():
-                fields.append(f"{k} = ?")
-                values.append(v)
-            values.append(time.time()) # updated_at
-            values.append(project_id)
-
-            cursor.execute(f"UPDATE projects SET {', '.join(fields)}, updated_at = ? WHERE id = ?", values)
-            conn.commit()
-            return cursor.rowcount > 0
-
-def delete_project(project_id: str) -> bool:
-    with _db_lock:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            # Delete associated chapters first
-            cursor.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
-            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-            conn.commit()
-            return cursor.rowcount > 0
 
 # --- Chapter Functions ---
 def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:
