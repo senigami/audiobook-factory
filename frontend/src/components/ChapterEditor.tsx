@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info } from 'lucide-react';
+import { ColorSwatchPicker } from './ColorSwatchPicker';
 
 import { api } from '../api';
 import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
@@ -564,21 +565,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     transition: 'all 0.2s'
                                 }}
                             >
-                                <input 
-                                    type="color"
-                                    value={char.color || '#8b5cf6'}
-                                    onChange={(e) => handleUpdateCharacterColor(char.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{ 
-                                        width: '16px', 
-                                        height: '16px', 
-                                        padding: 0, 
-                                        border: '1px solid var(--border)', 
-                                        background: 'none', 
-                                        cursor: 'pointer',
-                                        borderRadius: '2px',
-                                        flexShrink: 0
-                                    }}
+                                <ColorSwatchPicker 
+                                    value={char.color || '#8b5cf6'} 
+                                    onChange={(color) => handleUpdateCharacterColor(char.id, color)} 
+                                    size="sm" 
                                 />
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{char.name}</div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Character, SpeakerProfile } from '../types';
 import { api } from '../api';
 import { Plus, Trash2, User as UserIcon } from 'lucide-react';
+import { ColorSwatchPicker } from './ColorSwatchPicker';
 
 interface CharactersTabProps {
   projectId: string;
@@ -109,15 +110,9 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Color
             </label>
-            <input
-              type="color"
-              className="input-field"
-              value={newColor}
-              onChange={e => setNewColor(e.target.value)}
-              style={{ padding: '0', height: '38px', cursor: 'pointer' }}
-            />
+            <ColorSwatchPicker value={newColor} onChange={setNewColor} />
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 2 }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Character Name
             </label>
@@ -126,8 +121,9 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
               className="input-field"
               value={newName}
               onChange={e => setNewName(e.target.value)}
-              placeholder="e.g. Narrator, Sally, The Wizard..."
+              placeholder="e.g. Narrator, Wizard..."
               required
+              style={{ width: '100%' }}
             />
           </div>
           <div style={{ flex: 1 }}>
@@ -139,6 +135,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                 className="input-field"
                 value={newVoice}
                 onChange={e => setNewVoice(e.target.value)}
+                style={{ width: '100%' }}
               >
                 <option value="">Unassigned (Default Narrator)</option>
                 {speakerProfiles.map(p => (
@@ -167,32 +164,19 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
           {characters.map(char => (
             <div key={char.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface)', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
               
-              <input 
-                type="color"
-                value={char.color || '#8b5cf6'}
-                onChange={(e) => handleUpdateColor(char.id, e.target.value)}
-                style={{ 
-                    width: '32px', 
-                    height: '32px', 
-                    padding: 0, 
-                    border: '1px solid var(--border)', 
-                    background: 'none', 
-                    cursor: 'pointer',
-                    borderRadius: '6px'
-                }}
-              />
+              <ColorSwatchPicker value={char.color || '#8b5cf6'} onChange={(color) => handleUpdateColor(char.id, color)} size="md" />
 
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 3 }}>
                   <input 
                       type="text" 
                       defaultValue={char.name}
                       onBlur={(e) => { if (e.target.value !== char.name) handleUpdateName(char.id, e.target.value); }}
                       className="input-field"
-                      style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', boxShadow: 'none' }}
+                      style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', boxShadow: 'none', width: '100%' }}
                   />
               </div>
 
-              <div style={{ width: '300px' }} className="select-wrapper">
+              <div style={{ flex: 2 }} className="select-wrapper">
                 <select
                   className="input-field"
                   value={char.speaker_profile_name || ''}
