@@ -697,12 +697,12 @@ async def api_analyze_chapter(chapter_id: str):
         def commit_chunk():
             if not current_chunk_lines: return
             concatenated = ""
-            for l in current_chunk_lines:
+            for line in current_chunk_lines:
                 if concatenated:
-                    connector = "" if l[0] in ",;:" else " "
-                    concatenated += connector + l
+                    connector = "" if line[0] in ",;:" else " "
+                    concatenated += connector + line
                 else:
-                    concatenated = l
+                    concatenated = line
 
             raw_len = len(concatenated)
             padded_text = concatenated.ljust(SENT_CHAR_LIMIT)
@@ -720,7 +720,7 @@ async def api_analyze_chapter(chapter_id: str):
         group_text = " ".join([s['text_content'].strip() for s in g['segments']])
         cleaned = clean_text_for_tts(group_text)
         split = safe_split_long_sentences(cleaned, target=SENT_CHAR_LIMIT)
-        split_lines = [l.strip() for l in split.split('\n') if l.strip()]
+        split_lines = [ln.strip() for ln in split.split('\n') if ln.strip()]
 
         for line in split_lines:
             connector_len = 0
