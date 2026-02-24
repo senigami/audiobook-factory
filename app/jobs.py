@@ -587,7 +587,7 @@ def worker_loop(q: "queue.Queue[str]"):
 
                                 if curr['character_id'] == prev['character_id'] and \
                                    curr_full_idx == prev_full_idx + 1 and \
-                                   (current_len + len(curr['text_content']) < 250):
+                                   (current_len + len(curr['text_content']) < SENT_CHAR_LIMIT):
                                     current_group.append(curr)
                                 else:
                                     missing_groups.append(current_group)

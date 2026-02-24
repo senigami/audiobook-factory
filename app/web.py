@@ -643,7 +643,8 @@ async def api_analyze_text(text_content: str = Form(...)):
         "uncleanable": uncleanable,
         "uncleanable_sentences": uncleanable_sentences,
         "threshold": SENT_CHAR_LIMIT,
-        "safe_text": packed_text
+        "safe_text": packed_text,
+        "split_sentences": split_text.split('\n')
     })
 # --------------------
 

@@ -417,11 +417,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                 const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
                                 segments.forEach(seg => {
                                     const lastGroup = groups[groups.length - 1];
-                                    const currentGroupLen = lastGroup ? lastGroup.segments.reduce((sum, s) => sum + s.text_content.length, 0) : 0;
                                     
-                                    if (lastGroup && 
-                                        lastGroup.characterId === seg.character_id && 
-                                        (currentGroupLen + seg.text_content.length < 250)) {
+                                    if (lastGroup && lastGroup.characterId === seg.character_id) {
                                         lastGroup.segments.push(seg);
                                     } else {
                                         groups.push({
@@ -641,18 +638,55 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         <div style={{ height: '2rem', flexShrink: 0 }} /> {/* Bottom padding */}
                     </div>
                 ) : editorTab === 'preview' ? (
-                    <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '2rem', overflowY: 'auto' }}>
-                        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-                            <h3 style={{ marginBottom: '1.5rem', opacity: 0.8 }}>Preview Safe Text</h3>
-                            <div style={{ 
-                                fontSize: '1.1rem', 
-                                lineHeight: '1.8', 
-                                color: 'var(--text-secondary)',
-                                whiteSpace: 'pre-wrap',
-                                fontFamily: 'serif' 
-                            }}>
-                                {analysis?.safe_text || (analyzing ? "Analyzing text..." : "No analysis available.")}
+                    <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', overflowY: 'auto' }}>
+                        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ margin: 0, opacity: 0.8, fontSize: '1.2rem', fontWeight: 600 }}>Preview Safe Text</h3>
+                                {analysis && (
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
+                                        <span>{analysis.sent_count} Sentences</span>
+                                        <span>{analysis.char_count} Characters</span>
+                                    </div>
+                                )}
                             </div>
+                            
+                            {analyzing ? (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                    <RefreshCw size={24} className="animate-spin" style={{ marginBottom: '1rem' }} />
+                                    <p>Analyzing text and splitting into engine-safe segments...</p>
+                                </div>
+                            ) : analysis?.safe_text ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {analysis.safe_text.split('\n').map((block: string, bidx: number) => {
+                                        const isTooLong = block.length > (analysis.threshold || 250) + 20; // Slight buffer for packing
+                                        return (
+                                            <div key={bidx} style={{ 
+                                                padding: '1.25rem', 
+                                                background: 'var(--surface)', 
+                                                borderRadius: '12px', 
+                                                border: `1px solid ${isTooLong ? 'var(--error-muted)' : 'var(--border)'}`,
+                                                display: 'flex',
+                                                gap: '1.5rem',
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                            }}>
+                                                <div style={{ width: '40px', flexShrink: 0, fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, opacity: 0.6 }}>
+                                                    #{bidx + 1}
+                                                </div>
+                                                <div style={{ flex: 1, fontSize: '1.05rem', color: 'var(--text-primary)', lineHeight: 1.7, fontFamily: 'serif' }}>
+                                                    {block}
+                                                </div>
+                                                <div style={{ width: '60px', flexShrink: 0, textAlign: 'right', fontSize: '0.75rem', color: isTooLong ? 'var(--error)' : 'var(--text-muted)', fontWeight: 600 }}>
+                                                    {block.length}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: '12px' }}>
+                                    No analysis available. Please enter some text in the Edit tab.
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -669,117 +703,90 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
               flexDirection: 'column',
               gap: '1rem' // Slightly more gap between groups
             }}>
-              {(() => {
-                const prodGroups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
-                segments.forEach(seg => {
-                    const lastGroup = prodGroups[prodGroups.length - 1];
-                    const currentGroupLen = lastGroup ? lastGroup.segments.reduce((sum, s) => sum + s.text_content.length, 0) : 0;
-                    
-                    if (lastGroup && 
-                        lastGroup.characterId === seg.character_id && 
-                        (currentGroupLen + seg.text_content.length < 250)) {
-                        lastGroup.segments.push(seg);
-                    } else {
-                        prodGroups.push({ characterId: seg.character_id, segments: [seg] });
-                    }
-                });
+              {segments.map((seg) => {
+                const char = characters.find(c => c.id === seg.character_id);
+                const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
+                const isHovered = hoveredSegmentId === seg.id;
+                
+                return (
+                  <div 
+                    key={seg.id}
+                    onMouseEnter={() => setHoveredSegmentId(seg.id)}
+                    onMouseLeave={() => setHoveredSegmentId(null)}
+                    onClick={() => {
+                        if (selectedCharacterId) {
+                            handleBulkAssign(seg.id);
+                        } else {
+                            setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
+                        }
+                    }}
+                    style={{ 
+                      display: 'flex',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '4px',
+                      background: isSelectedCharLines ? `${char?.color || '#8b5cf6'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
+                      borderLeft: `4px solid ${char ? char.color : 'transparent'}`,
+                      cursor: selectedCharacterId ? 'copy' : 'pointer',
+                      transition: 'all 0.1s ease',
+                      gap: '2rem'
+                    }}
+                  >
+                    {/* Character/Voice column */}
+                    <div style={{ 
+                        width: '140px', 
+                        flexShrink: 0, 
+                        fontSize: '0.8rem', 
+                        fontWeight: 700,
+                        color: char ? char.color : 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        {char?.name || 'NARRATOR'}
+                        <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
+                            {char?.speaker_profile_name || 'Chapter Default'}
+                        </span>
+                    </div>
 
-                return prodGroups.map((group, gidx) => {
-                    const char = characters.find(c => c.id === group.characterId);
-                    const isSelectedCharGroup = selectedCharacterId && group.characterId === selectedCharacterId;
-                    
-                    return (
-                        <div key={gidx} style={{
-                            display: 'flex',
-                            gap: '2rem',
-                            padding: '0.75rem 1rem',
-                            borderRadius: '8px',
-                            background: isSelectedCharGroup ? `${char?.color || '#8b5cf6'}10` : 'transparent',
-                            borderLeft: `4px solid ${char?.color || 'transparent'}`,
-                            transition: 'all 0.1s ease',
+                    {/* Text column */}
+                    <div style={{ flex: 1 }}>
+                        <p style={{ 
+                            fontSize: '1rem', 
+                            color: 'var(--text-primary)', 
+                            margin: 0, 
+                            lineHeight: 1.6,
+                            opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.5 : 1
                         }}>
-                             {/* Character Column */}
-                             <div style={{ 
-                                width: '140px', 
-                                flexShrink: 0, 
-                                fontSize: '0.8rem', 
-                                fontWeight: 700,
-                                color: char ? char.color : 'var(--text-muted)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.05em',
-                                display: 'flex',
-                                flexDirection: 'column'
-                            }}>
-                                {char?.name || 'NARRATOR'}
-                                <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
-                                    {char?.speaker_profile_name || 'Chapter Default'}
-                                </span>
-                            </div>
+                            {seg.text_content}
+                        </p>
+                    </div>
 
-                            {/* Grouped Text Column */}
-                            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: '0 4px' }}>
-                                {group.segments.map(seg => {
-                                    const isHovered = hoveredSegmentId === seg.id;
-                                    const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
-                                    
-                                    return (
-                                        <span 
-                                            key={seg.id}
-                                            onMouseEnter={() => setHoveredSegmentId(seg.id)}
-                                            onMouseLeave={() => setHoveredSegmentId(null)}
-                                            onClick={() => {
-                                                if (selectedCharacterId) {
-                                                    handleBulkAssign(seg.id);
-                                                } else {
-                                                    setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
-                                                }
-                                            }}
-                                            style={{ 
-                                                fontSize: '1rem', 
-                                                color: 'var(--text-primary)', 
-                                                lineHeight: 1.6,
-                                                opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.3 : 1,
-                                                cursor: selectedCharacterId ? 'copy' : 'pointer',
-                                                background: isHovered ? 'rgba(255,255,255,0.05)' : 'transparent',
-                                                borderRadius: '3px',
-                                                padding: '0 2px',
-                                                position: 'relative'
-                                            }}
-                                        >
-                                            {seg.text_content}{' '}
-                                            {seg.audio_status === 'done' && (
-                                                <div style={{ 
-                                                    display: 'inline-block', 
-                                                    width: '4px', height: '4px', 
-                                                    borderRadius: '50%', background: 'var(--success-muted)', 
-                                                    marginLeft: '2px', verticalAlign: 'middle' 
-                                                }} />
-                                            )}
-                                        </span>
-                                    );
-                                })}
+                    {/* Quick status/actions */}
+                    <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        {seg.audio_status === 'done' && (
+                            <div title="Audio Generated" style={{ color: 'var(--success-muted)' }}>
+                                <CheckCircle size={14} />
                             </div>
-
-                            {/* Quick Actions (Reset etc) */}
-                            <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                {group.segments.some(s => s.id === activeSegmentId) && !selectedCharacterId && (
-                                    <button 
-                                        className="btn-ghost" 
-                                        style={{ padding: '2px 4px', fontSize: '0.7rem' }}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            const activeSeg = group.segments.find(s => s.id === activeSegmentId);
-                                            if (activeSeg) handleAssignCharacter(activeSeg.id, null);
-                                        }}
-                                    >
-                                        Reset
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    );
-                });
-              })()}
+                        )}
+                        {activeSegmentId === seg.id && !selectedCharacterId && (
+                           <div style={{ display: 'flex', gap: '4px' }}>
+                               <button 
+                                 className="btn-ghost" 
+                                 style={{ padding: '2px 4px', fontSize: '0.7rem' }}
+                                 onClick={(e) => {
+                                     e.stopPropagation();
+                                     handleAssignCharacter(seg.id, null);
+                                 }}
+                               >
+                                   Reset
+                               </button>
+                           </div>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
               
               {segments.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
