@@ -646,6 +646,93 @@ async def api_analyze_text(text_content: str = Form(...)):
         "safe_text": packed_text,
         "split_sentences": split_text.split('\n')
     })
+
+@app.get("/api/chapters/{chapter_id}/analyze")
+async def api_analyze_chapter(chapter_id: str):
+    from .db import get_chapter, get_chapter_segments, get_characters
+    from .config import SENT_CHAR_LIMIT
+
+    chap = get_chapter(chapter_id)
+    if not chap:
+        return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+    segs = get_chapter_segments(chapter_id)
+    chars = get_characters(chap['project_id'])
+    char_map = {c['id']: c for c in chars}
+
+    # 1. Group segments by consecutive character (matches Performance tab logic)
+    groups = []
+    if segs:
+        curr_group = {"character_id": segs[0]['character_id'], "segments": [segs[0]]}
+        for i in range(1, len(segs)):
+            s = segs[i]
+            if s['character_id'] == curr_group['character_id']:
+                curr_group['segments'].append(s)
+            else:
+                groups.append(curr_group)
+                curr_group = {"character_id": s['character_id'], "segments": [s]}
+        groups.append(curr_group)
+
+    # 2. Within each group, pack the text into "mini-chapter" blocks as they will be generated
+    voice_chunks = []
+    for g in groups:
+        char = char_map.get(g['character_id'])
+        char_name = char['name'] if char else "NARRATOR"
+        char_color = char['color'] if char else "#8b5cf6"
+
+        # Mirror pack_text_to_limit logic but with metadata
+        lines = [line.strip() for line in " ".join([s['text_content'].strip() for s in g['segments']]).split('\n') if line.strip()]
+
+        current_chunk_lines = []
+        current_len = 0
+
+        def commit_chunk():
+            if not current_chunk_lines: return
+            concatenated = ""
+            for l in current_chunk_lines:
+                if concatenated:
+                    connector = "" if l[0] in ",;:" else " "
+                    concatenated += connector + l
+                else:
+                    concatenated = l
+
+            raw_len = len(concatenated)
+            padded_text = concatenated.ljust(SENT_CHAR_LIMIT)
+
+            voice_chunks.append({
+                "character_name": char_name,
+                "character_color": char_color,
+                "text": padded_text,
+                "raw_length": raw_len,
+                "sent_count": len(current_chunk_lines)
+            })
+
+        # We assume the input to pack_text_to_limit has already been cleaned/split
+        # Let's perform those steps for the group text
+        group_text = " ".join([s['text_content'].strip() for s in g['segments']])
+        cleaned = clean_text_for_tts(group_text)
+        split = safe_split_long_sentences(cleaned, target=SENT_CHAR_LIMIT)
+        split_lines = [l.strip() for l in split.split('\n') if l.strip()]
+
+        for line in split_lines:
+            connector_len = 0
+            if current_chunk_lines:
+                connector_len = 0 if line[0] in ",;:" else 1
+
+            if current_chunk_lines and current_len + connector_len + len(line) <= SENT_CHAR_LIMIT:
+                current_chunk_lines.append(line)
+                current_len += connector_len + len(line)
+            else:
+                commit_chunk()
+                current_chunk_lines = [line]
+                current_len = len(line)
+        commit_chunk()
+
+    return JSONResponse({
+        "status": "success",
+        "voice_chunks": voice_chunks,
+        "threshold": SENT_CHAR_LIMIT
+    })
 # --------------------
 
 @app.get("/")

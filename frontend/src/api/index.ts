@@ -102,6 +102,10 @@ export const api = {
     const res = await fetch(`/api/projects/${projectId}/reorder_chapters`, { method: 'POST', body: formData });
     return res.json();
   },
+  analyzeChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/analyze`);
+    return res.json();
+  },
 
   // --- Segments ---
   fetchSegments: async (chapterId: string): Promise<import('../types').ChapterSegment[]> => {

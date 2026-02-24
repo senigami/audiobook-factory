@@ -48,6 +48,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const playbackQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     loadChapter();
@@ -62,7 +63,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     
     setAnalyzing(true);
     typingTimeoutRef.current = setTimeout(() => {
-        analyzeText(text);
+        runAnalysis(text);
     }, 1000);
     
     return () => {
@@ -94,19 +95,39 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
-  const analyzeText = async (textContent: string) => {
+  const runAnalysis = async (textContent: string) => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
+    setAnalyzing(true);
     try {
-      const formData = new FormData();
-      formData.append('text_content', textContent);
-      const res = await fetch('/api/analyze_text', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.status === 'success') {
-          setAnalysis(data);
+      let data;
+      if (projectId && chapterId) {
+        // Voice-aware analysis for existing chapters
+        data = await api.analyzeChapter(chapterId);
+      } else {
+        // Generic analysis for new/standalone text
+        const formData = new FormData();
+        formData.set('text_content', textContent);
+        const res = await fetch('/api/analyze_text', { 
+            method: 'POST', 
+            body: formData,
+            signal: controller.signal
+        });
+        data = await res.json();
       }
-    } catch (e) {
-      console.error("Analysis failed", e);
+      setAnalysis(data);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+          console.error("Analysis failed", e);
+      }
     } finally {
-      setAnalyzing(false);
+      if (abortControllerRef.current === controller) {
+          setAnalyzing(false);
+      }
     }
   };
 
@@ -332,7 +353,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     </button>
                     <button 
                         onClick={() => {
-                            if (!analysis?.safe_text) alert("Please wait for text to be analyzed...");
+                            if (!analysis?.safe_text && !analysis?.voice_chunks) alert("Please wait for text to be analyzed...");
                             else {
                                 setEditorTab('preview');
                                 handleSave(); // Give a chance to save the displayed text
@@ -340,7 +361,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         }} 
                         className={editorTab === 'preview' ? 'btn-primary' : 'btn-ghost'}
                         style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
-                        disabled={!analysis?.safe_text}
+                        disabled={!analysis?.safe_text && !analysis?.voice_chunks}
                     >
                         Preview Safe Text
                     </button>
@@ -638,14 +659,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         <div style={{ height: '2rem', flexShrink: 0 }} /> {/* Bottom padding */}
                     </div>
                 ) : editorTab === 'preview' ? (
-                    <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', overflowY: 'auto' }}>
-                        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+                    <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.25rem', overflowY: 'auto' }}>
+                        <div style={{ width: '100%', margin: '0 auto' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h3 style={{ margin: 0, opacity: 0.8, fontSize: '1.2rem', fontWeight: 600 }}>Preview Safe Text</h3>
                                 {analysis && (
                                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
-                                        <span>{analysis.sent_count} Sentences</span>
-                                        <span>{analysis.char_count} Characters</span>
+                                        <span>{analysis.sent_count} Sentences</span> /
+                                        <span>{analysis.char_count} Characters (of {analysis.threshold || 250})</span>
                                     </div>
                                 )}
                             </div>
@@ -655,10 +676,69 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     <RefreshCw size={24} className="animate-spin" style={{ marginBottom: '1rem' }} />
                                     <p>Analyzing text and splitting into engine-safe segments...</p>
                                 </div>
+                            ) : (analysis?.voice_chunks) ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {analysis.voice_chunks.map((chunk: any, cidx: number) => {
+                                        const isTooLong = (chunk.raw_length || chunk.length) > (analysis.threshold || 250);
+                                        return (
+                                            <div key={cidx} style={{ 
+                                                padding: '1rem', 
+                                                background: 'var(--surface)', 
+                                                borderRadius: '12px', 
+                                                border: `1px solid ${isTooLong ? 'var(--error-muted)' : 'var(--border)'}`,
+                                                borderLeft: `6px solid ${chunk.character_color || 'var(--primary)'}`,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '0.75rem',
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                                                position: 'relative'
+                                            }}>
+                                                <div style={{ 
+                                                    display: 'flex', 
+                                                    justifyContent: 'space-between', 
+                                                    alignItems: 'center',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 700,
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.05em'
+                                                }}>
+                                                    <div style={{ 
+                                                        color: chunk.character_color || 'var(--text-muted)', 
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.4rem'
+                                                    }}>
+                                                        <span style={{ opacity: 0.4 }}>#{cidx + 1}</span>
+                                                        <span>{chunk.character_name}</span>
+                                                    </div>
+                                                    <div style={{ color: 'var(--text-muted)', opacity: 0.6, display: 'flex', gap: '0.8rem' }}>
+                                                        {chunk.sent_count > 0 && <span>{chunk.sent_count}</span>} /
+                                                        <span style={{ color: isTooLong ? 'var(--error)' : 'inherit' }}>
+                                                            {chunk.raw_length || chunk.length}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ 
+                                                    fontSize: '1.05rem', 
+                                                    color: 'var(--text-primary)', 
+                                                    lineHeight: 1.7, 
+                                                    fontFamily: 'serif',
+                                                    whiteSpace: 'pre-wrap',
+                                                    background: 'rgba(255,255,255,0.01)',
+                                                    padding: '0.5rem',
+                                                    borderRadius: '4px'
+                                                }}>
+                                                    {chunk.text}<span style={{ color: 'var(--primary)', opacity: 0.8, fontWeight: 900, marginLeft: '2px' }}></span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             ) : analysis?.safe_text ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     {analysis.safe_text.split('\n').map((block: string, bidx: number) => {
-                                        const isTooLong = block.length > (analysis.threshold || 250) + 20; // Slight buffer for packing
+                                        const isTooLong = block.length > (analysis.threshold || 250) + 20; 
                                         return (
                                             <div key={bidx} style={{ 
                                                 padding: '1.25rem', 
@@ -672,8 +752,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                 <div style={{ width: '40px', flexShrink: 0, fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, opacity: 0.6 }}>
                                                     #{bidx + 1}
                                                 </div>
-                                                <div style={{ flex: 1, fontSize: '1.05rem', color: 'var(--text-primary)', lineHeight: 1.7, fontFamily: 'serif' }}>
-                                                    {block}
+                                                <div style={{ flex: 1, fontSize: '1.05rem', color: 'var(--text-primary)', lineHeight: 1.7, fontFamily: 'serif', whiteSpace: 'pre-wrap' }}>
+                                                    {block}<span style={{ color: 'var(--primary)', opacity: 0.8, fontWeight: 900 }}>|</span>
                                                 </div>
                                                 <div style={{ width: '60px', flexShrink: 0, textAlign: 'right', fontSize: '0.75rem', color: isTooLong ? 'var(--error)' : 'var(--text-muted)', fontWeight: 600 }}>
                                                     {block.length}
