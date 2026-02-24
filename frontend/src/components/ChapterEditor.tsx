@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info, Volume2, List } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
 
 import { api } from '../api';
@@ -40,7 +40,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const [analysis, setAnalysis] = useState<any>(null);
-  const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production'>('edit');
+  const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production' | 'performance'>('edit');
+  const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
+  const [generatingSegmentIds, setGeneratingSegmentIds] = useState<Set<string>>(new Set());
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const playbackQueueRef = useRef<string[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -349,6 +354,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     >
                         Production
                     </button>
+                    <button 
+                        onClick={() => {
+                            setEditorTab('performance');
+                            handleSave();
+                        }} 
+                        className={editorTab === 'performance' ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
+                    >
+                        Performance
+                    </button>
                 </div>
                 {editorTab === 'edit' ? (
                     <textarea 
@@ -370,40 +385,245 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             overflowY: 'auto'
                         }}
                     />
-                ) : editorTab === 'preview' ? (
-                    <div style={{ 
-                        flex: 1, 
-                        background: 'var(--bg)', 
-                        border: '1px solid var(--border)', 
-                        borderRadius: '12px', 
-                        padding: '1.5rem', 
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem'
-                    }}>
-                        {(analysis?.safe_text || '').split('\n').filter(Boolean).map((line: string, i: number) => (
-                            <div key={i} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: '0.25rem', right: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    #{i + 1}
-                                </div>
-                                <p style={{ 
-                                    fontSize: '0.9rem', 
-                                    color: 'var(--text-primary)', 
-                                    lineHeight: 1.5, 
-                                    margin: 0, 
-                                    paddingRight: '1rem', 
-                                    fontFamily: 'monospace',
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-all'
-                                }}>
-                                    {line}
-                                </p>
+                ) : editorTab === 'performance' ? (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem', overflowY: 'auto', padding: '1.5rem', minHeight: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <List size={20} color="var(--accent)" />
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Performance View</h3>
                             </div>
-                        ))}
+                            <button 
+                                onClick={async () => {
+                                    setSubmitting(true);
+                                    try {
+                                        await api.bakeChapter(chapterId);
+                                        onNavigateToQueue();
+                                    } catch (e) {
+                                        console.error(e);
+                                    } finally {
+                                        setSubmitting(false);
+                                    }
+                                }}
+                                className="btn-primary"
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', boxShadow: '0 4px 12px var(--accent-glow)' }}
+                                title="Stitch all segment audios into the final chapter file"
+                            >
+                                <RefreshCw size={16} className={submitting ? 'animate-spin' : ''} /> Bake Final Chapter
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {(() => {
+                                const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
+                                segments.forEach(seg => {
+                                    const lastGroup = groups[groups.length - 1];
+                                    if (lastGroup && lastGroup.characterId === seg.character_id) {
+                                        lastGroup.segments.push(seg);
+                                    } else {
+                                        groups.push({
+                                            characterId: seg.character_id,
+                                            segments: [seg]
+                                        });
+                                    }
+                                });
+
+                                const handleGenerate = async (sids: string[]) => {
+                                    setGeneratingSegmentIds(prev => {
+                                        const next = new Set(prev);
+                                        sids.forEach(id => next.add(id));
+                                        return next;
+                                    });
+                                    try {
+                                        await api.generateSegments(sids);
+                                        // The worker will push updates via WebSocket or we poll
+                                    } catch (e) {
+                                        console.error(e);
+                                    }
+                                };
+
+                                const stopPlayback = () => {
+                                    if (audioPlayerRef.current) {
+                                        audioPlayerRef.current.pause();
+                                        audioPlayerRef.current = null;
+                                    }
+                                    setPlayingSegmentId(null);
+                                    isPlayingRef.current = false;
+                                    playbackQueueRef.current = [];
+                                };
+
+                                const playSegment = async (segmentId: string, fullQueue: string[]) => {
+                                    stopPlayback();
+                                    isPlayingRef.current = true;
+                                    playbackQueueRef.current = fullQueue;
+                                    
+                                    const currentIndex = fullQueue.indexOf(segmentId);
+                                    if (currentIndex === -1) return;
+
+                                    const playFromIndex = async (idx: number) => {
+                                        if (!isPlayingRef.current || idx >= playbackQueueRef.current.length) {
+                                            stopPlayback();
+                                            return;
+                                        }
+
+                                        const currentId = playbackQueueRef.current[idx];
+                                        const seg = segments.find(s => s.id === currentId);
+                                        if (!seg) return;
+
+                                        setPlayingSegmentId(currentId);
+
+                                        // Auto-generate if missing
+                                        if (!seg.audio_file_path || seg.audio_status !== 'done') {
+                                            if (seg.audio_status !== 'processing') {
+                                                await handleGenerate([currentId]);
+                                            }
+                                            // Wait for it? For now, we'll try to wait or notify
+                                            // Ideally we'd poll or wait for WebSocket
+                                            // For this iteration, let's just skip or show "waiting"
+                                            // User said: "generating if it is not generated, and automatically moving to the next"
+                                            // Let's implement a simple poll/retry for auto-gen
+                                            let attempts = 0;
+                                            const pollForAudio = setInterval(async () => {
+                                                attempts++;
+                                                const updated = await api.fetchSegments(chapterId);
+                                                setSegments(updated);
+                                                const refreshedSeg = updated.find((s: any) => s.id === currentId);
+                                                if (refreshedSeg?.audio_file_path && refreshedSeg.audio_status === 'done') {
+                                                    clearInterval(pollForAudio);
+                                                    setGeneratingSegmentIds(prev => {
+                                                        const next = new Set(prev);
+                                                        next.delete(currentId);
+                                                        return next;
+                                                    });
+                                                    startAudio(refreshedSeg, idx);
+                                                } else if (attempts > 30) { // 30 sec timeout
+                                                    clearInterval(pollForAudio);
+                                                    setGeneratingSegmentIds(prev => {
+                                                        const next = new Set(prev);
+                                                        next.delete(currentId);
+                                                        return next;
+                                                    });
+                                                    playFromIndex(idx + 1); // Skip if failed
+                                                }
+                                            }, 1000);
+                                            return;
+                                        }
+
+                                        startAudio(seg, idx);
+                                    };
+
+                                    const startAudio = (seg: ChapterSegment, idx: number) => {
+                                        const url = projectId 
+                                            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
+                                            : `/out/xtts/${seg.audio_file_path}`;
+                                        const audio = new Audio(url);
+                                        audio.onended = () => playFromIndex(idx + 1);
+                                        audio.onerror = () => playFromIndex(idx + 1);
+                                        audio.play().catch(e => {
+                                            console.error("Playback failed", e);
+                                            playFromIndex(idx + 1);
+                                        });
+                                        audioPlayerRef.current = audio;
+                                    };
+
+                                    await playFromIndex(currentIndex);
+                                };
+
+                                const allSegmentIds = segments.map(s => s.id);
+
+                                return groups.map((group, gidx) => {
+                                    const char = characters.find(c => c.id === group.characterId);
+                                    const allDone = group.segments.every(s => s.audio_status === 'done');
+                                    const anyProcessing = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
+                                    
+                                    return (
+                                        <div key={gidx} style={{ 
+                                            display: 'flex', gap: '1.5rem', 
+                                            background: 'var(--surface)', padding: '1.25rem', 
+                                            borderRadius: '16px', border: '1px solid var(--border)',
+                                            transition: 'all 0.2s ease',
+                                            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                            borderLeft: `4px solid ${char?.color || 'var(--text-muted)'}`
+                                        }}>
+                                            <div style={{ width: '130px', flexShrink: 0 }}>
+                                                <div style={{ 
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                                                    color: char?.color || 'var(--text-muted)', 
+                                                    fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase',
+                                                    marginBottom: '0.75rem', letterSpacing: '0.05em'
+                                                }}>
+                                                    {char?.name || 'Narrator'}
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                                    {playingSegmentId && group.segments.some(s => s.id === playingSegmentId) ? (
+                                                        <button 
+                                                            onClick={stopPlayback} 
+                                                            className="btn-primary" 
+                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem' }}
+                                                        >
+                                                            <Zap size={14} fill="currentColor" /> Stop
+                                                        </button>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => playSegment(group.segments[0].id, allSegmentIds)} 
+                                                            className="btn-ghost" 
+                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)' }}
+                                                        >
+                                                            <Volume2 size={14} /> Listen
+                                                        </button>
+                                                    )}
+                                                    <button 
+                                                        onClick={() => handleGenerate(group.segments.map(s => s.id))}
+                                                        className="btn-ghost" 
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)' }}
+                                                        disabled={anyProcessing}
+                                                    >
+                                                        <RefreshCw size={14} className={anyProcessing ? 'animate-spin' : ''} /> 
+                                                        {anyProcessing ? 'Generating...' : (allDone ? 'Regenerate' : 'Generate')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div style={{ flex: 1, color: 'var(--text-secondary)', lineHeight: '1.7', fontSize: '1.05rem', marginTop: '0.2rem' }}>
+                                                {group.segments.map(s => {
+                                                    const isPlaying = playingSegmentId === s.id;
+                                                    const isGenerating = generatingSegmentIds.has(s.id) || s.audio_status === 'processing';
+                                                    const hasAudio = s.audio_file_path && s.audio_status === 'done';
+                                                    
+                                                    return (
+                                                        <span 
+                                                            key={s.id} 
+                                                            onClick={() => playSegment(s.id, allSegmentIds)}
+                                                            style={{ 
+                                                                background: isPlaying ? `${char?.color || '#ffffff'}44` : 'transparent',
+                                                                borderRadius: '6px', padding: '2px 4px', margin: '0 -2px',
+                                                                transition: 'all 0.3s ease',
+                                                                color: isPlaying ? 'var(--text-primary)' : (hasAudio ? 'var(--text-secondary)' : 'var(--text-muted)'),
+                                                                cursor: 'pointer',
+                                                                position: 'relative',
+                                                                display: 'inline-block',
+                                                                borderBottom: isGenerating ? `1px dashed ${char?.color || 'var(--accent)'}` : 'none'
+                                                            }}
+                                                            title={hasAudio ? 'Click to play' : (isGenerating ? 'Generating audio...' : 'Needs generation (click to play/auto-gen)')}
+                                                        >
+                                                            {s.text_content}{' '}
+                                                            {isGenerating && (
+                                                                <RefreshCw size={10} className="animate-spin" style={{ marginLeft: '4px', verticalAlign: 'middle', opacity: 0.6 }} />
+                                                            )}
+                                                            {!hasAudio && !isGenerating && (
+                                                                <div style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted)', marginLeft: '4px', verticalAlign: 'middle' }} />
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                        <div style={{ height: '2rem', flexShrink: 0 }} /> {/* Bottom padding */}
                     </div>
-        ) : (
-          <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '1rem' }}>
+                ) : (
+                    <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '1rem', gap: '1rem' }}>
             {/* Main Production View (Movie Sheet) */}
             <div style={{ 
               flex: 1, 
@@ -548,7 +768,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         </button>
 
                         {characters.map(char => (
-                            <button 
+                            <div 
                                 key={char.id}
                                 onClick={() => setSelectedCharacterId(char.id)}
                                 style={{ 
@@ -562,8 +782,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     color: 'var(--text-primary)',
                                     textAlign: 'left',
                                     cursor: 'pointer',
-                                    transition: 'all 0.2s'
+                                    transition: 'all 0.2s',
+                                    // Add hover effect since it's now a div
+                                    outline: 'none'
                                 }}
+                                onMouseEnter={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                                onMouseLeave={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'transparent'; }}
                             >
                                 <ColorSwatchPicker 
                                     value={char.color || '#8b5cf6'} 
@@ -574,7 +798,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{char.name}</div>
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{char.speaker_profile_name || 'No voice'}</div>
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
 

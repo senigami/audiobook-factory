@@ -38,3 +38,5 @@ class Job:
     narrator_meta: Optional[str] = None
     chapter_list: Optional[List[dict]] = None
     cover_path: Optional[str] = None
+    segment_ids: Optional[List[str]] = None
+    is_bake: bool = False

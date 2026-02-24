@@ -10,7 +10,7 @@ from typing import Dict, Optional
 from .models import Job
 from .state import get_jobs, put_job, update_job, get_settings, get_performance_metrics, update_performance_metrics
 from .config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, SENT_CHAR_LIMIT
-from .engines import xtts_generate, xtts_generate_script, wav_to_mp3, assemble_audiobook
+from .engines import xtts_generate, xtts_generate_script, wav_to_mp3, assemble_audiobook, stitch_segments
 
 job_queue: "queue.Queue[str]" = queue.Queue()
 assembly_queue: "queue.Queue[str]" = queue.Queue()
@@ -296,6 +296,15 @@ def worker_loop(q: "queue.Queue[str]"):
                 if text_path.exists():
                     text = text_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
+                elif j.segment_ids or j.is_bake:
+                    # For segments/bake, use total length of segments in DB as a proxy
+                    with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT SUM(LENGTH(text_content)) FROM chapter_segments WHERE chapter_id = ?", (j.chapter_id,))
+                        row = cursor.fetchone()
+                        chars = row[0] if row and row[0] else 0
+
+                if chars > 0:
                     perf = get_performance_metrics()
                     cps = perf.get("xtts_cps", BASELINE_XTTS_CPS)
                     eta = _estimate_seconds(chars, cps)
@@ -364,8 +373,10 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # --- Safety Checks ---
             if j.engine != "audiobook" and not text_path.exists():
-                update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Chapter file not found: {j.chapter_file}")
-                continue
+                # Allow segment-based jobs to bypass physical file check
+                if not (j.segment_ids or j.is_bake):
+                    update_job(jid, status="failed", finished_at=time.time(), progress=1.0, error=f"Chapter file not found: {j.chapter_file}")
+                    continue
 
             if _output_exists(j.engine, j.chapter_file, project_id=j.project_id, make_mp3=j.make_mp3):
                 update_job(jid, status="done", finished_at=time.time(), progress=1.0, log="Skipped: output already exists.")
@@ -536,6 +547,157 @@ def worker_loop(q: "queue.Queue[str]"):
                 out_wav = pdir / f"{Path(j.chapter_file).stem}.wav"
                 out_mp3 = pdir / f"{Path(j.chapter_file).stem}.mp3"
 
+                # Resolve speaker WAVs and settings from profile
+                default_sw = get_speaker_wavs(j.speaker_profile)
+                spk_settings = get_speaker_settings(j.speaker_profile)
+                speed = spk_settings["speed"]
+
+                # NEW: Handle Chapter Baking (Stitching existing segments)
+                if j.is_bake and j.chapter_id:
+                    on_output(f"Baking Chapter {j.chapter_id} starting...\n")
+                    from .db import get_chapter_segments, update_segment
+                    from .textops import sanitize_for_xtts, safe_split_long_sentences
+                    from .config import SENT_CHAR_LIMIT
+
+                    segs = get_chapter_segments(j.chapter_id)
+                    total_segs = len(segs)
+
+                    # 1. Identify missing segments
+                    missing_segs = []
+                    for s in segs:
+                        spath = pdir / (s['audio_file_path'] or f"seg_{s['id']}.wav")
+                        if s['audio_status'] != 'done' or not spath.exists():
+                            missing_segs.append(s)
+
+                    if missing_segs:
+                        on_output(f"Smart Bake: {len(missing_segs)} segments need generation before stitching.\n")
+                        # 2. Generate missing segments
+                        for idx, s in enumerate(missing_segs):
+                            if cancel_check(): break
+                            sid = s['id']
+                            on_output(f"[Bake-Gen {idx+1}/{len(missing_segs)}] Generating segment {sid}...\n")
+
+                            # Get character profile (already have it from get_chapter_segments)
+                            char_profile = s.get('speaker_profile_name')
+                            sw = get_speaker_wavs(char_profile) or default_sw
+                            spk_set = get_speaker_settings(char_profile)
+                            seg_speed = spk_set['speed']
+
+                            seg_out = pdir / f"seg_{sid}.wav"
+                            text = s['text_content']
+                            processed_text = text.strip()
+                            if j.safe_mode:
+                                processed_text = sanitize_for_xtts(processed_text)
+                                processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
+
+                            rc = xtts_generate(
+                                text=processed_text,
+                                out_wav=seg_out,
+                                safe_mode=False,
+                                on_output=lambda x: None,
+                                cancel_check=cancel_check,
+                                speaker_wav=sw,
+                                speed=seg_speed
+                            )
+
+                            if rc == 0 and seg_out.exists():
+                                update_segment(sid, audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
+                            else:
+                                update_segment(sid, audio_status='error')
+
+                            # Progress: 0 to 0.9 for generation
+                            prog = ((idx + 1) / len(missing_segs)) * 0.9
+                            update_job(jid, progress=prog)
+
+                    # 3. Final Stitch
+                    if cancel_check(): continue
+
+                    on_output("Stitching all segments into final chapter file...\n")
+                    # Refresh segment statuses
+                    fresh_segs = get_chapter_segments(j.chapter_id)
+                    segment_paths = []
+                    for s in fresh_segs:
+                        if s['audio_status'] == 'done' and s['audio_file_path']:
+                            spath = pdir / s['audio_file_path']
+                            if spath.exists():
+                                segment_paths.append(spath)
+
+                    if not segment_paths:
+                        update_job(jid, status="failed", error="No valid audio segments found to stitch.", finished_at=time.time())
+                        continue
+
+                    rc = stitch_segments(pdir, segment_paths, out_wav, on_output, cancel_check)
+                    if rc == 0 and out_wav.exists():
+                        duration = get_audio_duration(out_wav)
+                        update_job(jid, status="done", finished_at=time.time(), progress=1.0, output_wav=out_wav.name)
+                        from .db import update_queue_item
+                        update_queue_item(jid, "done", audio_length_seconds=duration)
+                    else:
+                        update_job(jid, status="failed", error=f"Stitching failed (rc={rc})", finished_at=time.time())
+                    continue
+
+                # NEW: Handle Granular Segment Generation
+                if j.segment_ids:
+                    on_output(f"Generating {len(j.segment_ids)} segments for Chapter {j.chapter_id}...\n")
+                    from .db import get_connection, update_segment
+                    from .textops import sanitize_for_xtts, safe_split_long_sentences
+                    from .config import SENT_CHAR_LIMIT
+
+                    total = len(j.segment_ids)
+                    for idx, sid in enumerate(j.segment_ids):
+                        if cancel_check(): break
+
+                        # Fetch segment details from DB
+                        with get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                SELECT s.text_content, s.character_id, c.speaker_profile_name
+                                FROM chapter_segments s
+                                LEFT JOIN characters c ON s.character_id = c.id
+                                WHERE s.id = ?
+                            """, (sid,))
+                            row = cursor.fetchone()
+
+                        if not row:
+                            on_output(f"Segment {sid} not found in DB, skipping.\n")
+                            continue
+
+                        text, char_id, char_profile = row['text_content'], row['character_id'], row['speaker_profile_name']
+                        sw = get_speaker_wavs(char_profile) or default_sw
+                        spk_set = get_speaker_settings(char_profile)
+                        seg_speed = spk_set['speed']
+
+                        seg_out = pdir / f"seg_{sid}.wav"
+
+                        processed_text = text.strip()
+                        if j.safe_mode:
+                            processed_text = sanitize_for_xtts(processed_text)
+                            processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
+
+                        on_output(f"[{idx+1}/{total}] Synthesizing segment {sid}...\n")
+
+                        rc = xtts_generate(
+                            text=processed_text,
+                            out_wav=seg_out,
+                            safe_mode=False, # Already handled above
+                            on_output=lambda x: None, # Stay quiet unless error
+                            cancel_check=cancel_check,
+                            speaker_wav=sw,
+                            speed=seg_speed
+                        )
+
+                        if rc == 0 and seg_out.exists():
+                            update_segment(sid, audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
+                        else:
+                            update_segment(sid, audio_status='error')
+
+                        # Update job progress
+                        p = (idx + 1) / total
+                        update_job(jid, progress=p)
+
+                    update_job(jid, status="done", finished_at=time.time(), progress=1.0)
+                    continue
+
                 # Check for segment-level character assignments
                 segments_data = []
                 if j.chapter_id:
@@ -549,11 +711,6 @@ def worker_loop(q: "queue.Queue[str]"):
                             ORDER BY s.segment_order
                         """, (j.chapter_id,))
                         segments_data = cursor.fetchall()
-
-                # Resolve speaker WAVs and settings from profile
-                default_sw = get_speaker_wavs(j.speaker_profile)
-                spk_settings = get_speaker_settings(j.speaker_profile)
-                speed = spk_settings["speed"]
 
                 has_custom_characters = any(s['character_id'] for s in segments_data) if segments_data else False
 

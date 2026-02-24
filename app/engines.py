@@ -331,9 +331,29 @@ def generate_video_sample(
     else:
         logo_filter = '-map 0:v '
 
-    cmd = (
-        f"ffmpeg -y {inputs} "
-        f"{logo_filter} -map 1:a -c:v libx264 -tune stillimage -c:a aac -b:a 192k "
-        f"-pix_fmt yuv420p -shortest -t {max_duration} {shlex.quote(str(output_video))}"
-    )
     return run_cmd_stream(cmd, on_output, cancel_check)
+
+def stitch_segments(
+    pdir: Path,
+    segment_wavs: List[Path],
+    output_path: Path,
+    on_output,
+    cancel_check
+) -> int:
+    """Concatenates multiple segments into one final file."""
+    if not segment_wavs:
+        on_output("No segments to stitch.\n")
+        return 1
+
+    list_file = output_path.with_suffix(".list.txt")
+    try:
+        with open(list_file, 'w') as lf:
+            for sw in segment_wavs:
+                # Use absolute path for safety with safe 0
+                lf.write(f"file '{sw.absolute()}'\n")
+
+        # Simple concat for segments (they should all be same sample rate/channels from XTTS)
+        cmd = f'ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} -c copy {shlex.quote(str(output_path))}'
+        return run_cmd_stream(cmd, on_output, cancel_check)
+    finally:
+        if list_file.exists(): list_file.unlink()

@@ -453,6 +453,47 @@ def api_list_segments(chapter_id: str):
     from .db import get_chapter_segments
     return JSONResponse({"status": "success", "segments": get_chapter_segments(chapter_id)})
 
+@app.post("/api/segments/generate")
+def api_generate_segments(segment_ids: str = Form(...)):
+    """Queues generation for specific segments."""
+    print(f"DEBUG: api_generate_segments called with: {segment_ids}")
+    sids = [s.strip() for s in segment_ids.split(",") if s.strip()]
+    if not sids:
+        return JSONResponse({"status": "error", "message": "No segment IDs provided"}, status_code=400)
+
+    from .db import get_connection
+    # Find chapter_id from first segment to group them
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chapter_id FROM chapter_segments WHERE id = ?", (sids[0],))
+        row = cursor.fetchone()
+        if not row:
+            return JSONResponse({"status": "error", "message": "Segment not found"}, status_code=404)
+        chapter_id = row['chapter_id']
+
+        # Get project_id for output paths
+        cursor.execute("SELECT project_id, title FROM chapters WHERE id = ?", (chapter_id,))
+        chap = cursor.fetchone()
+        project_id = chap['project_id']
+        chapter_title = chap['title']
+
+    from .jobs import enqueue
+    from .models import Job
+    import uuid
+
+    job = Job(
+        id=str(uuid.uuid4()),
+        engine="xtts",
+        chapter_file=f"{chapter_title}.txt", # Fallback name
+        status="queued",
+        created_at=time.time(),
+        project_id=project_id,
+        chapter_id=chapter_id,
+        segment_ids=sids
+    )
+    enqueue(job)
+    return JSONResponse({"status": "success", "job_id": job.id})
+
 @app.put("/api/segments/{segment_id}")
 def api_update_segment(
     segment_id: str,
@@ -471,6 +512,36 @@ def api_update_segment(
         update_segment(segment_id, **updates)
 
     return JSONResponse({"status": "success"})
+
+@app.post("/api/chapters/{chapter_id}/bake")
+def api_bake_chapter(chapter_id: str):
+    """Stitches all segments of a chapter into a final audio file."""
+    from .db import get_connection
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT project_id, title FROM chapters WHERE id = ?", (chapter_id,))
+        chap = cursor.fetchone()
+        if not chap:
+            return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+        project_id = chap['project_id']
+        chapter_title = chap['title']
+
+    from .jobs import enqueue
+    from .models import Job
+    import uuid
+
+    job = Job(
+        id=str(uuid.uuid4()),
+        engine="xtts",
+        chapter_file=f"{chapter_title}.txt",
+        status="queued",
+        created_at=time.time(),
+        project_id=project_id,
+        chapter_id=chapter_id,
+        is_bake=True
+    )
+    enqueue(job)
+    return JSONResponse({"status": "success", "job_id": job.id})
 
 # --- Characters API ---
 

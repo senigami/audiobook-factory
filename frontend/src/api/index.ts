@@ -116,6 +116,16 @@ export const api = {
     const res = await fetch(`/api/segments/${segmentId}`, { method: 'PUT', body: formData });
     return res.json();
   },
+  generateSegments: async (segmentIds: string[]): Promise<any> => {
+    const formData = new FormData();
+    formData.append('segment_ids', segmentIds.join(','));
+    const res = await fetch('/api/segments/generate', { method: 'POST', body: formData });
+    return res.json();
+  },
+  bakeChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/bake`, { method: 'POST' });
+    return res.json();
+  },
 
   // --- Jobs ---
   fetchJobs: async (): Promise<Job[]> => {
