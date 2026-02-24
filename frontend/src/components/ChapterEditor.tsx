@@ -436,17 +436,22 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {(() => {
                                 const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
+                                const CHUNK_LIMIT = 250;
+                                
                                 segments.forEach(seg => {
                                     const lastGroup = groups[groups.length - 1];
-                                    
                                     if (lastGroup && lastGroup.characterId === seg.character_id) {
-                                        lastGroup.segments.push(seg);
-                                    } else {
-                                        groups.push({
-                                            characterId: seg.character_id,
-                                            segments: [seg]
-                                        });
+                                        // Count length using normalized whitespace just like the generator does
+                                        const currentBatchText = lastGroup.segments.map(s => s.text_content.trim()).join(' ');
+                                        const normalizedBatch = currentBatchText.replace(/\s+/g, ' ');
+                                        const normalizedSeg = seg.text_content.trim().replace(/\s+/g, ' ');
+                                        
+                                        if (normalizedBatch.length + 1 + normalizedSeg.length <= CHUNK_LIMIT) {
+                                            lastGroup.segments.push(seg);
+                                            return;
+                                        }
                                     }
+                                    groups.push({ characterId: seg.character_id, segments: [seg] });
                                 });
 
                                 const handleGenerate = async (sids: string[]) => {
@@ -457,7 +462,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     });
                                     try {
                                         await api.generateSegments(sids);
-                                        // The worker will push updates via WebSocket or we poll
                                     } catch (e) {
                                         console.error(e);
                                     }
@@ -493,16 +497,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
                                         setPlayingSegmentId(currentId);
 
-                                        // Auto-generate if missing
                                         if (!seg.audio_file_path || seg.audio_status !== 'done') {
                                             if (seg.audio_status !== 'processing') {
                                                 await handleGenerate([currentId]);
                                             }
-                                            // Wait for it? For now, we'll try to wait or notify
-                                            // Ideally we'd poll or wait for WebSocket
-                                            // For this iteration, let's just skip or show "waiting"
-                                            // User said: "generating if it is not generated, and automatically moving to the next"
-                                            // Let's implement a simple poll/retry for auto-gen
                                             let attempts = 0;
                                             const pollForAudio = setInterval(async () => {
                                                 attempts++;
@@ -517,14 +515,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                         return next;
                                                     });
                                                     startAudio(refreshedSeg, idx);
-                                                } else if (attempts > 30) { // 30 sec timeout
+                                                } else if (attempts > 30) {
                                                     clearInterval(pollForAudio);
                                                     setGeneratingSegmentIds(prev => {
                                                         const next = new Set(prev);
                                                         next.delete(currentId);
                                                         return next;
                                                     });
-                                                    playFromIndex(idx + 1); // Skip if failed
+                                                    playFromIndex(idx + 1);
                                                 }
                                             }, 1000);
                                             return;
@@ -539,7 +537,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             : `/out/xtts/${seg.audio_file_path}`;
                                         const audio = new Audio(url);
                                         audio.onended = () => {
-                                            // Find next segment that has a DIFFERENT audio file
                                             let nextIdx = idx + 1;
                                             while (nextIdx < playbackQueueRef.current.length) {
                                                 const nextId = playbackQueueRef.current[nextIdx];
@@ -569,7 +566,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     const char = characters.find(c => c.id === group.characterId);
                                     const allDone = group.segments.every(s => s.audio_status === 'done');
                                     const anyProcessing = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
-                                    
+                                    const isPlaying = group.segments.some(s => {
+                                        const playingSegment = segments.find(ps => ps.id === playingSegmentId);
+                                        return playingSegmentId === s.id || (playingSegment && playingSegment.audio_file_path && s.audio_file_path === playingSegment.audio_file_path);
+                                    });
+
                                     return (
                                         <div key={gidx} style={{ 
                                             display: 'flex', gap: '1.5rem', 
@@ -589,7 +590,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     {char?.name || 'Narrator'}
                                                 </div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                                    {playingSegmentId && group.segments.some(s => s.id === playingSegmentId) ? (
+                                                    {isPlaying ? (
                                                         <button 
                                                             onClick={stopPlayback} 
                                                             className="btn-primary" 
@@ -601,7 +602,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                         <button 
                                                             onClick={() => playSegment(group.segments[0].id, allSegmentIds)} 
                                                             className="btn-ghost" 
-                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)' }}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.1)' }}
                                                         >
                                                             <Volume2 size={14} /> Listen
                                                         </button>
@@ -609,7 +610,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     <button 
                                                         onClick={() => handleGenerate(group.segments.map(s => s.id))}
                                                         className="btn-ghost" 
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)' }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.1)' }}
                                                         disabled={anyProcessing}
                                                     >
                                                         <RefreshCw size={14} className={anyProcessing ? 'animate-spin' : ''} /> 
@@ -617,46 +618,45 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div style={{ flex: 1, color: 'var(--text-secondary)', lineHeight: '1.7', fontSize: '1.05rem', marginTop: '0.2rem' }}>
-                                                {group.segments.map(s => {
-                                                    const playingSegment = segments.find(ps => ps.id === playingSegmentId);
-                                                    const isPlaying = playingSegmentId === s.id || (playingSegment && playingSegment.audio_file_path && s.audio_file_path === playingSegment.audio_file_path);
-                                                    const hasAudio = s.audio_status === 'done' && s.audio_file_path;
-                                                    const isGenerating = s.audio_status === 'processing' || generatingSegmentIds.has(s.id);
-
-                                                    return (
-                                                        <span 
-                                                            key={s.id} 
-                                                            onClick={() => playSegment(s.id, allSegmentIds)}
-                                                            style={{ 
-                                                                background: isPlaying ? `${char?.color || '#ffffff'}44` : 'transparent',
-                                                                borderRadius: '4px',
-                                                                padding: '0 4px',
-                                                                margin: '0 -2px',
-                                                                cursor: 'pointer',
-                                                                color: isPlaying ? 'var(--text-primary)' : 'inherit',
-                                                                transition: 'all 0.1s ease',
-                                                                display: 'inline-block'
-                                                            }}
-                                                            title={hasAudio ? "Click to play" : "Needs generation"}
-                                                        >
-                                                            {s.text_content}{' '}
-                                                            {isGenerating && (
-                                                                <RefreshCw size={10} className="animate-spin" style={{ marginLeft: '4px', verticalAlign: 'middle', opacity: 0.6 }} />
-                                                            )}
-                                                            {!hasAudio && !isGenerating && (
-                                                                <div style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted)', marginLeft: '4px', verticalAlign: 'middle' }} />
-                                                            )}
-                                                        </span>
-                                                    );
-                                                })}
+                                            <div 
+                                                onClick={() => playSegment(group.segments[0].id, allSegmentIds)}
+                                                style={{ 
+                                                    flex: 1, 
+                                                    color: 'var(--text-secondary)', 
+                                                    lineHeight: '1.7', 
+                                                    fontSize: '1.05rem', 
+                                                    marginTop: '0.2rem',
+                                                    cursor: 'pointer',
+                                                    padding: '0.5rem',
+                                                    borderRadius: '8px',
+                                                    background: isPlaying ? `${char?.color || '#ffffff'}22` : 'transparent',
+                                                    transition: 'background 0.2s ease'
+                                                }}
+                                            >
+                                                {group.segments.map((s, sidx) => (
+                                                    <span key={s.id}>
+                                                        {s.text_content}
+                                                        {sidx < group.segments.length - 1 ? ' ' : ''}
+                                                    </span>
+                                                ))}
+                                                {(() => {
+                                                    const anyGenerating = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
+                                                    const anyMissing = group.segments.some(s => s.audio_status !== 'done' || !s.audio_file_path);
+                                                    if (anyGenerating) {
+                                                        return <RefreshCw size={14} className="animate-spin" style={{ marginLeft: '8px', verticalAlign: 'middle', opacity: 0.6 }} />;
+                                                    }
+                                                    if (anyMissing) {
+                                                        return <div style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-muted)', marginLeft: '8px', verticalAlign: 'middle', opacity: 0.4 }} />;
+                                                    }
+                                                    return null;
+                                                })()}
                                             </div>
                                         </div>
                                     );
                                 });
                             })()}
                         </div>
-                        <div style={{ height: '2rem', flexShrink: 0 }} /> {/* Bottom padding */}
+                        <div style={{ height: '2rem', flexShrink: 0 }} />
                     </div>
                 ) : editorTab === 'preview' ? (
                     <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.25rem', overflowY: 'auto' }}>
@@ -708,7 +708,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                         alignItems: 'center',
                                                         gap: '0.4rem'
                                                     }}>
-                                                        <span style={{ opacity: 0.4 }}>#{cidx + 1}</span>
+                                                        <span style={{ color: '#ccc' }}>#{cidx + 1}</span>
                                                         <span>{chunk.character_name}</span>
                                                     </div>
                                                     <div style={{ color: 'var(--text-muted)', opacity: 0.6, display: 'flex', gap: '0.8rem' }}>
@@ -804,8 +804,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                       display: 'flex',
                       padding: '0.5rem 1rem',
                       borderRadius: '4px',
-                      background: isSelectedCharLines ? `${char?.color || '#8b5cf6'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
-                      borderLeft: `4px solid ${char ? char.color : 'transparent'}`,
+                      background: isSelectedCharLines ? `${char?.color || '#94a3b8'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
+                      borderLeft: `4px solid ${char ? char.color : 'var(--text-muted)'}`,
                       cursor: selectedCharacterId ? 'copy' : 'pointer',
                       transition: 'all 0.1s ease',
                       gap: '2rem'
@@ -933,11 +933,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     // Add hover effect since it's now a div
                                     outline: 'none'
                                 }}
-                                onMouseEnter={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                                onMouseEnter={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
                                 onMouseLeave={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'transparent'; }}
                             >
                                 <ColorSwatchPicker 
-                                    value={char.color || '#8b5cf6'} 
+                                    value={char.color || '#94a3b8'} 
                                     onChange={(color) => handleUpdateCharacterColor(char.id, color)} 
                                     size="sm" 
                                 />

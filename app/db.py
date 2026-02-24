@@ -320,7 +320,13 @@ def get_chapter_segments(chapter_id: str) -> List[Dict[str, Any]]:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM chapter_segments WHERE chapter_id = ? ORDER BY segment_order ASC", (chapter_id,))
+            cursor.execute("""
+                SELECT s.*, c.speaker_profile_name, c.color as character_color, c.name as character_name
+                FROM chapter_segments s
+                LEFT JOIN characters c ON s.character_id = c.id
+                WHERE s.chapter_id = ? 
+                ORDER BY s.segment_order ASC
+            """, (chapter_id,))
             return [dict(row) for row in cursor.fetchall()]
 
 def update_segment(segment_id: str, **updates) -> bool:

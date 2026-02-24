@@ -119,6 +119,10 @@ def main():
                     sentences = [text]
 
                 for sentence in sentences:
+                    # Skip empty or whitespace-only sentences which cause XTTS crashes
+                    if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
+                        continue
+
                     if latents:
                         gpt_cond_latent, speaker_embedding = latents
                         out_dict = xtts_model.inference(

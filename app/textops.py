@@ -51,8 +51,8 @@ def preprocess_text(text: str) -> str:
     """Foundational cleaning to remove unspoken characters before splitting or analysis."""
     if not text:
         return ""
-    # Strip brackets, braces, and parentheses
-    for char in "[]{}()":
+    # Strip brackets, braces, parentheses, and angle brackets
+    for char in '[]{}()<>':
         text = text.replace(char, "")
     return text
 
@@ -307,10 +307,13 @@ def sanitize_for_xtts(text: str) -> str:
     # 1. Perform base TTS cleaning (includes bracket stripping and consolidation)
     text = clean_text_for_tts(text)
 
+    # Normalize all newlines and whitespace/tabs early
+    text = text.replace("\r", " ").replace("\t", " ").replace("\n", " ")
+
     # 2. Remove any remaining non-ASCII characters that might cause hallucinations
     text = re.sub(r'[^\x00-\x7F]+', '', text)
-    # Collapse multiple spaces (but preserve newlines) and trim
-    text = re.sub(r'[^\S\r\n]+', ' ', text).strip()
+    # Collapse multiple spaces and trim
+    text = re.sub(r'\s+', ' ', text).strip()
 
     # 3. Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
     # Use regex to check for end-of-sentence punctuation even if followed by quotes/parens

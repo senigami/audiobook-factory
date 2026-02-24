@@ -454,10 +454,18 @@ def api_list_segments(chapter_id: str):
     return JSONResponse({"status": "success", "segments": get_chapter_segments(chapter_id)})
 
 @app.post("/api/segments/generate")
-def api_generate_segments(segment_ids: str = Form(...)):
+def api_generate_segments(segment_ids: List[str] = Form(...)):
     """Queues generation for specific segments."""
-    print(f"DEBUG: api_generate_segments called with: {segment_ids}")
-    sids = [s.strip() for s in segment_ids.split(",") if s.strip()]
+    # Handle both ["id1,id2"] and ["id1", "id2"]
+    actual_ids = []
+    for item in segment_ids:
+        if "," in item:
+            actual_ids.extend([s.strip() for s in item.split(",") if s.strip()])
+        else:
+            actual_ids.append(item.strip())
+
+    print(f"DEBUG: api_generate_segments called with: {actual_ids}")
+    sids = [s for s in actual_ids if s]
     if not sids:
         return JSONResponse({"status": "error", "message": "No segment IDs provided"}, status_code=400)
 
@@ -678,7 +686,7 @@ async def api_analyze_chapter(chapter_id: str):
     for g in groups:
         char = char_map.get(g['character_id'])
         char_name = char['name'] if char else "NARRATOR"
-        char_color = char['color'] if char else "#8b5cf6"
+        char_color = char['color'] if char else "#94a3b8"
 
         # Mirror pack_text_to_limit logic but with metadata
         lines = [line.strip() for line in " ".join([s['text_content'].strip() for s in g['segments']]).split('\n') if line.strip()]

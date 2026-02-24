@@ -216,11 +216,16 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
     """Returns a comma-separated string of absolute paths for the given profile."""
 
     # User choice or system default
-    target_profile = profile_name if profile_name else "Default"
+    target_profile = profile_name if profile_name else "Dark Fantasy"
     p = VOICES_DIR / target_profile
 
     if not p.exists() or not p.is_dir():
-        return None
+        # Fallback to ANY existing profile folder if the requested one is gone
+        subdirs = [d for d in VOICES_DIR.iterdir() if d.is_dir() and not d.name.startswith(".")]
+        if subdirs:
+            p = subdirs[0]
+        else:
+            return None
 
     wavs = sorted(p.glob("*.wav"))
     if not wavs:
@@ -231,7 +236,8 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
 
 def get_speaker_settings(profile_name: str) -> dict:
     """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
-    import json
+    target_profile = profile_name if profile_name else "Dark Fantasy"
+    p = VOICES_DIR / target_profile
 
     defaults = get_settings()
     default_test_text = (
@@ -248,8 +254,6 @@ def get_speaker_settings(profile_name: str) -> dict:
         "test_text": default_test_text
     }
 
-    # User choice or system default
-    target_profile = profile_name if profile_name else "Default"
     p = VOICES_DIR / target_profile
 
     meta_path = p / "profile.json"
@@ -461,6 +465,8 @@ def worker_loop(q: "queue.Queue[str]"):
                         logs.append(line)
                         new_log = "".join(logs)[-20000:]
 
+                print(line, end="", flush=True) # Live debug output
+
                 # 4. Consolidated Broadcast
                 # Decide if we SHOULD include progress in this update
                 broadcast_p = getattr(j, '_last_broadcast_p', 0.0)
@@ -583,11 +589,15 @@ def worker_loop(q: "queue.Queue[str]"):
                                 prev_full_idx = next((idx for idx, s in enumerate(segs) if s['id'] == prev['id']), -1)
                                 curr_full_idx = next((idx for idx, s in enumerate(segs) if s['id'] == curr['id']), -1)
 
-                                current_len = sum(len(s['text_content']) for s in current_group)
+                                # Calculate combined length as it will be synthesize (with joining space)
+                                trimmed_group_text = " ".join([s['text_content'].strip() for s in current_group])
+                                combined_len = len(trimmed_group_text) + 1 + len(curr['text_content'].strip())
 
-                                if curr['character_id'] == prev['character_id'] and \
-                                   curr_full_idx == prev_full_idx + 1 and \
-                                   (current_len + len(curr['text_content']) < SENT_CHAR_LIMIT):
+                                same_char = curr['character_id'] == prev['character_id']
+                                is_consecutive = curr_full_idx == prev_full_idx + 1
+                                fits_limit = combined_len <= SENT_CHAR_LIMIT
+
+                                if same_char and is_consecutive and fits_limit:
                                     current_group.append(curr)
                                 else:
                                     missing_groups.append(current_group)
@@ -595,6 +605,11 @@ def worker_loop(q: "queue.Queue[str]"):
                             missing_groups.append(current_group)
 
                         on_output(f"Smart Bake: {len(missing_segs)} segments need generation. Grouped into {len(missing_groups)} batches.\n")
+                        # Debug logging for groups
+                        for i, g in enumerate(missing_groups):
+                            ids = [s['id'] for s in g]
+                            tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
+                            on_output(f"  [Bake Group {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
                         # 2. Generate missing groups
                         for g_idx, group in enumerate(missing_groups):
                             if cancel_check(): break
@@ -619,8 +634,8 @@ def worker_loop(q: "queue.Queue[str]"):
                             rc = xtts_generate(
                                 text=processed_text,
                                 out_wav=seg_out,
-                                safe_mode=False,
-                                on_output=lambda x: None,
+                                safe_mode=True,
+                                on_output=on_output,
                                 cancel_check=cancel_check,
                                 speaker_wav=sw,
                                 speed=seg_speed
@@ -692,15 +707,18 @@ def worker_loop(q: "queue.Queue[str]"):
                             prev = segs_to_gen[i-1]
                             curr = segs_to_gen[i]
 
-                            # Check if they are consecutive in the full chapter list
+                            # Check if they are actually consecutive in the full chapter list
                             prev_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == prev['id']), -1)
                             curr_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == curr['id']), -1)
 
-                            current_len = sum(len(s['text_content']) for s in current_group)
+                            trimmed_group_text = " ".join([s['text_content'].strip() for s in current_group])
+                            combined_len = len(trimmed_group_text) + 1 + len(curr['text_content'].strip())
 
-                            if curr['character_id'] == prev['character_id'] and \
-                               curr_full_idx == prev_full_idx + 1 and \
-                               (current_len + len(curr['text_content']) < 250):
+                            same_char = curr['character_id'] == prev['character_id']
+                            is_consecutive = curr_full_idx == prev_full_idx + 1
+                            fits_limit = combined_len <= SENT_CHAR_LIMIT
+
+                            if same_char and is_consecutive and fits_limit:
                                 current_group.append(curr)
                             else:
                                 gen_groups.append(current_group)
@@ -708,6 +726,12 @@ def worker_loop(q: "queue.Queue[str]"):
                         gen_groups.append(current_group)
 
                     total_groups = len(gen_groups)
+                    on_output(f"Grouped into {total_groups} generation batches.\n")
+                    for i, g in enumerate(gen_groups):
+                        ids = [s['id'] for s in g]
+                        tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
+                        on_output(f"  [Batch {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
+
                     for g_idx, group in enumerate(gen_groups):
                         if cancel_check(): break
 
@@ -730,8 +754,8 @@ def worker_loop(q: "queue.Queue[str]"):
                         rc = xtts_generate(
                             text=processed_text,
                             out_wav=seg_out,
-                            safe_mode=False,
-                            on_output=lambda x: None,
+                            safe_mode=True,
+                            on_output=on_output,
                             cancel_check=cancel_check,
                             speaker_wav=sw,
                             speed=seg_speed

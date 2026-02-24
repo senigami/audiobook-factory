@@ -119,10 +119,10 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
         text = text.strip()
 
-    text = pack_text_to_limit(text, pad=True)
+    text = pack_text_to_limit(text, pad=True) or " "
 
     cmd = (
-        f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
+        f"export PYTHONUNBUFFERED=1 && . {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
         f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
         f"--text {shlex.quote(text)} "
         f"--speaker_wav {shlex.quote(sw)} "
