@@ -1943,7 +1943,7 @@ def api_preview(chapter_file: str, processed: bool = False):
 
 @app.post("/api/projects/{project_id}/assemble")
 def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
-    from .db import get_project, get_chapters
+    from .db import get_project
     from .jobs import enqueue
     from .state import put_job
     from .models import Job
@@ -1954,7 +1954,7 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     if not project:
         return JSONResponse({"error": "Project not found"}, status_code=404)
 
-    chapters = get_chapters(project_id)
+    chapters = db_list_chapters(project_id)
     if not chapters:
         return JSONResponse({"error": "No chapters found in project"}, status_code=400)
 
