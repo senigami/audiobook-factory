@@ -1,6 +1,6 @@
 ---
 name: 🐛 Bug Report
-about: Report a technical glitch or unexpected behavior in the Factory
+about: Report a technical glitch or unexpected behavior in the Audiobook Studio
 title: "[BUG] "
 labels: bug
 assignees: ""
@@ -32,7 +32,7 @@ What did you expect to happen? (e.g., "The chapter should finish synthesis in 2 
 - **GPU (if applicable)**: [e.g. RTX 4090, 16GB VRAM]
 - **Python Version**: `python --version`
 
-**Factory Logs**
+**Studio Logs**
 Please paste the relevant output from your terminal console or the integrated "System Console" in the dashboard.
 
 ```yaml
