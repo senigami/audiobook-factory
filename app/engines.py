@@ -175,7 +175,7 @@ def get_speaker_latent_path(speaker_wavs_str: str) -> Optional[Path]:
         combined_paths = os.path.abspath(speaker_wavs_str)
 
     speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
-    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-factory/voices"))
+    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-studio/voices"))
     return voice_dir / f"{speaker_id}.pth"
 
 def assemble_audiobook(

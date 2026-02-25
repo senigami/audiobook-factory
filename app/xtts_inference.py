@@ -52,7 +52,7 @@ def main():
         for c in chunks:
             script.append({"text": c, "speaker_wav": args.speaker_wav})
 
-    voice_dir = os.path.expanduser("~/.cache/audiobook-factory/voices")
+    voice_dir = os.path.expanduser("~/.cache/audiobook-studio/voices")
     os.makedirs(voice_dir, exist_ok=True)
 
     def get_latents(speaker_wav_paths, device, tts_model):

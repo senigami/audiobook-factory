@@ -9,7 +9,7 @@ import threading
 
 # Use a connection pool or a single connection with a lock
 _db_lock = threading.Lock()
-DB_PATH = Path(os.getenv("DB_PATH", "audiobook_factory.db"))
+DB_PATH = Path(os.getenv("DB_PATH", "audiobook_studio.db"))
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)

@@ -160,7 +160,7 @@ def test_latent_cache_path():
     # Single wav
     path = get_speaker_latent_path("/path/to/test.wav")
     assert str(path).endswith(".pth")
-    assert ".cache/audiobook-factory/voices" in str(path)
+    assert ".cache/audiobook-studio/voices" in str(path)
 
     # Comma separated
     path2 = get_speaker_latent_path("/path/1.wav, /path/2.wav")

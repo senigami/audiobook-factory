@@ -1,6 +1,6 @@
 ---
 name: ✨ Feature Request
-about: Suggest a new capability or improvement for The Audiobook Factory
+about: Suggest a new capability or improvement for The Audiobook Studio
 title: "[FEATURE] "
 labels: enhancement
 assignees: ""

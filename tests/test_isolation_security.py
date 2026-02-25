@@ -27,7 +27,7 @@ def test_sandbox_isolation_verification(client):
     assert "projects" in str(PROJECTS_DIR)
 
     # 2. Verify we aren't using the production DB file
-    assert "test_audiobook_factory.db" in str(DB_PATH), f"Expected 'test_audiobook_factory.db' in {DB_PATH}"
+    assert "test_audiobook_studio.db" in str(DB_PATH), f"Expected 'test_audiobook_studio.db' in {DB_PATH}"
 
     # 3. Verify environment variable overrides are active
     assert os.environ.get("AUDIOBOOK_BASE_DIR") is not None

@@ -1,6 +1,6 @@
-# Contributing to Audiobook Factory
+# Contributing to Audiobook Studio
 
-First off, thank you for considering contributing to Audiobook Factory! It’s people like you who make this tool better for everyone.
+First off, thank you for considering contributing to Audiobook Studio! It’s people like you who make this tool better for everyone.
 
 To keep the project organized and ensure code quality, please follow these guidelines.
 
