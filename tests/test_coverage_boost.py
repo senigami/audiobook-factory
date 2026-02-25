@@ -43,7 +43,8 @@ def test_web_startup_recovery(mock_state):
     put_job(j)
 
     startup_event()
-    assert get_jobs()["rec_j"].status == "cancelled"
+    # startup_event deletes queued/running jobs entirely (clean slate on restart)
+    assert "rec_j" not in get_jobs()
 
 def test_jobs_reconcile_logic(mock_state):
     from app.jobs import cleanup_and_reconcile, XTTS_OUT_DIR

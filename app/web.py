@@ -1413,13 +1413,15 @@ def delete_audiobook(filename: str):
 
 @app.post("/api/chapter/reset")
 def reset_chapter(chapter_file: str = Form(...)):
+    from .state import update_job as state_update_job
     existing = get_jobs()
     stem = Path(chapter_file).stem
 
-    # 1. Stop any running jobs and delete files
+    # 1. Stop any running jobs and update their status
     for jid, j in existing.items():
         if j.chapter_file == chapter_file:
             cancel_job(jid)
+            state_update_job(jid, status="cancelled", log="Cancelled by chapter reset.")
 
     # 2. Delete files on disk
     count = 0
