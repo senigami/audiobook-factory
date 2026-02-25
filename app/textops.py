@@ -264,42 +264,42 @@ def clean_text_for_tts(text: str) -> str:
             cleaned_lines.append("")
             continue
 
-        l = preprocess_text(line)
+        ln = preprocess_text(line)
 
         # Handle smart quotes and then strip all quotes (standard and normalized)
-        l = l.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
-        l = l.replace('"', '')
+        ln = ln.replace("“", '').replace("”", '').replace("‘", "'").replace("’", "'")
+        ln = ln.replace('"', '')
 
         # Normalize acronyms/initials: A.B. if 2 or more. A. alone is a period.
         pattern = r'\b(?:[A-Za-z]\.){2,}'
-        l = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), l)
+        ln = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), ln)
 
         # Normalize fractions (444/7000 -> 444 out of 7000)
-        l = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', l)
+        ln = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', ln)
 
         # Strip leading dots/ellipses/punctuation
-        l = l.lstrip(" .…!?,")
+        ln = ln.lstrip(" .…!?,")
         # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
-        l = l.replace("—", ", ").replace("…", ". ").replace("...", ". ")
+        ln = ln.replace("—", ", ").replace("…", ". ").replace("...", ". ")
 
         # Common redundant punctuation artifacts
-        l = l.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
-        l = l.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
+        ln = ln.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
+        ln = ln.replace('".',  '."').replace('?"', '"?').replace('!"', '"!')
 
         # Normalize spaces after punctuation (if missing)
-        l = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', l)
+        ln = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', ln)
         # Collapse multiple spaces
-        l = re.sub(r' +', ' ', l)
+        ln = re.sub(r' +', ' ', ln)
         # Remove spaces before punctuation
-        l = re.sub(r' +([,;:])', r'\1', l)
+        ln = re.sub(r' +([,;:])', r'\1', ln)
         # Remove redundant punctuation
-        l = re.sub(r'([!?])\.+', r'\1', l)
+        ln = re.sub(r'([!?])\.+', r'\1', ln)
         # Fix ., -> , and ,. -> . and .; -> ; etc
-        l = l.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
+        ln = ln.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
         # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
-        l = re.sub(r'([!?])\1+', r'\1', l)
+        ln = re.sub(r'([!?])\1+', r'\1', ln)
 
-        cleaned_lines.append(l)
+        cleaned_lines.append(ln)
 
     # Join lines back
     result = '\n'.join(cleaned_lines)
@@ -315,7 +315,7 @@ def consolidate_single_word_sentences(text: str) -> str:
     TTS engines (especially XTTS) often fail on short sentences.
     This merges them (<= 2 words) with neighbors using semicolons.
     Semicolons are mapped to pauses in xtts_inference.py.
-    
+
     If text contains newlines, they are preserved as boundaries. 
     If a merge happens across a newline, we use ';; ' to indicate 
     a paragraph-level break/pause while merging the text units.

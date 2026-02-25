@@ -1430,9 +1430,6 @@ def reset_chapter(chapter_file: str = Form(...)):
                 f.unlink()
                 count += 1
 
-    # 3. Cancel any active jobs for this chapter to prevent re-generation
-    cancel_chapter_generation(chapter_id)
-
     return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files and cancelled active jobs"})
 
 @app.post("/api/chapters/{chapter_id}/cancel")
