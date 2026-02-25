@@ -150,6 +150,7 @@ def main():
                 else:
                     sentences = [text]
 
+                segment_wav_chunks = []
                 for sentence in sentences:
                     if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
                         continue
@@ -162,15 +163,28 @@ def main():
                             sub_text = sub_part.strip()
                             if sub_text and any(c.isalnum() for c in sub_text):
                                 wav_chunk = _synthesize_one(sub_text, latents, sw)
-                                all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                                chunk_tensor = torch.FloatTensor(wav_chunk)
+                                all_wav_chunks.append(chunk_tensor)
+                                segment_wav_chunks.append(chunk_tensor)
                             # Insert pause silence after each sub-part except the last
                             if sp_idx < len(sub_parts) - 1:
                                 pause_samples = int(SAMPLE_RATE * PAUSE_CHAR_MS / 1000)
-                                all_wav_chunks.append(torch.zeros(pause_samples))
+                                silence = torch.zeros(pause_samples)
+                                all_wav_chunks.append(silence)
+                                segment_wav_chunks.append(silence)
                                 pause_indices.add(len(all_wav_chunks) - 1)
                     else:
                         wav_chunk = _synthesize_one(sentence, latents, sw)
-                        all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                        chunk_tensor = torch.FloatTensor(wav_chunk)
+                        all_wav_chunks.append(chunk_tensor)
+                        segment_wav_chunks.append(chunk_tensor)
+
+                # Save this segment individually if requested (for Performance tab playback)
+                if 'save_path' in segment and segment_wav_chunks:
+                    seg_wav = torch.cat(segment_wav_chunks, dim=0)
+                    torchaudio.save(segment['save_path'], seg_wav.unsqueeze(0), SAMPLE_RATE)
+                    # Signal to parent process that this segment's audio is ready
+                    print(f"[SEGMENT_SAVED] {segment['save_path']}", file=sys.stderr)
 
                 if i < len(script) - 1:
                     par_indices.add(len(all_wav_chunks) - 1)

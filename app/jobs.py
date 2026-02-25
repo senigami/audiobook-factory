@@ -611,47 +611,70 @@ def worker_loop(q: "queue.Queue[str]"):
                             ids = [s['id'] for s in g]
                             tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
                             on_output(f"  [Bake Group {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
-                        # 2. Generate missing groups
-                        for g_idx, group in enumerate(missing_groups):
-                            if cancel_check(): break
 
-                            # Combine text for the group
-                            combined_text = " ".join([s['text_content'].strip() for s in group])
-                            sid = group[0]['id']
-                            on_output(f"[Bake-Batch {g_idx+1}/{len(missing_groups)}] Generating batch starting with {sid} ({len(group)} segments)...\n")
-
-                            # Get character profile from first segment in group
+                        # Build a consolidated script so XTTS loads the model ONCE
+                        full_script = []
+                        # Map save_path -> group for real-time status updates
+                        path_to_group = {}
+                        for group in missing_groups:
                             char_profile = group[0].get('speaker_profile_name')
                             sw = get_speaker_wavs(char_profile) or default_sw
-                            spk_set = get_speaker_settings(char_profile)
-                            seg_speed = spk_set['speed']
 
-                            seg_out = pdir / f"seg_{sid}.wav"
-                            processed_text = combined_text
+                            combined_text = " ".join([s['text_content'].strip() for s in group])
                             if j.safe_mode:
-                                processed_text = sanitize_for_xtts(processed_text)
-                                processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
+                                combined_text = sanitize_for_xtts(combined_text)
+                                combined_text = safe_split_long_sentences(combined_text, target=SENT_CHAR_LIMIT)
 
-                            rc = xtts_generate(
-                                text=processed_text,
-                                out_wav=seg_out,
-                                safe_mode=True,
-                                on_output=on_output,
+                            sid = group[0]['id']
+                            seg_out = pdir / f"seg_{sid}.wav"
+                            save_path_str = str(seg_out.absolute())
+
+                            full_script.append({
+                                "text": combined_text,
+                                "speaker_wav": sw,
+                                "save_path": save_path_str
+                            })
+                            path_to_group[save_path_str] = group
+
+                        script_path = pdir / f"bake_{j.id}_script.json"
+                        script_path.write_text(json.dumps(full_script), encoding="utf-8")
+                        on_output(f"Synthesizing {len(full_script)} groups in a single XTTS session...\n")
+
+                        # Wrap on_output to detect [SEGMENT_SAVED] markers and update segments in real-time
+                        groups_completed = [0]
+                        def bake_on_output(line):
+                            on_output(line)
+                            if "[SEGMENT_SAVED]" in line:
+                                saved_path = line.split("[SEGMENT_SAVED]")[1].strip()
+                                group = path_to_group.get(saved_path)
+                                if group:
+                                    seg_filename = Path(saved_path).name
+                                    for s in group:
+                                        update_segment(s['id'], audio_status='done', audio_file_path=seg_filename, audio_generated_at=time.time())
+                                    groups_completed[0] += 1
+                                    prog = (groups_completed[0] / len(missing_groups)) * 0.9
+                                    update_job(jid, progress=prog)
+
+                        try:
+                            rc = xtts_generate_script(
+                                script_json_path=script_path,
+                                out_wav=out_wav,
+                                on_output=bake_on_output,
                                 cancel_check=cancel_check,
-                                speaker_wav=sw,
-                                speed=seg_speed
+                                speed=speed
                             )
 
-                            if rc == 0 and seg_out.exists():
-                                for s in group:
-                                    update_segment(s['id'], audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
-                            else:
-                                for s in group:
-                                    update_segment(s['id'], audio_status='error')
-
-                            # Progress: 0 to 0.9 for generation
-                            prog = ((g_idx + 1) / len(missing_groups)) * 0.9
-                            update_job(jid, progress=prog)
+                            if rc != 0:
+                                # Mark any un-saved groups as error
+                                for group in missing_groups:
+                                    sid = group[0]['id']
+                                    seg_out = pdir / f"seg_{sid}.wav"
+                                    if not seg_out.exists():
+                                        for s in group:
+                                            update_segment(s['id'], audio_status='error')
+                        finally:
+                            if script_path.exists():
+                                script_path.unlink()
 
                     # 3. Final Stitch
                     if cancel_check(): continue
