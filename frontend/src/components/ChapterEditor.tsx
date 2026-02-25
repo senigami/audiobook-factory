@@ -50,6 +50,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production' | 'performance'>('edit');
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [generatingSegmentIds, setGeneratingSegmentIds] = useState<Set<string>>(new Set());
+  const generatingSegmentIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    generatingSegmentIdsRef.current = generatingSegmentIds;
+  }, [generatingSegmentIds]);
   
   // Group segments for Block UI (matches backend chunking logic)
   const chunkGroups = React.useMemo(() => {
@@ -152,9 +156,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
      if (idx >= playbackQueueRef.current.length) return;
      const groupIds = getGroupSegmentIds(idx);
      if (groupIds.length === 0) return;
+     // Check ref (not state) to avoid stale closure
+     if (groupIds.some(id => generatingSegmentIdsRef.current.has(id))) return;
      const missingIds = groupIds.filter(id => {
          const s = segmentsRef.current.find(seg => seg.id === id);
-         return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+         return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIdsRef.current.has(id);
      });
      if (missingIds.length > 0) {
          handleGenerate(missingIds);
@@ -194,9 +200,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             const groupIds = getGroupSegmentIds(idx);
             const missingInGroup = groupIds.filter(id => {
                 const s = segmentsRef.current.find(seg => seg.id === id);
-                return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+                return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIdsRef.current.has(id);
             });
-            if (missingInGroup.length > 0) {
+            // Use ref (not state) so the stale closure in setTimeout reads current live value
+            if (missingInGroup.length > 0 && !groupIds.some(id => generatingSegmentIdsRef.current.has(id))) {
                 handleGenerate(missingInGroup);
             }
             if (isPlayingRef.current) {
@@ -639,7 +646,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
                         disabled={!analysis?.safe_text && !analysis?.voice_chunks}
                     >
-                        Preview Safe Text
+                        Preview Safe Output
                     </button>
                 </div>
                 {editorTab === 'edit' ? (
@@ -816,7 +823,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.25rem', overflowY: 'auto' }}>
                         <div style={{ width: '100%', margin: '0 auto' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h3 style={{ margin: 0, opacity: 0.8, fontSize: '1.2rem', fontWeight: 600 }}>Preview Safe Text</h3>
+                                <h3 style={{ margin: 0, opacity: 0.8, fontSize: '1.2rem', fontWeight: 600 }}>Preview Safe Output</h3>
                                 {analysis && (
                                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
                                         <span>{analysis.sent_count} Sentences</span> /

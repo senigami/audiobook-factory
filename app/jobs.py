@@ -128,6 +128,10 @@ def cleanup_and_reconcile():
     stale_ids = []
     for jid, j in all_jobs.items():
         if j.engine != "audiobook":
+            # Skip pruning for granular segment jobs which don't have a backing text file on disk
+            if j.segment_ids:
+                continue
+
             if j.project_id:
                 from .config import get_project_text_dir
                 text_path = get_project_text_dir(j.project_id) / j.chapter_file
@@ -156,7 +160,12 @@ def cleanup_and_reconcile():
     for jid, j in all_jobs.items():
         if j.status == "done":
             if j.engine == "audiobook":
-                continue 
+                continue
+
+            # Segment jobs (from Performance/Listen) don't have a merged output file —
+            # they save individual seg_*.wav files directly. Skip them here.
+            if j.segment_ids:
+                continue
 
             # Use _output_exists to check the correct path based on project_id
             exists = _output_exists(
