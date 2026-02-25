@@ -276,7 +276,7 @@ def reorder_chapters(chapter_ids: List[str]) -> bool:
             return True
 
 def reset_chapter_audio(chapter_id: str) -> bool:
-    """Resets the audio generation status of a chapter to unprocessed."""
+    """Resets the audio generation status of a chapter and all its segments to unprocessed."""
     from .config import get_project_audio_dir
     with _db_lock:
         with get_connection() as conn:
@@ -288,17 +288,27 @@ def reset_chapter_audio(chapter_id: str) -> bool:
 
             project_id = row[0]
             audio_file = row[1]
+            p_audio_dir = get_project_audio_dir(project_id)
 
-            # 1. Delete file on disk if it exists
+            # 1. Delete chapter audio file on disk if it exists
             if project_id and audio_file:
-                p_audio_dir = get_project_audio_dir(project_id)
                 stem = Path(audio_file).stem
                 for ext in [".wav", ".mp3"]:
                     f = p_audio_dir / f"{stem}{ext}"
                     if f.exists():
                         f.unlink()
 
-            # 2. Reset database fields
+            # 2. Delete all segment audio files
+            cursor.execute("SELECT audio_file_path FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+            segments = cursor.fetchall()
+            for s_row in segments:
+                s_audio_file = s_row[0]
+                if s_audio_file:
+                    f = p_audio_dir / s_audio_file
+                    if f.exists():
+                        f.unlink()
+
+            # 3. Reset database fields for chapter
             cursor.execute("""
                 UPDATE chapters 
                 SET audio_status = 'unprocessed', 
@@ -308,7 +318,16 @@ def reset_chapter_audio(chapter_id: str) -> bool:
                 WHERE id = ?
             """, (chapter_id,))
 
-            # also remove from processing_queue if it's there
+            # 4. Reset database fields for segments
+            cursor.execute("""
+                UPDATE chapter_segments
+                SET audio_status = 'unprocessed',
+                    audio_file_path = NULL,
+                    audio_generated_at = NULL
+                WHERE chapter_id = ?
+            """, (chapter_id,))
+
+            # 5. Remove from processing_queue if it's there
             cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
 
             conn.commit()

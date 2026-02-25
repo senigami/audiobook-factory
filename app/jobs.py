@@ -301,8 +301,17 @@ def worker_loop(q: "queue.Queue[str]"):
                 if text_path.exists():
                     text = text_path.read_text(encoding="utf-8", errors="replace")
                     chars = len(text)
-                elif j.segment_ids or j.is_bake:
-                    # For segments/bake, use total length of segments in DB as a proxy
+                elif j.segment_ids:
+                    # For specific segments, sum ONLY their lengths
+                    from .db import get_connection
+                    with get_connection() as conn:
+                        cursor = conn.cursor()
+                        placeholders = ",".join(["?"] * len(j.segment_ids))
+                        cursor.execute(f"SELECT SUM(LENGTH(text_content)) FROM chapter_segments WHERE id IN ({placeholders})", j.segment_ids)
+                        row = cursor.fetchone()
+                        chars = row[0] if row and row[0] else 0
+                elif j.is_bake:
+                    # For bake, use total length of segments in DB as a proxy
                     from .db import get_connection
                     with get_connection() as conn:
                         cursor = conn.cursor()
@@ -756,45 +765,71 @@ def worker_loop(q: "queue.Queue[str]"):
                         tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
                         on_output(f"  [Batch {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
 
-                    for g_idx, group in enumerate(gen_groups):
-                        if cancel_check(): break
-
-                        combined_text = " ".join([s['text_content'].strip() for s in group])
-                        first_sid = group[0]['id']
-                        on_output(f"[Batch {g_idx+1}/{total_groups}] Synthesizing batch starting with {first_sid} ({len(group)} segments)...\n")
-
-                        # Resolve character profile
+                    # Build a consolidated script for single-session XTTS run
+                    full_script = []
+                    path_to_group = {}
+                    for group in gen_groups:
                         char_profile = group[0].get('speaker_profile_name')
                         sw = get_speaker_wavs(char_profile) or default_sw
-                        spk_set = get_speaker_settings(char_profile)
-                        seg_speed = spk_set['speed']
 
-                        seg_out = pdir / f"seg_{first_sid}.wav"
-                        processed_text = combined_text
+                        combined_text = " ".join([s['text_content'].strip() for s in group])
                         if j.safe_mode:
-                            processed_text = sanitize_for_xtts(processed_text)
-                            processed_text = safe_split_long_sentences(processed_text, target=SENT_CHAR_LIMIT)
+                            combined_text = sanitize_for_xtts(combined_text)
+                            combined_text = safe_split_long_sentences(combined_text, target=SENT_CHAR_LIMIT)
 
-                        rc = xtts_generate(
-                            text=processed_text,
-                            out_wav=seg_out,
-                            safe_mode=True,
-                            on_output=on_output,
+                        first_sid = group[0]['id']
+                        seg_out = pdir / f"seg_{first_sid}.wav"
+                        save_path_str = str(seg_out.absolute())
+
+                        full_script.append({
+                            "text": combined_text,
+                            "speaker_wav": sw,
+                            "save_path": save_path_str
+                        })
+                        path_to_group[save_path_str] = group
+
+                    script_path = pdir / f"gen_{j.id}_script.json"
+                    script_path.write_text(json.dumps(full_script), encoding="utf-8")
+                    on_output(f"Synthesizing {len(full_script)} groups in a single XTTS session...\n")
+
+                    groups_completed = [0]
+                    def gen_on_output(line):
+                        on_output(line)
+                        if "[SEGMENT_SAVED]" in line:
+                            saved_path = line.split("[SEGMENT_SAVED]")[1].strip()
+                            group = path_to_group.get(saved_path)
+                            if group:
+                                seg_filename = Path(saved_path).name
+                                for s in group:
+                                    update_segment(s['id'], audio_status='done', audio_file_path=seg_filename, audio_generated_at=time.time())
+                                groups_completed[0] += 1
+                                prog = (groups_completed[0] / len(gen_groups))
+                                update_job(jid, progress=prog)
+
+                    try:
+                        rc = xtts_generate_script(
+                            script_json_path=script_path,
+                            out_wav=pdir / f"output_{j.id}.wav", # Scratch output
+                            on_output=gen_on_output,
                             cancel_check=cancel_check,
-                            speaker_wav=sw,
-                            speed=seg_speed
+                            speed=speed
                         )
 
-                        if rc == 0 and seg_out.exists():
-                            for s in group:
-                                update_segment(s['id'], audio_status='done', audio_file_path=seg_out.name, audio_generated_at=time.time())
-                        else:
-                            for s in group:
-                                update_segment(s['id'], audio_status='error')
+                        if rc != 0:
+                            for group in gen_groups:
+                                first_sid = group[0]['id']
+                                seg_out = pdir / f"seg_{first_sid}.wav"
+                                if not seg_out.exists():
+                                    for s in group:
+                                        update_segment(s['id'], audio_status='error')
+                    finally:
+                        if script_path.exists():
+                            script_path.unlink()
+                        scratch_out = pdir / f"output_{j.id}.wav"
+                        if scratch_out.exists():
+                            scratch_out.unlink()
 
-                        update_job(jid, progress=(g_idx + 1) / total_groups)
-
-                    update_job(jid, status="done", finished_at=time.time(), progress=1.0)
+                    update_job(jid, status="done", progress=1.0, finished_at=time.time())
                     continue
 
                 # Check for segment-level character assignments

@@ -30,6 +30,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
   const segmentsRef = useRef<ChapterSegment[]>(segments);
+  const groupsRef = useRef<{ characterId: string | null; segments: ChapterSegment[] }[]>([]);
+  
   useEffect(() => {
     segmentsRef.current = segments;
   }, [segments]);
@@ -465,13 +467,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {(() => {
+                                const CHUNK_LIMIT = 500;
                                 const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
-                                const CHUNK_LIMIT = 250;
                                 
                                 segments.forEach(seg => {
                                     const lastGroup = groups[groups.length - 1];
                                     if (lastGroup && lastGroup.characterId === seg.character_id) {
-                                        // Count length using normalized whitespace just like the generator does
                                         const currentBatchText = lastGroup.segments.map(s => s.text_content.trim()).join(' ');
                                         const normalizedBatch = currentBatchText.replace(/\s+/g, ' ');
                                         const normalizedSeg = seg.text_content.trim().replace(/\s+/g, ' ');
@@ -483,6 +484,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     }
                                     groups.push({ characterId: seg.character_id, segments: [seg] });
                                 });
+
+                                // Stable groups reference for playback logic
+                                groupsRef.current = groups;
 
                                 const handleGenerate = async (sids: string[]) => {
                                     setGeneratingSegmentIds(prev => {
@@ -523,46 +527,34 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     }
                                 };
 
-                                // Helper: find all segment IDs in the same group (consecutive same-character) as queue[idx]
-                                const getGroupSegmentIds = (idx: number): string[] => {
-                                    const queue = playbackQueueRef.current;
-                                    if (idx >= queue.length) return [];
-                                    const segs = segmentsRef.current;
-                                    const anchorSeg = segs.find(s => s.id === queue[idx]);
-                                    if (!anchorSeg) return [queue[idx]];
-                                    const charId = anchorSeg.character_id;
+                                 // Helper: find the chunk (group of segments) that contains queue[idx]
+                                 const getGroupSegmentIds = (idx: number): string[] => {
+                                     const queue = playbackQueueRef.current;
+                                     if (idx >= queue.length) return [];
+                                     const segId = queue[idx];
+                                     
+                                     // Find which pre-calculated group this segment belongs to
+                                     const group = groupsRef.current.find(g => g.segments.some(s => s.id === segId));
+                                     if (!group) return [segId];
+                                     
+                                     // Return ONLY those segment IDs that are in the current playback queue
+                                     const groupIds = group.segments.map(s => s.id);
+                                     return queue.filter(qid => groupIds.includes(qid));
+                                 };
 
-                                    // Expand forward from idx while same character
-                                    let endIdx = idx;
-                                    while (endIdx + 1 < queue.length) {
-                                        const nextSeg = segs.find(s => s.id === queue[endIdx + 1]);
-                                        if (nextSeg && nextSeg.character_id === charId) {
-                                            endIdx++;
-                                        } else break;
-                                    }
-                                    // Expand backward from idx while same character
-                                    let startIdx = idx;
-                                    while (startIdx - 1 >= 0) {
-                                        const prevSeg = segs.find(s => s.id === queue[startIdx - 1]);
-                                        if (prevSeg && prevSeg.character_id === charId) {
-                                            startIdx--;
-                                        } else break;
-                                    }
-                                    return queue.slice(startIdx, endIdx + 1);
-                                };
-
-                                // Look-ahead: kick off generation for the NEXT GROUP in the queue
-                                const lookAheadGenerate = (idx: number) => {
-                                    const groupIds = getGroupSegmentIds(idx);
-                                    if (groupIds.length === 0) return;
-                                    const missingIds = groupIds.filter(id => {
-                                        const s = segmentsRef.current.find(seg => seg.id === id);
-                                        return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
-                                    });
-                                    if (missingIds.length > 0) {
-                                        handleGenerate(missingIds);
-                                    }
-                                };
+                                 // Look-ahead: kick off generation for the NEXT GROUP in the queue
+                                 const lookAheadGenerate = (idx: number) => {
+                                     if (idx >= playbackQueueRef.current.length) return;
+                                     const groupIds = getGroupSegmentIds(idx);
+                                     if (groupIds.length === 0) return;
+                                     const missingIds = groupIds.filter(id => {
+                                         const s = segmentsRef.current.find(seg => seg.id === id);
+                                         return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+                                     });
+                                     if (missingIds.length > 0) {
+                                         handleGenerate(missingIds);
+                                     }
+                                 };
 
                                 const playSegment = async (segmentId: string, fullQueue: string[]) => {
                                     // If clicking the same segment that's currently playing, toggle pause
@@ -702,11 +694,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     <button 
                                                         onClick={() => handleGenerate(group.segments.map(s => s.id))}
                                                         className="btn-ghost" 
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', background: 'rgba(255,255,255,0.1)' }}
+                                                        style={{ 
+                                                            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+                                                            justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', 
+                                                            background: anyProcessing ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+                                                            color: anyProcessing ? 'var(--accent)' : 'inherit'
+                                                        }}
                                                         disabled={anyProcessing}
                                                     >
                                                         <RefreshCw size={14} className={anyProcessing ? 'animate-spin' : ''} /> 
-                                                        {anyProcessing ? 'Generating...' : (allDone ? 'Regenerate' : 'Generate')}
+                                                        {anyProcessing ? 'Working...' : (allDone ? 'Regenerate' : 'Generate')}
                                                     </button>
                                                 </div>
                                             </div>
@@ -734,7 +731,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                             key={s.id}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                playSegment(s.id, allSegmentIds);
+                                                                // Play from this segment FORWARD only
+                                                                const queueFromHere = allSegmentIds.slice(allSegmentIds.indexOf(s.id));
+                                                                playSegment(s.id, queueFromHere);
                                                             }}
                                                             style={{ 
                                                                 cursor: 'pointer',
@@ -743,13 +742,31 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                                 background: isSegPlaying 
                                                                     ? `${char?.color || '#ffffff'}33` 
                                                                     : isSegGenerating 
-                                                                        ? 'rgba(255,255,255,0.05)' 
+                                                                        ? 'rgba(255,165,0,0.15)' 
                                                                         : 'transparent',
                                                                 borderBottom: isSegPlaying ? `2px solid ${char?.color || 'var(--accent)'}` : '2px solid transparent',
-                                                                transition: 'all 0.2s ease'
+                                                                transition: 'all 0.2s ease',
+                                                                opacity: (s.audio_status === 'done' || isSegPlaying || isSegGenerating) ? 1 : 0.45,
+                                                                filter: (s.audio_status === 'done' || isSegPlaying || isSegGenerating) ? 'none' : 'grayscale(1)',
+                                                                position: 'relative'
                                                             }}
                                                         >
                                                             {s.text_content}
+                                                            {isSegGenerating && sidx === 0 && (
+                                                                <span style={{ 
+                                                                    position: 'absolute', 
+                                                                    top: '-8px', 
+                                                                    right: '-8px',
+                                                                    background: 'var(--bg)',
+                                                                    borderRadius: '50%',
+                                                                    padding: '2px',
+                                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                                                                    display: 'flex',
+                                                                    zIndex: 10
+                                                                }}>
+                                                                    <RefreshCw size={10} className="animate-spin" color="var(--accent)" />
+                                                                </span>
+                                                            )}
                                                             {sidx < group.segments.length - 1 ? ' ' : ''}
                                                         </span>
                                                     );
