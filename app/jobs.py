@@ -600,8 +600,8 @@ def worker_loop(q: "queue.Queue[str]"):
                                 curr_full_idx = next((idx for idx, s in enumerate(segs) if s['id'] == curr['id']), -1)
 
                                 # Calculate combined length as it will be synthesize (with joining space)
-                                trimmed_group_text = " ".join([s['text_content'].strip() for s in current_group])
-                                combined_len = len(trimmed_group_text) + 1 + len(curr['text_content'].strip())
+                                trimmed_group_text = "".join([s['text_content'] for s in current_group])
+                                combined_len = len(trimmed_group_text) + len(curr['text_content'])
 
                                 same_char = curr['character_id'] == prev['character_id']
                                 is_consecutive = curr_full_idx == prev_full_idx + 1
@@ -618,7 +618,7 @@ def worker_loop(q: "queue.Queue[str]"):
                         # Debug logging for groups
                         for i, g in enumerate(missing_groups):
                             ids = [s['id'] for s in g]
-                            tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
+                            tlen = sum(len(s['text_content']) for s in g)
                             on_output(f"  [Bake Group {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
 
                         # Build a consolidated script so XTTS loads the model ONCE
@@ -629,7 +629,7 @@ def worker_loop(q: "queue.Queue[str]"):
                             char_profile = group[0].get('speaker_profile_name')
                             sw = get_speaker_wavs(char_profile) or default_sw
 
-                            combined_text = " ".join([s['text_content'].strip() for s in group])
+                            combined_text = "".join([s['text_content'] for s in group])
                             if j.safe_mode:
                                 combined_text = sanitize_for_xtts(combined_text)
                                 combined_text = safe_split_long_sentences(combined_text, target=SENT_CHAR_LIMIT)
@@ -744,8 +744,8 @@ def worker_loop(q: "queue.Queue[str]"):
                             prev_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == prev['id']), -1)
                             curr_full_idx = next((idx for idx, s in enumerate(all_segs) if s['id'] == curr['id']), -1)
 
-                            trimmed_group_text = " ".join([s['text_content'].strip() for s in current_group])
-                            combined_len = len(trimmed_group_text) + 1 + len(curr['text_content'].strip())
+                            trimmed_group_text = "".join([s['text_content'] for s in current_group])
+                            combined_len = len(trimmed_group_text) + len(curr['text_content'])
 
                             same_char = curr['character_id'] == prev['character_id']
                             is_consecutive = curr_full_idx == prev_full_idx + 1
@@ -762,7 +762,7 @@ def worker_loop(q: "queue.Queue[str]"):
                     on_output(f"Grouped into {total_groups} generation batches.\n")
                     for i, g in enumerate(gen_groups):
                         ids = [s['id'] for s in g]
-                        tlen = sum(len(s['text_content'].strip()) for s in g) + (len(g)-1)
+                        tlen = sum(len(s['text_content']) for s in g)
                         on_output(f"  [Batch {i+1}] {len(g)} segments, len={tlen}: {ids}\n")
 
                     # Build a consolidated script for single-session XTTS run
@@ -772,7 +772,7 @@ def worker_loop(q: "queue.Queue[str]"):
                         char_profile = group[0].get('speaker_profile_name')
                         sw = get_speaker_wavs(char_profile) or default_sw
 
-                        combined_text = " ".join([s['text_content'].strip() for s in group])
+                        combined_text = "".join([s['text_content'] for s in group])
                         if j.safe_mode:
                             combined_text = sanitize_for_xtts(combined_text)
                             combined_text = safe_split_long_sentences(combined_text, target=SENT_CHAR_LIMIT)

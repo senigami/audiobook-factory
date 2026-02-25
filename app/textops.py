@@ -52,6 +52,14 @@ from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
 CHAPTER_RE = re.compile(r"^(Chapter\s+(\d+)\s*:\s*.+)$", re.MULTILINE)
 SENT_SPLIT_RE = re.compile(r'(.+?[.!?]["\'”’]*)(\s+|$)', re.DOTALL)
 
+def normalize_newlines(text: str) -> str:
+    """Reduces 2+ newlines to 1, and trims whitespace."""
+    if not text:
+        return ""
+    # Reduce consecutive newlines to maximum of 1
+    text = re.sub(r'\n{2,}', '\n', text)
+    return text.strip()
+
 def preprocess_text(text: str) -> str:
     """Foundational cleaning to remove unspoken characters before splitting or analysis."""
     if not text:
@@ -142,17 +150,28 @@ def write_chapters_to_folder(chapters, out_dir: Path, prefix: str = "chapter", i
         written.append(fname)
     return written
 
-def split_sentences(text: str):
+def split_sentences(text: str, preserve_gap: bool = False):
+    """
+    Splits text into (sentence, start_idx, end_idx).
+    If preserve_gap is True, the sentence will include its trailing whitespace/newlines.
+    """
     last_end = 0
     for m in SENT_SPLIT_RE.finditer(text):
-        s = m.group(1).strip()
-        if s:
-            yield s, m.start(1), m.end(1)
+        if preserve_gap:
+            # Full match includes the trailing space group
+            s = m.group(0)
+            yield s, m.start(0), m.end(0)
+        else:
+            s = m.group(1).strip()
+            if s:
+                yield s, m.start(1), m.end(1)
         last_end = m.end()
 
-    remainder = text[last_end:].strip()
-    if remainder:
-        yield remainder, last_end, len(text)
+    remainder = text[last_end:]
+    if remainder.strip() or (preserve_gap and remainder):
+        if not preserve_gap:
+            remainder = remainder.strip()
+        yield remainder, last_end, last_end + len(remainder)
 
 def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str:
     def split_one(s: str) -> List[str]:
@@ -190,10 +209,22 @@ def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str
             i = j
         return out
 
-    pieces = []
-    for s, _, _ in split_sentences(text):
-        pieces.extend(split_one(s) if len(s) > target else [s])
-    return "\n".join(pieces)
+    lines = text.split('\n')
+    processed_lines = []
+    for line in lines:
+        if not line.strip():
+            processed_lines.append("")
+            continue
+
+        pieces = []
+        for s, _, _ in split_sentences(line):
+            pieces.extend(split_one(s) if len(s) > target else [s])
+        processed_lines.append(" ".join(pieces))
+
+    result = "\n".join(processed_lines)
+    # Final newline normalization
+    result = re.sub(r'\n{2,}', '\n', result)
+    return result.strip()
 
 def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
     text = preprocess_text(text)
@@ -220,49 +251,62 @@ def find_long_sentences(text: str, limit: int = SENT_CHAR_LIMIT):
 #     Merge short sentences (<= 2 words) into neighbors using forward-favored semicolons.
 
 def clean_text_for_tts(text: str) -> str:
-    """Normalize punctuation and characters to avoid TTS speech artifacts."""
-    # Remove unspoken formatting characters at the absolute start
-    text = preprocess_text(text)
+    """Normalize punctuation and characters to avoid TTS speech artifacts, preserving newlines."""
+    if not text:
+        return ""
 
-    # Handle smart quotes and then strip all quotes (standard and normalized)
-    text = text.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
-    text = text.replace('"', '')
+    # Split into lines to preserve newlines during cleaning
+    lines = text.split('\n')
+    cleaned_lines = []
 
-    # Normalize acronyms/initials: A.B. if 2 or more. A. alone is a period.
-    # This ensures "A.B.C." isn't split into 4 sentences but "It is I." is handled.
-    pattern = r'\b(?:[A-Za-z]\.){2,}'
-    text = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), text)
+    for line in lines:
+        if not line.strip():
+            cleaned_lines.append("")
+            continue
 
-    # Normalize fractions (444/7000 -> 444 out of 7000)
-    text = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', text)
+        l = preprocess_text(line)
 
-    # Strip leading dots/ellipses/punctuation that often cause hallucinations at the start of blocks
-    text = text.lstrip(" .…!?,")
-    # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
-    text = text.replace("—", ", ").replace("…", ". ").replace("...", ". ")
+        # Handle smart quotes and then strip all quotes (standard and normalized)
+        l = l.replace('“', '').replace('”', '').replace('‘', "'").replace('’', "'")
+        l = l.replace('"', '')
 
-    # Common redundant punctuation artifacts
-    text = text.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
-    text = text.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
+        # Normalize acronyms/initials: A.B. if 2 or more. A. alone is a period.
+        pattern = r'\b(?:[A-Za-z]\.){2,}'
+        l = re.sub(pattern, lambda m: m.group(0).replace('.', ' '), l)
 
-    # Normalize spaces after punctuation (if missing)
-    text = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', text)
-    # Collapse multiple spaces
-    text = re.sub(r' +', ' ', text)
-    # Remove spaces before punctuation
-    text = re.sub(r' +([,;:])', r'\1', text)
-    # Remove redundant punctuation
-    # Fix !. -> ! and ?. -> ? but preserve ... and ..
-    text = re.sub(r'([!?])\.+', r'\1', text)
-    # Fix ., -> , and ,. -> . and .; -> ; etc
-    text = text.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
-    # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
-    text = re.sub(r'([!?])\1+', r'\1', text)
+        # Normalize fractions (444/7000 -> 444 out of 7000)
+        l = re.sub(r'(\d+)/(\d+)', r'\1 out of \2', l)
 
-    # Consolidate short sentences (<= 2 words) (like "Wait!" or "No way!") with neighbors
-    text = consolidate_single_word_sentences(text.strip())
+        # Strip leading dots/ellipses/punctuation
+        l = l.lstrip(" .…!?,")
+        # Handle dashes and ellipses. Use commas for ellipses to prevent breaks.
+        l = l.replace("—", ", ").replace("…", ". ").replace("...", ". ")
 
-    return text.strip()
+        # Common redundant punctuation artifacts
+        l = l.replace(".' .", ". ").replace(".' ", ". ").replace("'.", ".'")
+        l = l.replace('".', '."').replace('?"', '"?').replace('!"', '"!')
+
+        # Normalize spaces after punctuation (if missing)
+        l = re.sub(r'([.!?])(?=[^ \s.!?\'"])', r'\1 ', l)
+        # Collapse multiple spaces
+        l = re.sub(r' +', ' ', l)
+        # Remove spaces before punctuation
+        l = re.sub(r' +([,;:])', r'\1', l)
+        # Remove redundant punctuation
+        l = re.sub(r'([!?])\.+', r'\1', l)
+        # Fix ., -> , and ,. -> . and .; -> ; etc
+        l = l.replace(".,", ",").replace(",.", ".").replace(".;", ";").replace(". :", ":")
+        # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
+        l = re.sub(r'([!?])\1+', r'\1', l)
+
+        # Consolidate short sentences within this LINE
+        l = consolidate_single_word_sentences(l.strip())
+        cleaned_lines.append(l)
+
+    # Join lines back, then normalize to collapse any resulting empty lines beyond 1
+    result = '\n'.join(cleaned_lines)
+    result = re.sub(r'\n{2,}', '\n', result)
+    return result.strip()
 
 def consolidate_single_word_sentences(text: str) -> str:
     """
@@ -313,13 +357,15 @@ def sanitize_for_xtts(text: str) -> str:
     # 1. Perform base TTS cleaning (includes bracket stripping and consolidation)
     text = clean_text_for_tts(text)
 
-    # Normalize all newlines and whitespace/tabs early
-    text = text.replace("\r", " ").replace("\t", " ").replace("\n", " ")
+    # Preserve newlines but normalize other whitespace
+    text = text.replace("\r", " ").replace("\t", " ")
 
     # 2. Remove any remaining non-ASCII characters that might cause hallucinations
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
-    # Collapse multiple spaces and trim
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'[^\x00-\x7F\n]+', '', text)
+    # Collapse multiple horizontal spaces and trim
+    text = re.sub(r'[ \t]+', ' ', text).strip()
+    # Normalize multiple newlines to maximum of 1
+    text = re.sub(r'\n{2,}', '\n', text)
 
     # 3. Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
     if text and not re.search(r'[.!?]["\')\]\s]*$', text):
@@ -333,25 +379,30 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
     This gives XTTS the maximum context and prevents choppiness from short lines.
     If pad is True, each chunk is padded with spaces up to the limit.
     """
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    if not lines:
+    if not text:
         return ""
 
+    # Split into blocks by literal newlines to respect paragraphing
+    raw_lines = text.split('\n')
     packed = []
     current_chunk = ""
 
-    for line in lines:
-        if current_chunk and len(current_chunk) + 1 + len(line) <= limit:
-            connector = "" if line[0] in ",;:" else " "
-            current_chunk += connector + line
-        elif not current_chunk and len(line) <= limit:
-            current_chunk = line
+    for line in raw_lines:
+        line_content = line.strip()
+        # If it's an empty line (paragraph break), we treat it as part of the previous or next chunk
+        # But we must ensure it doesn't break the chunking greedy logic too much.
+        separator = "\n" if current_chunk else ""
+
+        if current_chunk and len(current_chunk) + len(separator) + len(line_content) <= limit:
+            current_chunk += separator + line_content
+        elif not current_chunk and len(line_content) <= limit:
+            current_chunk = line_content
         else:
             if current_chunk:
                 if pad:
                     current_chunk = current_chunk.ljust(limit)
                 packed.append(current_chunk)
-            current_chunk = line
+            current_chunk = line_content
 
     if current_chunk:
         if pad:

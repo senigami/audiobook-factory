@@ -151,29 +151,35 @@ def startup_event():
     except RuntimeError:
         pass
 
-    # Re-populate in-memory queue from state on restart
+    # Clear the in-memory queue and strictly "queued" or "running" jobs from state on restart
+    # users want a clean slate when they restart the server, not auto-resume of partial jobs.
     existing = get_jobs()
-    count = 0
+    to_delete = []
     for jid, j in existing.items():
         if j.status == "queued" or j.status == "running":
-            # Reset stale jobs to 'cancelled' on startup to prevent auto-start
-            update_job(jid,
-                       status="cancelled",
-                       progress=0.0,
-                       started_at=None,
-                       log="Reset on startup.",
-                       finished_at=None,
-                       eta_seconds=None,
-                       error="Restarted",
-                       warning_count=0)
-            count += 1
-    if count > 0:
-        print(f"recovered {count} jobs from state")
+            to_delete.append(jid)
 
-    # 2. Reconcile DB queue with what's actually still in memory/state
-    from .db import reconcile_queue_status
-    active_ids = list(get_jobs().keys()) # Only jobs that still exist in state.json
-    reconcile_queue_status(active_ids)
+    if to_delete:
+        from .state import delete_jobs
+        delete_jobs(to_delete)
+        print(f"Cleared {len(to_delete)} pending/running jobs on startup.")
+
+    # 2. Reconcile DB queue - clear everything pending since we want a clean slate
+    from .db import get_connection
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Mark any non-finished chapters back to unprocessed if they were in the middle of generation
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed' 
+                WHERE audio_status = 'processing'
+            """)
+            # Clear the queue entirely of non-finished items
+            cursor.execute("DELETE FROM processing_queue WHERE status NOT IN ('done', 'failed', 'cancelled')")
+            conn.commit()
+    except Exception as e:
+        print(f"Warning: Failed to clear DB queue on startup: {e}")
 
     # Register bridge between state updates and WebSocket broadcast
     from .state import add_job_listener
@@ -530,6 +536,32 @@ def api_update_segment(
 
     return JSONResponse({"status": "success"})
 
+@app.put("/api/segments")
+async def api_update_segments_bulk(
+    segment_ids: List[str] = Form(...),
+    character_id: Optional[str] = Form(None),
+    audio_status: Optional[str] = Form(None)
+):
+    # Handle both ["id1,id2"] and ["id1", "id2"]
+    actual_ids = []
+    for item in segment_ids:
+        if "," in item:
+            actual_ids.extend([s.strip() for s in item.split(",") if s.strip()])
+        else:
+            actual_ids.append(item.strip())
+
+    updates = {}
+    if character_id is not None:
+        updates["character_id"] = character_id if character_id != "" else None
+    if audio_status is not None:
+        updates["audio_status"] = audio_status
+
+    if updates and actual_ids:
+        from .db import update_segments_bulk
+        update_segments_bulk(actual_ids, **updates)
+
+    return JSONResponse({"status": "success"})
+
 @app.post("/api/chapters/{chapter_id}/bake")
 def api_bake_chapter(chapter_id: str):
     """Stitches all segments of a chapter into a final audio file."""
@@ -690,60 +722,59 @@ async def api_analyze_chapter(chapter_id: str):
                 curr_group = {"character_id": s['character_id'], "segments": [s]}
         groups.append(curr_group)
 
-    # 2. Within each group, pack the text into "mini-chapter" blocks as they will be generated
+    # 2. Within each group, reproduce the exact character-limit grouping from jobs.py
     voice_chunks = []
+    from .textops import sanitize_for_xtts, safe_split_long_sentences
+
     for g in groups:
         char = char_map.get(g['character_id'])
         char_name = char['name'] if char else "NARRATOR"
         char_color = char['color'] if char else "#94a3b8"
 
-        # Mirror pack_text_to_limit logic but with metadata
-        lines = [line.strip() for line in " ".join([s['text_content'].strip() for s in g['segments']]).split('\n') if line.strip()]
+        segs_in_group = g['segments']
+        if not segs_in_group:
+            continue
 
-        current_chunk_lines = []
-        current_len = 0
+        # Greedy packing within consecutive-character group
+        current_batch = [segs_in_group[0]]
+        for i in range(1, len(segs_in_group)):
+            curr_seg = segs_in_group[i]
 
-        def commit_chunk():
-            if not current_chunk_lines: return
-            concatenated = ""
-            for line in current_chunk_lines:
-                if concatenated:
-                    connector = "" if line[0] in ",;:" else " "
-                    concatenated += connector + line
-                else:
-                    concatenated = line
+            # Match jobs.py logic: "".join then check len
+            current_batch_text = "".join([s['text_content'] for s in current_batch])
+            combined_len = len(current_batch_text) + len(curr_seg['text_content'])
 
-            raw_len = len(concatenated)
-            padded_text = concatenated.ljust(SENT_CHAR_LIMIT)
+            if combined_len <= SENT_CHAR_LIMIT:
+                current_batch.append(curr_seg)
+            else:
+                # Commit previous batch
+                combined = "".join([s['text_content'] for s in current_batch])
+                # Clean/Split as the engine does
+                final_text = sanitize_for_xtts(combined)
+                final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
+
+                voice_chunks.append({
+                    "character_name": char_name,
+                    "character_color": char_color,
+                    "text": final_text,
+                    "raw_length": len(final_text),
+                    "sent_count": len(current_batch)
+                })
+                current_batch = [curr_seg]
+
+        # Final batch in group
+        if current_batch:
+            combined = "".join([s['text_content'] for s in current_batch])
+            final_text = sanitize_for_xtts(combined)
+            final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
 
             voice_chunks.append({
                 "character_name": char_name,
                 "character_color": char_color,
-                "text": padded_text,
-                "raw_length": raw_len,
-                "sent_count": len(current_chunk_lines)
+                "text": final_text,
+                "raw_length": len(final_text),
+                "sent_count": len(current_batch)
             })
-
-        # We assume the input to pack_text_to_limit has already been cleaned/split
-        # Let's perform those steps for the group text
-        group_text = " ".join([s['text_content'].strip() for s in g['segments']])
-        cleaned = clean_text_for_tts(group_text)
-        split = safe_split_long_sentences(cleaned, target=SENT_CHAR_LIMIT)
-        split_lines = [ln.strip() for ln in split.split('\n') if ln.strip()]
-
-        for line in split_lines:
-            connector_len = 0
-            if current_chunk_lines:
-                connector_len = 0 if line[0] in ",;:" else 1
-
-            if current_chunk_lines and current_len + connector_len + len(line) <= SENT_CHAR_LIMIT:
-                current_chunk_lines.append(line)
-                current_len += connector_len + len(line)
-            else:
-                commit_chunk()
-                current_chunk_lines = [line]
-                current_len = len(line)
-        commit_chunk()
 
     return JSONResponse({
         "status": "success",
@@ -1399,20 +1430,41 @@ def reset_chapter(chapter_file: str = Form(...)):
                 f.unlink()
                 count += 1
 
-    # 3. Update job records to 'cancelled' so they don't auto-start
-    # but preserve custom titles etc.
-    for jid, j in existing.items():
-        if j.chapter_file == chapter_file:
-            update_job(jid,
-                       status="cancelled",
-                       progress=0.0,
-                       output_wav=None,
-                       output_mp3=None,
-                       log="Audio reset by user.",
-                       error=None,
-                       warning_count=0)
+    # 3. Cancel any active jobs for this chapter to prevent re-generation
+    cancel_chapter_generation(chapter_id)
 
-    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
+    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files and cancelled active jobs"})
+
+@app.post("/api/chapters/{chapter_id}/cancel")
+def cancel_chapter_generation(chapter_id: str):
+    """Cancels all active jobs (granular or full chapter) associated with this chapter id."""
+    from .jobs import cancel as cancel_job, get_jobs
+    from .state import update_job
+    from .db import get_connection
+
+    # 1. Cancel in-memory jobs from state.json
+    existing = get_jobs()
+    cancelled_count = 0
+    for jid, j in existing.items():
+        # Granular jobs have chapter_id, full chapter jobs match project/chapter_file logic
+        # check both for safety
+        if getattr(j, 'chapter_id', None) == chapter_id or j.chapter_file == chapter_id:
+            cancel_job(jid)
+            update_job(jid, status="cancelled", log="Cancelled by user via chapter editor.")
+            cancelled_count += 1
+
+    # 2. Update DB processing queue
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE processing_queue SET status = 'cancelled' WHERE chapter_id = ? AND status IN ('queued', 'running')", (chapter_id,))
+            cursor.execute("UPDATE chapters SET audio_status = 'unprocessed' WHERE id = ? AND audio_status = 'processing'", (chapter_id,))
+            cursor.execute("UPDATE chapter_segments SET audio_status = 'unprocessed' WHERE chapter_id = ? AND audio_status = 'processing'", (chapter_id,))
+            conn.commit()
+    except Exception as e:
+        print(f"Error cancelling chapter {chapter_id} in DB: {e}")
+
+    return JSONResponse({"status": "ok", "cancelled_count": cancelled_count})
 
 @app.delete("/api/chapter/{filename}")
 def api_delete_legacy_chapter(filename: str):

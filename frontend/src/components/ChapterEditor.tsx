@@ -30,7 +30,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
   const segmentsRef = useRef<ChapterSegment[]>(segments);
-  const groupsRef = useRef<{ characterId: string | null; segments: ChapterSegment[] }[]>([]);
   
   useEffect(() => {
     segmentsRef.current = segments;
@@ -51,11 +50,191 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [editorTab, setEditorTab] = useState<'edit' | 'preview' | 'production' | 'performance'>('edit');
   const [playingSegmentId, setPlayingSegmentId] = useState<string | null>(null);
   const [generatingSegmentIds, setGeneratingSegmentIds] = useState<Set<string>>(new Set());
+  
+  // Group segments for Block UI (matches backend chunking logic)
+  const chunkGroups = React.useMemo(() => {
+    const limit = 500;
+    const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
+    
+    segments.forEach(seg => {
+        const lastGroup = groups[groups.length - 1];
+        if (lastGroup && lastGroup.characterId === seg.character_id) {
+            const currentBatchText = lastGroup.segments.map(s => s.text_content).join('');
+            
+            if (currentBatchText.length + seg.text_content.length <= limit) {
+                lastGroup.segments.push(seg);
+                return;
+            }
+        }
+        groups.push({ characterId: seg.character_id, segments: [seg] });
+    });
+    return groups;
+  }, [segments]);
+
+  // Group segments strictly by paragraph breaks for Production/Voice Assignment
+  const paragraphGroups = React.useMemo(() => {
+    const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
+    
+    segments.forEach(seg => {
+        const lastGroup = groups[groups.length - 1];
+        const lastSeg = lastGroup?.segments[lastGroup.segments.length - 1];
+        const isNewParagraph = lastSeg && (lastSeg.text_content.includes('\n\n') || lastSeg.text_content.includes('\r\n\r\n'));
+
+        // For Production tab, we only group if they are in the same paragraph AND same character (if already assigned)
+        // Actually, if we want to assign a voice to a paragraph, they might have different characters initially (assigned vs not).
+        // Let's stick to literal paragraph structure.
+        if (lastGroup && !isNewParagraph) {
+            lastGroup.segments.push(seg);
+        } else {
+            groups.push({ characterId: seg.character_id, segments: [seg] });
+        }
+    });
+    return groups;
+  }, [segments]);
+
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const playbackQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const allSegmentIds = segments.map(s => s.id);
+
+  const stopPlayback = () => {
+    if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+    }
+    setPlayingSegmentId(null);
+    isPlayingRef.current = false;
+    playbackQueueRef.current = [];
+  };
+
+  const togglePause = () => {
+    const audio = audioPlayerRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+        audio.play().catch(() => {});
+    } else {
+        audio.pause();
+    }
+  };
+
+  const handleGenerate = async (sids: string[]) => {
+    setGeneratingSegmentIds(prev => {
+        const next = new Set(prev);
+        sids.forEach(id => next.add(id));
+        return next;
+    });
+    try {
+        await api.generateSegments(sids);
+    } catch (e) {
+        console.error(e);
+        setGeneratingSegmentIds(prev => {
+            const next = new Set(prev);
+            sids.forEach(id => next.delete(id));
+            return next;
+        });
+    }
+  };
+
+  const getGroupSegmentIds = (idx: number): string[] => {
+     const queue = playbackQueueRef.current;
+     if (idx >= queue.length) return [];
+     const segId = queue[idx];
+     const group = chunkGroups.find(g => g.segments.some(s => s.id === segId));
+     if (!group) return [segId];
+     const groupIds = group.segments.map(s => s.id);
+     return queue.filter(qid => groupIds.includes(qid));
+  };
+
+  const lookAheadGenerate = (idx: number) => {
+     if (idx >= playbackQueueRef.current.length) return;
+     const groupIds = getGroupSegmentIds(idx);
+     if (groupIds.length === 0) return;
+     const missingIds = groupIds.filter(id => {
+         const s = segmentsRef.current.find(seg => seg.id === id);
+         return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+     });
+     if (missingIds.length > 0) {
+         handleGenerate(missingIds);
+     }
+  };
+
+  const playSegment = async (segmentId: string, fullQueue: string[]) => {
+    if (playingSegmentId === segmentId && audioPlayerRef.current) {
+        togglePause();
+        return;
+    }
+
+    stopPlayback();
+    isPlayingRef.current = true;
+    playbackQueueRef.current = fullQueue;
+    
+    const currentIndex = fullQueue.indexOf(segmentId);
+    if (currentIndex === -1) return;
+
+    const playFromIndex = async (idx: number) => {
+        if (!isPlayingRef.current || idx >= playbackQueueRef.current.length) {
+            if (idx >= playbackQueueRef.current.length) stopPlayback();
+            return;
+        }
+
+        const currentId = playbackQueueRef.current[idx];
+        const seg = segmentsRef.current.find(s => s.id === currentId);
+        if (!seg) return;
+
+        setPlayingSegmentId(currentId);
+
+        const currentGroup = getGroupSegmentIds(idx);
+        const nextGroupStartIdx = idx + currentGroup.length - (currentGroup.indexOf(currentId));
+        lookAheadGenerate(nextGroupStartIdx);
+
+        if (!seg.audio_file_path || seg.audio_status !== 'done') {
+            const groupIds = getGroupSegmentIds(idx);
+            const missingInGroup = groupIds.filter(id => {
+                const s = segmentsRef.current.find(seg => seg.id === id);
+                return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+            });
+            if (missingInGroup.length > 0) {
+                handleGenerate(missingInGroup);
+            }
+            if (isPlayingRef.current) {
+                setTimeout(() => playFromIndex(idx), 500);
+            }
+            return;
+        }
+
+        const url = projectId 
+            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
+            : `/out/xtts/${seg.audio_file_path}`;
+        const audio = new Audio(url);
+        
+        audio.onended = () => {
+            if (!isPlayingRef.current) return;
+            let nextIdx = idx + 1;
+            while (nextIdx < playbackQueueRef.current.length) {
+                const nextId = playbackQueueRef.current[nextIdx];
+                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
+                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
+                    nextIdx++;
+                } else {
+                    break;
+                }
+            }
+            playFromIndex(nextIdx);
+        };
+        
+        audio.onerror = () => { if (isPlayingRef.current) playFromIndex(idx + 1); };
+        audio.play().catch(e => {
+            console.error("Playback failed", e);
+            if (isPlayingRef.current) playFromIndex(idx + 1);
+        });
+        audioPlayerRef.current = audio;
+    };
+
+    await playFromIndex(currentIndex);
+  };
 
   useEffect(() => {
     loadChapter();
@@ -197,15 +376,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
-  const handleAssignCharacter = async (segmentId: string, charId: string | null) => {
-    try {
-      await api.updateSegment(segmentId, { character_id: charId });
-      setSegments(prev => prev.map(s => s.id === segmentId ? { ...s, character_id: charId } : s));
-    } catch (e) {
-      console.error("Failed to assign character", e);
-    }
-  };
-
   const handleUpdateCharacterColor = async (id: string, color: string) => {
     try {
       setCharacters(prev => prev.map(c => c.id === id ? { ...c, color } : c));
@@ -217,9 +387,23 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
-  const handleBulkAssign = async (segmentId: string) => {
+  const handleParagraphBulkAssign = async (segmentIds: string[]) => {
     if (!selectedCharacterId) return;
-    await handleAssignCharacter(segmentId, selectedCharacterId);
+    try {
+        await api.updateSegmentsBulk(segmentIds, { character_id: selectedCharacterId });
+        setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { ...s, character_id: selectedCharacterId } : s));
+    } catch (e) {
+        console.error("Bulk assign failed", e);
+    }
+  };
+
+  const handleParagraphBulkReset = async (segmentIds: string[]) => {
+    try {
+        await api.updateSegmentsBulk(segmentIds, { character_id: null });
+        setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { ...s, character_id: null } : s));
+    } catch (e) {
+        console.error("Bulk reset failed", e);
+    }
   };
 
   const handleNavigate = async (dir: 'next' | 'prev') => {
@@ -359,6 +543,28 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                 Queue
             </button>
 
+            {(generatingSegmentIds.size > 0 || chapter?.audio_status === 'processing') && (
+                <button
+                    onClick={async () => {
+                        try {
+                            await api.cancelChapterGeneration(chapterId);
+                            setGeneratingSegmentIds(new Set());
+                            loadChapter(); // Refresh status
+                        } catch (e) {
+                            console.error("Failed to cancel", e);
+                        }
+                    }}
+                    className="btn-ghost"
+                    style={{
+                        padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: 'var(--error)', 
+                        border: '1px solid var(--error-muted)', borderRadius: '8px',
+                        display: 'flex', alignItems: 'center', gap: '0.4rem'
+                    }}
+                >
+                    Stop All
+                </button>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                 <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success-muted)" />)}
@@ -466,187 +672,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {(() => {
-                                const CHUNK_LIMIT = 500;
-                                const groups: { characterId: string | null; segments: ChapterSegment[] }[] = [];
-                                
-                                segments.forEach(seg => {
-                                    const lastGroup = groups[groups.length - 1];
-                                    if (lastGroup && lastGroup.characterId === seg.character_id) {
-                                        const currentBatchText = lastGroup.segments.map(s => s.text_content.trim()).join(' ');
-                                        const normalizedBatch = currentBatchText.replace(/\s+/g, ' ');
-                                        const normalizedSeg = seg.text_content.trim().replace(/\s+/g, ' ');
-                                        
-                                        if (normalizedBatch.length + 1 + normalizedSeg.length <= CHUNK_LIMIT) {
-                                            lastGroup.segments.push(seg);
-                                            return;
-                                        }
-                                    }
-                                    groups.push({ characterId: seg.character_id, segments: [seg] });
-                                });
-
-                                // Stable groups reference for playback logic
-                                groupsRef.current = groups;
-
-                                const handleGenerate = async (sids: string[]) => {
-                                    setGeneratingSegmentIds(prev => {
-                                        const next = new Set(prev);
-                                        sids.forEach(id => next.add(id));
-                                        return next;
-                                    });
-                                    try {
-                                        await api.generateSegments(sids);
-                                        // Completion is handled by the segments_updated WebSocket event
-                                    } catch (e) {
-                                        console.error(e);
-                                        setGeneratingSegmentIds(prev => {
-                                            const next = new Set(prev);
-                                            sids.forEach(id => next.delete(id));
-                                            return next;
-                                        });
-                                    }
-                                };
-
-                                const stopPlayback = () => {
-                                    if (audioPlayerRef.current) {
-                                        audioPlayerRef.current.pause();
-                                        audioPlayerRef.current = null;
-                                    }
-                                    setPlayingSegmentId(null);
-                                    isPlayingRef.current = false;
-                                    playbackQueueRef.current = [];
-                                };
-
-                                const togglePause = () => {
-                                    const audio = audioPlayerRef.current;
-                                    if (!audio) return;
-                                    if (audio.paused) {
-                                        audio.play().catch(() => {});
-                                    } else {
-                                        audio.pause();
-                                    }
-                                };
-
-                                 // Helper: find the chunk (group of segments) that contains queue[idx]
-                                 const getGroupSegmentIds = (idx: number): string[] => {
-                                     const queue = playbackQueueRef.current;
-                                     if (idx >= queue.length) return [];
-                                     const segId = queue[idx];
-                                     
-                                     // Find which pre-calculated group this segment belongs to
-                                     const group = groupsRef.current.find(g => g.segments.some(s => s.id === segId));
-                                     if (!group) return [segId];
-                                     
-                                     // Return ONLY those segment IDs that are in the current playback queue
-                                     const groupIds = group.segments.map(s => s.id);
-                                     return queue.filter(qid => groupIds.includes(qid));
-                                 };
-
-                                 // Look-ahead: kick off generation for the NEXT GROUP in the queue
-                                 const lookAheadGenerate = (idx: number) => {
-                                     if (idx >= playbackQueueRef.current.length) return;
-                                     const groupIds = getGroupSegmentIds(idx);
-                                     if (groupIds.length === 0) return;
-                                     const missingIds = groupIds.filter(id => {
-                                         const s = segmentsRef.current.find(seg => seg.id === id);
-                                         return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
-                                     });
-                                     if (missingIds.length > 0) {
-                                         handleGenerate(missingIds);
-                                     }
-                                 };
-
-                                const playSegment = async (segmentId: string, fullQueue: string[]) => {
-                                    // If clicking the same segment that's currently playing, toggle pause
-                                    if (playingSegmentId === segmentId && audioPlayerRef.current) {
-                                        togglePause();
-                                        return;
-                                    }
-
-                                    stopPlayback();
-                                    isPlayingRef.current = true;
-                                    playbackQueueRef.current = fullQueue;
-                                    
-                                    const currentIndex = fullQueue.indexOf(segmentId);
-                                    if (currentIndex === -1) return;
-
-                                    const playFromIndex = async (idx: number) => {
-                                        if (!isPlayingRef.current || idx >= playbackQueueRef.current.length) {
-                                            if (idx >= playbackQueueRef.current.length) stopPlayback();
-                                            return;
-                                        }
-
-                                        const currentId = playbackQueueRef.current[idx];
-                                        const seg = segmentsRef.current.find(s => s.id === currentId);
-                                        if (!seg) return;
-
-                                        setPlayingSegmentId(currentId);
-
-                                        // Kick off look-ahead for the NEXT GROUP while we deal with this one
-                                        const currentGroup = getGroupSegmentIds(idx);
-                                        const nextGroupStartIdx = idx + currentGroup.length - (currentGroup.indexOf(currentId));
-                                        lookAheadGenerate(nextGroupStartIdx);
-
-                                        if (!seg.audio_file_path || seg.audio_status !== 'done') {
-                                            // This segment's group isn't ready yet. Generate the whole group.
-                                            const groupIds = getGroupSegmentIds(idx);
-                                            const missingInGroup = groupIds.filter(id => {
-                                                const s = segmentsRef.current.find(seg => seg.id === id);
-                                                return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
-                                            });
-                                            if (missingInGroup.length > 0) {
-                                                handleGenerate(missingInGroup);
-                                            }
-                                            // Wait for WebSocket update to make it ready, then retry
-                                            if (isPlayingRef.current) {
-                                                setTimeout(() => playFromIndex(idx), 500);
-                                            }
-                                            return;
-                                        }
-
-                                        startAudio(seg, idx);
-                                    };
-
-                                    const startAudio = (seg: ChapterSegment, idx: number) => {
-                                        const url = projectId 
-                                            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
-                                            : `/out/xtts/${seg.audio_file_path}`;
-                                        const audio = new Audio(url);
-                                        
-                                        audio.onended = () => {
-                                            if (!isPlayingRef.current) return;
-                                            
-                                            // Advance past segments sharing this exact audio file
-                                            let nextIdx = idx + 1;
-                                            while (nextIdx < playbackQueueRef.current.length) {
-                                                const nextId = playbackQueueRef.current[nextIdx];
-                                                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
-                                                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
-                                                    nextIdx++;
-                                                } else {
-                                                    break;
-                                                }
-                                            }
-                                            playFromIndex(nextIdx);
-                                        };
-                                        
-                                        audio.onerror = () => {
-                                            if (isPlayingRef.current) playFromIndex(idx + 1);
-                                        };
-
-                                        audio.play().catch(e => {
-                                            console.error("Playback failed", e);
-                                            if (isPlayingRef.current) playFromIndex(idx + 1);
-                                        });
-                                        audioPlayerRef.current = audio;
-                                    };
-
-                                    await playFromIndex(currentIndex);
-                                };
-
-                                const allSegmentIds = segments.map(s => s.id);
-
-                                return groups.map((group, gidx) => {
+                                {chunkGroups.map((group, gidx) => {
                                     const char = characters.find(c => c.id === group.characterId);
                                     const allDone = group.segments.every(s => s.audio_status === 'done');
                                     const anyProcessing = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
@@ -697,8 +723,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                         style={{ 
                                                             display: 'flex', alignItems: 'center', gap: '0.5rem', 
                                                             justifyContent: 'center', fontSize: '0.8rem', padding: '0.5rem', 
-                                                            background: anyProcessing ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
-                                                            color: anyProcessing ? 'var(--accent)' : 'inherit'
+                                                            background: anyProcessing ? 'rgba(255,165,0,0.1)' : 'rgba(255,255,255,0.05)',
+                                                            color: anyProcessing ? 'var(--accent)' : 'inherit',
+                                                            border: '1px solid var(--border)'
                                                         }}
                                                         disabled={anyProcessing}
                                                     >
@@ -708,6 +735,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                 </div>
                                             </div>
                                             <div 
+                                                onClick={() => {
+                                                    // Play from the start of this group FORWARD
+                                                    const queueFromHere = allSegmentIds.slice(allSegmentIds.indexOf(group.segments[0].id));
+                                                    playSegment(group.segments[0].id, queueFromHere);
+                                                }}
                                                 style={{ 
                                                     flex: 1, 
                                                     color: 'var(--text-secondary)', 
@@ -716,69 +748,41 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     marginTop: '0.2rem',
                                                     padding: '0.5rem',
                                                     borderRadius: '8px',
-                                                    transition: 'background 0.2s ease'
+                                                    transition: 'all 0.2s ease',
+                                                    cursor: 'pointer',
+                                                    opacity: (allDone || isPlaying || anyProcessing) ? 1 : 0.45,
+                                                    filter: (allDone || isPlaying || anyProcessing) ? 'none' : 'grayscale(1)',
+                                                    background: isPlaying 
+                                                        ? `${char?.color || '#ffffff'}22` 
+                                                        : anyProcessing 
+                                                            ? 'rgba(255,165,0,0.1)' 
+                                                            : 'transparent',
+                                                    borderBottom: isPlaying ? `2px solid ${char?.color || 'var(--accent)'}` : '2px solid transparent',
+                                                    position: 'relative',
+                                                    whiteSpace: 'pre-wrap'
                                                 }}
                                             >
-                                                {group.segments.map((s, sidx) => {
-                                                    const isSegPlaying = playingSegmentId === s.id || 
-                                                        (playingSegmentId && (() => {
-                                                            const ps = segments.find(ps => ps.id === playingSegmentId);
-                                                            return ps && ps.audio_file_path && s.audio_file_path === ps.audio_file_path;
-                                                        })());
-                                                    const isSegGenerating = s.audio_status === 'processing' || generatingSegmentIds.has(s.id);
-                                                    return (
-                                                        <span 
-                                                            key={s.id}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                // Play from this segment FORWARD only
-                                                                const queueFromHere = allSegmentIds.slice(allSegmentIds.indexOf(s.id));
-                                                                playSegment(s.id, queueFromHere);
-                                                            }}
-                                                            style={{ 
-                                                                cursor: 'pointer',
-                                                                padding: '2px 4px',
-                                                                borderRadius: '4px',
-                                                                background: isSegPlaying 
-                                                                    ? `${char?.color || '#ffffff'}33` 
-                                                                    : isSegGenerating 
-                                                                        ? 'rgba(255,165,0,0.15)' 
-                                                                        : 'transparent',
-                                                                borderBottom: isSegPlaying ? `2px solid ${char?.color || 'var(--accent)'}` : '2px solid transparent',
-                                                                transition: 'all 0.2s ease',
-                                                                opacity: (s.audio_status === 'done' || isSegPlaying || isSegGenerating) ? 1 : 0.45,
-                                                                filter: (s.audio_status === 'done' || isSegPlaying || isSegGenerating) ? 'none' : 'grayscale(1)',
-                                                                position: 'relative'
-                                                            }}
-                                                        >
-                                                            {s.text_content}
-                                                            {isSegGenerating && sidx === 0 && (
-                                                                <span style={{ 
-                                                                    position: 'absolute', 
-                                                                    top: '-8px', 
-                                                                    right: '-8px',
-                                                                    background: 'var(--bg)',
-                                                                    borderRadius: '50%',
-                                                                    padding: '2px',
-                                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                                                                    display: 'flex',
-                                                                    zIndex: 10
-                                                                }}>
-                                                                    <RefreshCw size={10} className="animate-spin" color="var(--accent)" />
-                                                                </span>
-                                                            )}
-                                                            {sidx < group.segments.length - 1 ? ' ' : ''}
-                                                        </span>
-                                                    );
-                                                })}
+                                                {group.segments.map(s => s.text_content).join('')}
+
+                                                {anyProcessing && (
+                                                    <span style={{ 
+                                                        position: 'absolute', 
+                                                        top: '-8px', 
+                                                        right: '-8px',
+                                                        background: 'var(--bg)',
+                                                        borderRadius: '50%',
+                                                        padding: '2px',
+                                                        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                                                        display: 'flex',
+                                                        zIndex: 10
+                                                    }}>
+                                                        <RefreshCw size={12} className="animate-spin" color="var(--accent)" />
+                                                    </span>
+                                                )}
 
                                                 {(() => {
-                                                    const anyGenerating = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
                                                     const anyMissing = group.segments.some(s => s.audio_status !== 'done' || !s.audio_file_path);
-                                                    if (anyGenerating) {
-                                                        return <RefreshCw size={14} className="animate-spin" style={{ marginLeft: '8px', verticalAlign: 'middle', opacity: 0.6 }} />;
-                                                    }
-                                                    if (anyMissing) {
+                                                    if (!anyProcessing && anyMissing) {
                                                         return <div style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-muted)', marginLeft: '8px', verticalAlign: 'middle', opacity: 0.4 }} />;
                                                     }
                                                     return null;
@@ -786,8 +790,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             </div>
                                         </div>
                                     );
-                                });
-                            })()}
+                                })}
                         </div>
                         <div style={{ height: '2rem', flexShrink: 0 }} />
                     </div>
@@ -916,32 +919,35 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
               flexDirection: 'column',
               gap: '1rem' // Slightly more gap between groups
             }}>
-              {segments.map((seg) => {
-                const char = characters.find(c => c.id === seg.character_id);
-                const isSelectedCharLines = selectedCharacterId && seg.character_id === selectedCharacterId;
-                const isHovered = hoveredSegmentId === seg.id;
+              {paragraphGroups.map((group, gidx) => {
+                const char = characters.find(c => c.id === group.characterId);
+                const isSelectedCharLines = selectedCharacterId && group.characterId === selectedCharacterId;
+                const isHovered = hoveredSegmentId === group.segments[0].id;
                 
                 return (
                   <div 
-                    key={seg.id}
-                    onMouseEnter={() => setHoveredSegmentId(seg.id)}
+                    key={gidx}
+                    onMouseEnter={() => setHoveredSegmentId(group.segments[0].id)}
                     onMouseLeave={() => setHoveredSegmentId(null)}
                     onClick={() => {
                         if (selectedCharacterId) {
-                            handleBulkAssign(seg.id);
+                            // Bulk assign all segments in this chunk
+                            // Bulk assign all segments in this paragraph in one call
+                            handleParagraphBulkAssign(group.segments.map(s => s.id));
                         } else {
-                            setActiveSegmentId(seg.id === activeSegmentId ? null : seg.id);
+                            setActiveSegmentId(group.segments[0].id === activeSegmentId ? null : group.segments[0].id);
                         }
                     }}
                     style={{ 
                       display: 'flex',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '4px',
-                      background: isSelectedCharLines ? `${char?.color || '#94a3b8'}10` : (isHovered ? 'var(--surface-light)' : 'transparent'),
+                      padding: '0.75rem 1.25rem',
+                      borderRadius: '8px',
+                      background: isSelectedCharLines ? `${char?.color || '#94a3b8'}15` : (isHovered ? 'var(--surface-light)' : 'transparent'),
                       borderLeft: `4px solid ${char ? char.color : 'var(--text-muted)'}`,
                       cursor: selectedCharacterId ? 'copy' : 'pointer',
                       transition: 'all 0.1s ease',
-                      gap: '2rem'
+                      gap: '2rem',
+                      boxShadow: isHovered ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
                     }}
                   >
                     {/* Character/Voice column */}
@@ -969,27 +975,28 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                             color: 'var(--text-primary)', 
                             margin: 0, 
                             lineHeight: 1.6,
-                            opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.5 : 1
+                            opacity: (selectedCharacterId && !isSelectedCharLines) ? 0.5 : 1,
+                            whiteSpace: 'pre-wrap'
                         }}>
-                            {seg.text_content}
+                            {group.segments.map(s => s.text_content).join('')}
                         </p>
                     </div>
 
                     {/* Quick status/actions */}
                     <div style={{ width: '80px', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                        {seg.audio_status === 'done' && (
+                        {group.segments.every(s => s.audio_status === 'done') && (
                             <div title="Audio Generated" style={{ color: 'var(--success-muted)' }}>
                                 <CheckCircle size={14} />
                             </div>
                         )}
-                        {activeSegmentId === seg.id && !selectedCharacterId && (
+                        {activeSegmentId === group.segments[0].id && !selectedCharacterId && (
                            <div style={{ display: 'flex', gap: '4px' }}>
                                <button 
                                  className="btn-ghost" 
                                  style={{ padding: '2px 4px', fontSize: '0.7rem' }}
                                  onClick={(e) => {
                                      e.stopPropagation();
-                                     handleAssignCharacter(seg.id, null);
+                                     handleParagraphBulkReset(group.segments.map(s => s.id));
                                  }}
                                >
                                    Reset

@@ -378,17 +378,50 @@ def update_segment(segment_id: str, **updates) -> bool:
 
     return changed
 
+def update_segments_bulk(segment_ids: List[str], **updates) -> bool:
+    if not updates or not segment_ids: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+
+            placeholders = ",".join(["?"] * len(segment_ids))
+            sql = f"UPDATE chapter_segments SET {', '.join(fields)} WHERE id IN ({placeholders})"
+            cursor.execute(sql, (*values, *segment_ids))
+            conn.commit()
+            changed = cursor.rowcount > 0
+
+    # Broadcast via WebSocket if audio_status changed
+    if changed:
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT chapter_id FROM chapter_segments WHERE id = ?", (segment_ids[0],))
+                row = cursor.fetchone()
+                if row:
+                    from .web import broadcast_segments_updated
+                    broadcast_segments_updated(row["chapter_id"])
+        except (ImportError, IndexError, Exception):
+            pass
+    return changed
+
 def sync_chapter_segments(chapter_id: str, text_content: str):
     """
     Parses the text into sentences (segments) and syncs the chapter_segments table.
     Attempts to preserve IDs and assignments for sentences that haven't changed.
     """
-    from .textops import split_sentences, preprocess_text
+    from .textops import split_sentences, preprocess_text, normalize_newlines
 
-    # Pre-parse the text to avoid hidden formatting issues breaking the diff
+    # Pre-parse the text and reduce excessive newlines
     clean = preprocess_text(text_content)
-    # Split into actual sentences
-    sentences = [s.strip() for s, _, _ in split_sentences(clean) if s.strip()]
+    clean = normalize_newlines(clean)
+
+    # Split into actual sentences while preserving trailing spaces/newlines
+    sentences = [s for s, _, _ in split_sentences(clean, preserve_gap=True)]
 
     with _db_lock:
         with get_connection() as conn:

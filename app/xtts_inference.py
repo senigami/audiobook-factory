@@ -110,7 +110,6 @@ def main():
     try:
         from tqdm import tqdm
         all_wav_chunks = []
-        par_indices = set()
         pause_indices = set()  # indices that are already silence tensors from <PAUSE> markers
 
         def _synthesize_one(text_to_speak, latent_pair, fallback_sw):
@@ -143,41 +142,62 @@ def main():
                 sw = segment['speaker_wav']
                 latents = speaker_latents.get(sw)
 
-                if hasattr(tts, 'synthesizer') and hasattr(tts.synthesizer, 'split_into_sentences'):
-                    sentences = tts.synthesizer.split_into_sentences(text)
-                elif hasattr(tts, 'tts_tokenizer'):
-                    sentences = tts.tts_tokenizer.split_sentences(text)
-                else:
-                    sentences = [text]
-
+                # Split by newline to preserve paragraph breaks within a single script entry
+                paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
                 segment_wav_chunks = []
-                for sentence in sentences:
-                    if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
-                        continue
 
-                    # Handle semicolons: split around them, synthesize each part,
-                    # and insert a silence tensor where each semicolon was.
-                    if PAUSE_CHAR in sentence:
-                        sub_parts = sentence.split(PAUSE_CHAR)
-                        for sp_idx, sub_part in enumerate(sub_parts):
-                            sub_text = sub_part.strip()
-                            if sub_text and any(c.isalnum() for c in sub_text):
-                                wav_chunk = _synthesize_one(sub_text, latents, sw)
-                                chunk_tensor = torch.FloatTensor(wav_chunk)
-                                all_wav_chunks.append(chunk_tensor)
-                                segment_wav_chunks.append(chunk_tensor)
-                            # Insert pause silence after each sub-part except the last
-                            if sp_idx < len(sub_parts) - 1:
-                                pause_samples = int(SAMPLE_RATE * PAUSE_CHAR_MS / 1000)
-                                silence = torch.zeros(pause_samples)
-                                all_wav_chunks.append(silence)
-                                segment_wav_chunks.append(silence)
-                                pause_indices.add(len(all_wav_chunks) - 1)
+                for p_idx, paragraph in enumerate(paragraphs):
+                    if hasattr(tts, 'synthesizer') and hasattr(tts.synthesizer, 'split_into_sentences'):
+                        sentences = tts.synthesizer.split_into_sentences(paragraph)
+                    elif hasattr(tts, 'tts_tokenizer'):
+                        sentences = tts.tts_tokenizer.split_sentences(paragraph)
                     else:
-                        wav_chunk = _synthesize_one(sentence, latents, sw)
-                        chunk_tensor = torch.FloatTensor(wav_chunk)
-                        all_wav_chunks.append(chunk_tensor)
-                        segment_wav_chunks.append(chunk_tensor)
+                        sentences = [paragraph]
+
+                    for s_idx, sentence in enumerate(sentences):
+                        if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
+                            continue
+
+                        # Handle semicolons: split around them, synthesize each part,
+                        # and insert a silence tensor where each semicolon was.
+                        if PAUSE_CHAR in sentence:
+                            sub_parts = sentence.split(PAUSE_CHAR)
+                            for sp_idx, sub_part in enumerate(sub_parts):
+                                sub_text = sub_part.strip()
+                                if sub_text and any(c.isalnum() for c in sub_text):
+                                    wav_chunk = _synthesize_one(sub_text, latents, sw)
+                                    chunk_tensor = torch.FloatTensor(wav_chunk)
+                                    all_wav_chunks.append(chunk_tensor)
+                                    segment_wav_chunks.append(chunk_tensor)
+                                if sp_idx < len(sub_parts) - 1:
+                                    pause_samples = int(SAMPLE_RATE * PAUSE_CHAR_MS / 1000)
+                                    silence = torch.zeros(pause_samples)
+                                    all_wav_chunks.append(silence)
+                                    segment_wav_chunks.append(silence)
+                                    pause_indices.add(len(all_wav_chunks) - 1)
+                        else:
+                            wav_chunk = _synthesize_one(sentence, latents, sw)
+                            chunk_tensor = torch.FloatTensor(wav_chunk)
+                            all_wav_chunks.append(chunk_tensor)
+                            segment_wav_chunks.append(chunk_tensor)
+
+                        # Add sentence or paragraph pause
+                        is_last_sentence = (s_idx == len(sentences) - 1)
+                        is_last_paragraph = (p_idx == len(paragraphs) - 1)
+
+                        pause_ms = 0
+                        if not (is_last_sentence and is_last_paragraph):
+                            pause_ms = PARAGRAPH_PAUSE_MS if is_last_sentence else SENTENCE_PAUSE_MS
+                        elif i < len(script) - 1:
+                            # End of a script entry (except the very last one)
+                            pause_ms = PARAGRAPH_PAUSE_MS
+
+                        if pause_ms > 0:
+                            pause_samples = int(SAMPLE_RATE * pause_ms / 1000)
+                            silence = torch.zeros(pause_samples)
+                            all_wav_chunks.append(silence)
+                            segment_wav_chunks.append(silence)
+                            pause_indices.add(len(all_wav_chunks) - 1)
 
                 # Save this segment individually if requested (for Performance tab playback)
                 if 'save_path' in segment and segment_wav_chunks:
@@ -186,23 +206,12 @@ def main():
                     # Signal to parent process that this segment's audio is ready
                     print(f"[SEGMENT_SAVED] {segment['save_path']}", file=sys.stderr)
 
-                if i < len(script) - 1:
-                    par_indices.add(len(all_wav_chunks) - 1)
-
                 pbar.update(1)
 
         if all_wav_chunks:
-            final_parts = []
-            for i, wav in enumerate(all_wav_chunks):
-                final_parts.append(wav)
-                if i < len(all_wav_chunks) - 1 and i not in pause_indices:
-                    pause_ms = PARAGRAPH_PAUSE_MS if i in par_indices else SENTENCE_PAUSE_MS
-                    pause_samples = int(SAMPLE_RATE * pause_ms / 1000)
-                    final_parts.append(torch.zeros(pause_samples))
-
-            final_wav = torch.cat(final_parts, dim=0)
+            final_wav = torch.cat(all_wav_chunks, dim=0)
             torchaudio.save(args.out_path, final_wav.unsqueeze(0), SAMPLE_RATE)
-            print(f"Successfully synthesized {len(all_wav_chunks)} sentence chunks.", file=sys.stderr)
+            print(f"Successfully synthesized {len(all_wav_chunks)} audio chunks.", file=sys.stderr)
 
     except Exception as e:
         print(f"\n[CRITICAL ERROR] XTTS failed: {str(e)}", file=sys.stderr)
