@@ -307,6 +307,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const runAnalysis = async (textContent: string) => {
+    if (!textContent) {
+        setAnalysis(null);
+        setAnalyzing(false);
+        return;
+    }
+
     if (abortControllerRef.current) {
         abortControllerRef.current.abort();
     }
@@ -343,12 +349,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const handleSave = async (manualTitle?: string, manualText?: string) => {
-    if (!chapter) return;
+    if (!chapter) return false;
     
     const finalTitle = manualTitle !== undefined ? manualTitle : title;
     const finalText = manualText !== undefined ? manualText : text;
     
-    // Check if anything actually changed before showing "Saving..."
     let changed = false;
     const payload: any = {};
     
@@ -361,17 +366,28 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
         changed = true;
     }
     
-    if (!changed) return;
+    if (!changed) return true;
 
     setSaving(true);
     try {
-      await api.updateChapter(chapterId, payload);
-      // We don't necessarily need to reload everything, but maybe update the local chapter object
-      setChapter(prev => prev ? { ...prev, ...payload } : null);
+      const result = await api.updateChapter(chapterId, payload);
+      if (result.chapter) {
+          setChapter(result.chapter);
+      }
+      
+      // If text changed, force refresh of segments and analysis immediately
+      if (payload.text_content !== undefined) {
+          const updatedSegs = await api.fetchSegments(chapterId);
+          setSegments(updatedSegs);
+          // Also trigger immediate analysis refresh bypassing the debounce
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          runAnalysis(payload.text_content);
+      }
+      return true;
     } catch (e) {
-      console.error(e);
+      console.error("Save failed", e);
+      return false;
     } finally {
-      // Add a tiny delay so the "Saving..." UI is actually visible to the user as feedback
       setTimeout(() => setSaving(false), 500);
     }
   };
@@ -590,23 +606,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         Edit Text
                     </button>
                     <button 
-                        onClick={() => {
-                            if (!analysis?.safe_text && !analysis?.voice_chunks) alert("Please wait for text to be analyzed...");
-                            else {
-                                setEditorTab('preview');
-                                handleSave(); // Give a chance to save the displayed text
-                            }
-                        }} 
-                        className={editorTab === 'preview' ? 'btn-primary' : 'btn-ghost'}
-                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
-                        disabled={!analysis?.safe_text && !analysis?.voice_chunks}
-                    >
-                        Preview Safe Text
-                    </button>
-                    <button 
-                        onClick={() => {
+                        onClick={async () => {
+                            await handleSave();
                             setEditorTab('production');
-                            handleSave();
                         }} 
                         className={editorTab === 'production' ? 'btn-primary' : 'btn-ghost'}
                         style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
@@ -614,14 +616,30 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         Production
                     </button>
                     <button 
-                        onClick={() => {
+                        onClick={async () => {
+                            await handleSave();
                             setEditorTab('performance');
-                            handleSave();
                         }} 
                         className={editorTab === 'performance' ? 'btn-primary' : 'btn-ghost'}
                         style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
                     >
                         Performance
+                    </button>
+                    <button 
+                        onClick={async () => {
+                            // First ensure we are saved so analysis is fresh
+                            await handleSave();
+                            if (!analysis?.safe_text && !analysis?.voice_chunks) {
+                                alert("Please wait for text to be analyzed...");
+                            } else {
+                                setEditorTab('preview');
+                            }
+                        }} 
+                        className={editorTab === 'preview' ? 'btn-primary' : 'btn-ghost'}
+                        style={{ padding: '8px 16px', fontSize: '0.9rem', borderRadius: '8px' }}
+                        disabled={!analysis?.safe_text && !analysis?.voice_chunks}
+                    >
+                        Preview Safe Text
                     </button>
                 </div>
                 {editorTab === 'edit' ? (
@@ -762,7 +780,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     whiteSpace: 'pre-wrap'
                                                 }}
                                             >
-                                                {group.segments.map(s => s.text_content).join('')}
+                                                {group.segments.map(s => s.sanitized_text || s.text_content).join('')}
 
                                                 {anyProcessing && (
                                                     <span style={{ 

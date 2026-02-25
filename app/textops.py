@@ -299,12 +299,14 @@ def clean_text_for_tts(text: str) -> str:
         # Collapse multiple identical punctuations like !! -> ! or ?? -> ? (preserving ...)
         l = re.sub(r'([!?])\1+', r'\1', l)
 
-        # Consolidate short sentences within this LINE
-        l = consolidate_single_word_sentences(l.strip())
         cleaned_lines.append(l)
 
-    # Join lines back, then normalize to collapse any resulting empty lines beyond 1
+    # Join lines back
     result = '\n'.join(cleaned_lines)
+    # Consolidate short sentences ACROSS lines now that they are joined
+    result = consolidate_single_word_sentences(result)
+
+    # Finally normalize to collapse any resulting empty lines beyond 1
     result = re.sub(r'\n{2,}', '\n', result)
     return result.strip()
 
@@ -382,8 +384,19 @@ def consolidate_single_word_sentences(text: str) -> str:
 
     for item in consolidated:
         if item['line_idx'] > current_line:
-            final_output.append(" ".join(buffer))
-            # Add back the correct number of newlines
+            # Commit the current buffer as a single block
+            if buffer:
+                joined = ""
+                for idx, text in enumerate(buffer):
+                    if idx == 0:
+                        joined = text
+                    else:
+                        # Append with space only if we didn't just add a pause separator
+                        sep = "" if joined.endswith("; ") or joined.endswith(";; ") else " "
+                        joined += sep + text
+                final_output.append(joined)
+
+            # Pad with empty lines if there were gaps
             final_output.extend([""] * (item['line_idx'] - current_line - 1))
             buffer = [item['text']]
             current_line = item['line_idx']
@@ -391,7 +404,14 @@ def consolidate_single_word_sentences(text: str) -> str:
             buffer.append(item['text'])
 
     if buffer:
-        final_output.append(" ".join(buffer))
+        joined = ""
+        for idx, text in enumerate(buffer):
+            if idx == 0:
+                joined = text
+            else:
+                sep = "" if joined.endswith("; ") or joined.endswith(";; ") else " "
+                joined += sep + text
+        final_output.append(joined)
 
     return "\n".join(final_output)
 

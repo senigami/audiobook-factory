@@ -25,6 +25,7 @@ export interface ChapterSegment {
   chapter_id: string;
   segment_order: number;
   text_content: string;
+  sanitized_text?: string;
   character_id: string | null;
   audio_file_path: string | null;
   audio_status: 'unprocessed' | 'processing' | 'done' | 'error';

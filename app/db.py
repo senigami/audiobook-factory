@@ -89,6 +89,7 @@ def init_db():
                     chapter_id TEXT NOT NULL,
                     segment_order INTEGER NOT NULL,
                     text_content TEXT NOT NULL,
+                    sanitized_text TEXT,
                     character_id TEXT,
                     audio_file_path TEXT,
                     audio_status TEXT DEFAULT 'unprocessed',
@@ -97,6 +98,11 @@ def init_db():
                     FOREIGN KEY (character_id) REFERENCES characters (id)
                 )
             """)
+            # Migration
+            try:
+                cursor.execute("ALTER TABLE chapter_segments ADD COLUMN sanitized_text TEXT")
+            except:
+                pass
 
             conn.commit()
 
@@ -416,12 +422,8 @@ def sync_chapter_segments(chapter_id: str, text_content: str):
     """
     from .textops import split_sentences, preprocess_text, normalize_newlines
 
-    # Pre-parse the text and reduce excessive newlines
-    clean = preprocess_text(text_content)
-    clean = normalize_newlines(clean)
-
     # Split into actual sentences while preserving trailing spaces/newlines
-    sentences = [s for s, _, _ in split_sentences(clean, preserve_gap=True)]
+    sentences = [s for s, _, _ in split_sentences(text_content, preserve_gap=True)]
 
     with _db_lock:
         with get_connection() as conn:
@@ -438,8 +440,14 @@ def sync_chapter_segments(chapter_id: str, text_content: str):
             cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
 
             # Re-insert in order, preserving IDs and attributes if an exact text match is found
+            from .textops import clean_text_for_tts, preprocess_text
+
             for i, text in enumerate(sentences):
                 old_seg = existing_texts.get(text)
+
+                # Compute sanitized version for Performance view (strips brackets/quotes but keeps commas/punc)
+                # We use clean_text_for_tts which now does a full but line-by-line safe clean.
+                sanitized = clean_text_for_tts(text)
 
                 if old_seg:
                     # Reuse old segment attributes
@@ -461,11 +469,18 @@ def sync_chapter_segments(chapter_id: str, text_content: str):
 
                 cursor.execute("""
                     INSERT INTO chapter_segments 
-                    (id, chapter_id, segment_order, text_content, character_id, audio_file_path, audio_status, audio_generated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (seg_id, chapter_id, i, text, char_id, audio_path, audio_status, audio_gen_at))
+                    (id, chapter_id, segment_order, text_content, sanitized_text, character_id, audio_file_path, audio_status, audio_generated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (seg_id, chapter_id, i, text, sanitized, char_id, audio_path, audio_status, audio_gen_at))
 
             conn.commit()
+
+            # Broadcast via WebSocket if text changed
+            try:
+                from .web import broadcast_segments_updated
+                broadcast_segments_updated(chapter_id)
+            except:
+                pass
 
 # --- Processing Queue Functions ---
 def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
