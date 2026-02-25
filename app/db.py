@@ -354,7 +354,7 @@ def get_chapter_segments(chapter_id: str) -> List[Dict[str, Any]]:
             """, (chapter_id,))
             return [dict(row) for row in cursor.fetchall()]
 
-def update_segment(segment_id: str, **updates) -> bool:
+def update_segment(segment_id: str, broadcast: bool = True, **updates) -> bool:
     if not updates: return False
     with _db_lock:
         with get_connection() as conn:
@@ -370,7 +370,7 @@ def update_segment(segment_id: str, **updates) -> bool:
             changed = cursor.rowcount > 0
 
     # Broadcast via WebSocket if audio_status changed (outside the lock to avoid deadlock)
-    if changed and "audio_status" in updates:
+    if broadcast and changed and "audio_status" in updates:
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()

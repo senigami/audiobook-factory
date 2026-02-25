@@ -802,6 +802,8 @@ def worker_loop(q: "queue.Queue[str]"):
                     on_output(f"Synthesizing {len(full_script)} groups in a single XTTS session...\n")
 
                     groups_completed = [0]
+                    chapter_id_for_broadcast = j.chapter_id
+
                     def gen_on_output(line):
                         on_output(line)
                         if "[SEGMENT_SAVED]" in line:
@@ -810,7 +812,8 @@ def worker_loop(q: "queue.Queue[str]"):
                             if group:
                                 seg_filename = Path(saved_path).name
                                 for s in group:
-                                    update_segment(s['id'], audio_status='done', audio_file_path=seg_filename, audio_generated_at=time.time())
+                                    # batch: no broadcast per-segment, we'll broadcast once at the end
+                                    update_segment(s['id'], broadcast=False, audio_status='done', audio_file_path=seg_filename, audio_generated_at=time.time())
                                 groups_completed[0] += 1
                                 prog = (groups_completed[0] / len(gen_groups))
                                 update_job(jid, progress=prog)
@@ -830,13 +833,21 @@ def worker_loop(q: "queue.Queue[str]"):
                                 seg_out = pdir / f"seg_{first_sid}.wav"
                                 if not seg_out.exists():
                                     for s in group:
-                                        update_segment(s['id'], audio_status='error')
+                                        update_segment(s['id'], broadcast=False, audio_status='error')
                     finally:
                         if script_path.exists():
                             script_path.unlink()
                         scratch_out = pdir / f"output_{j.id}.wav"
                         if scratch_out.exists():
                             scratch_out.unlink()
+
+                    # Single broadcast now that all segments for this job are finalized
+                    if chapter_id_for_broadcast:
+                        try:
+                            from .web import broadcast_segments_updated
+                            broadcast_segments_updated(chapter_id_for_broadcast)
+                        except Exception:
+                            pass
 
                     update_job(jid, status="done", progress=1.0, finished_at=time.time())
                     continue

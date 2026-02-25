@@ -101,6 +101,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const isPlayingRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const segmentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allSegmentIds = segments.map(s => s.id);
 
@@ -247,20 +248,21 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     loadChapter();
   }, [chapterId]);
 
-  // React to WebSocket segment updates for this chapter
+  // React to WebSocket segment updates for this chapter — debounced so a burst
+  // of per-segment events (e.g. cancel-all) collapses into a single re-fetch.
   useEffect(() => {
     if (!segmentUpdate || segmentUpdate.chapterId !== chapterId || segmentUpdate.tick === 0) return;
-    // Segments changed on the server — re-fetch and clear spinners
-    (async () => {
+    if (segmentRefreshTimerRef.current) clearTimeout(segmentRefreshTimerRef.current);
+    segmentRefreshTimerRef.current = setTimeout(async () => {
       try {
         const updated = await api.fetchSegments(chapterId);
         setSegments(updated);
-        // Clear generating state for any segments now done or errored
+        // Clear generating spinners for segments that are now done, errored, or reset to unprocessed
         setGeneratingSegmentIds(prev => {
           const next = new Set(prev);
           for (const id of prev) {
             const seg = updated.find((s: any) => s.id === id);
-            if (seg && (seg.audio_status === 'done' || seg.audio_status === 'error')) {
+            if (seg && (seg.audio_status === 'done' || seg.audio_status === 'error' || seg.audio_status === 'unprocessed')) {
               next.delete(id);
             }
           }
@@ -269,7 +271,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
       } catch (e) {
         console.error("Failed to refresh segments from WS", e);
       }
-    })();
+    }, 300);
   }, [segmentUpdate, chapterId]);
 
   useEffect(() => {
