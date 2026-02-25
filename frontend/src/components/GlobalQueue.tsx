@@ -52,6 +52,30 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
     fetchQueue();
   }, [refreshTrigger]);
 
+  // Re-fetch queue from server whenever live job data changes,
+  // ensuring status sync even if a WS event was missed during tab navigation.
+  useEffect(() => {
+    // Also sync local state immediately from jobs prop
+    setQueue(prev => {
+      let changed = false;
+      const updated = prev.map(q => {
+        const liveJob = Object.values(jobs).find(j => j.id === q.id);
+        if (liveJob && liveJob.status !== q.status) {
+          changed = true;
+          return { ...q, status: liveJob.status };
+        }
+        return q;
+      });
+      return changed ? updated : prev;
+    });
+  }, [jobs]);
+
+  // Safety-net polling: re-fetch every 10s to catch any missed updates
+  useEffect(() => {
+    const timer = setInterval(fetchQueue, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleReorder = async (newOrder: ProcessingQueueItem[]) => {
     // Only allow reordering of queued items
     const nonQueued = queue.filter(q => q.status !== 'queued');
@@ -65,17 +89,6 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
         fetchQueue();
     }
   };
-
-  // Sync queue status with live jobs
-  useEffect(() => {
-    setQueue(prev => prev.map(q => {
-      const liveJob = Object.values(jobs).find(j => j.id === q.id);
-      if (liveJob && liveJob.status !== q.status) {
-        return { ...q, status: liveJob.status };
-      }
-      return q;
-    }));
-  }, [jobs]);
 
   const handleRemove = async (id: string) => {
     try {

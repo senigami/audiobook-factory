@@ -485,6 +485,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     const currentIndex = fullQueue.indexOf(segmentId);
                                     if (currentIndex === -1) return;
 
+                                    // Pre-generate all missing segments in this group's queue
+                                    // so they render as a single batch instead of one-by-one
+                                    const missingIds = fullQueue.slice(currentIndex).filter(id => {
+                                        const seg = segments.find(s => s.id === id);
+                                        return seg && (!seg.audio_file_path || seg.audio_status !== 'done') && seg.audio_status !== 'processing';
+                                    });
+                                    if (missingIds.length > 0) {
+                                        await handleGenerate(missingIds);
+                                    }
+
                                     const playFromIndex = async (idx: number) => {
                                         if (!isPlayingRef.current || idx >= playbackQueueRef.current.length) {
                                             stopPlayback();
@@ -498,9 +508,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                         setPlayingSegmentId(currentId);
 
                                         if (!seg.audio_file_path || seg.audio_status !== 'done') {
-                                            if (seg.audio_status !== 'processing') {
-                                                await handleGenerate([currentId]);
-                                            }
+                                            // Audio isn't ready yet — poll until it is
                                             let attempts = 0;
                                             const pollForAudio = setInterval(async () => {
                                                 attempts++;
@@ -515,7 +523,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                         return next;
                                                     });
                                                     startAudio(refreshedSeg, idx);
-                                                } else if (attempts > 30) {
+                                                } else if (attempts > 60) {
                                                     clearInterval(pollForAudio);
                                                     setGeneratingSegmentIds(prev => {
                                                         const next = new Set(prev);
