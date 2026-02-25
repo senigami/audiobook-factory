@@ -1856,6 +1856,10 @@ def api_add_to_queue(
             temp_path = text_dir / temp_filename
             temp_path.write_text(text_content or "", encoding="utf-8", errors="replace")
 
+            # Check if this chapter has Performance tab segments defined
+            from .db import get_chapter_segments
+            has_segments = len(get_chapter_segments(chapter_id)) > 0
+
             # Create legacy Job
             settings = get_settings()
             from .models import Job
@@ -1875,7 +1879,8 @@ def api_add_to_queue(
                 make_mp3=True,
                 bypass_pause=False,
                 custom_title=title, # Ensures frontend shows the chapter title globally
-                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile")
+                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile"),
+                is_bake=has_segments  # Use bake flow to honor Performance tab segments
             )
             put_job(j)
             enqueue(j)

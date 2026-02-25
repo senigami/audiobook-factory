@@ -29,6 +29,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [localVoice, setLocalVoice] = useState<string>('');
   
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
+  const segmentsRef = useRef<ChapterSegment[]>(segments);
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
@@ -509,7 +513,64 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     playbackQueueRef.current = [];
                                 };
 
+                                const togglePause = () => {
+                                    const audio = audioPlayerRef.current;
+                                    if (!audio) return;
+                                    if (audio.paused) {
+                                        audio.play().catch(() => {});
+                                    } else {
+                                        audio.pause();
+                                    }
+                                };
+
+                                // Helper: find all segment IDs in the same group (consecutive same-character) as queue[idx]
+                                const getGroupSegmentIds = (idx: number): string[] => {
+                                    const queue = playbackQueueRef.current;
+                                    if (idx >= queue.length) return [];
+                                    const segs = segmentsRef.current;
+                                    const anchorSeg = segs.find(s => s.id === queue[idx]);
+                                    if (!anchorSeg) return [queue[idx]];
+                                    const charId = anchorSeg.character_id;
+
+                                    // Expand forward from idx while same character
+                                    let endIdx = idx;
+                                    while (endIdx + 1 < queue.length) {
+                                        const nextSeg = segs.find(s => s.id === queue[endIdx + 1]);
+                                        if (nextSeg && nextSeg.character_id === charId) {
+                                            endIdx++;
+                                        } else break;
+                                    }
+                                    // Expand backward from idx while same character
+                                    let startIdx = idx;
+                                    while (startIdx - 1 >= 0) {
+                                        const prevSeg = segs.find(s => s.id === queue[startIdx - 1]);
+                                        if (prevSeg && prevSeg.character_id === charId) {
+                                            startIdx--;
+                                        } else break;
+                                    }
+                                    return queue.slice(startIdx, endIdx + 1);
+                                };
+
+                                // Look-ahead: kick off generation for the NEXT GROUP in the queue
+                                const lookAheadGenerate = (idx: number) => {
+                                    const groupIds = getGroupSegmentIds(idx);
+                                    if (groupIds.length === 0) return;
+                                    const missingIds = groupIds.filter(id => {
+                                        const s = segmentsRef.current.find(seg => seg.id === id);
+                                        return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+                                    });
+                                    if (missingIds.length > 0) {
+                                        handleGenerate(missingIds);
+                                    }
+                                };
+
                                 const playSegment = async (segmentId: string, fullQueue: string[]) => {
+                                    // If clicking the same segment that's currently playing, toggle pause
+                                    if (playingSegmentId === segmentId && audioPlayerRef.current) {
+                                        togglePause();
+                                        return;
+                                    }
+
                                     stopPlayback();
                                     isPlayingRef.current = true;
                                     playbackQueueRef.current = fullQueue;
@@ -517,54 +578,37 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     const currentIndex = fullQueue.indexOf(segmentId);
                                     if (currentIndex === -1) return;
 
-                                    // Pre-generate all missing segments in this group's queue
-                                    // so they render as a single batch instead of one-by-one
-                                    const missingIds = fullQueue.slice(currentIndex).filter(id => {
-                                        const seg = segments.find(s => s.id === id);
-                                        return seg && (!seg.audio_file_path || seg.audio_status !== 'done') && seg.audio_status !== 'processing';
-                                    });
-                                    if (missingIds.length > 0) {
-                                        await handleGenerate(missingIds);
-                                    }
-
                                     const playFromIndex = async (idx: number) => {
                                         if (!isPlayingRef.current || idx >= playbackQueueRef.current.length) {
-                                            stopPlayback();
+                                            if (idx >= playbackQueueRef.current.length) stopPlayback();
                                             return;
                                         }
 
                                         const currentId = playbackQueueRef.current[idx];
-                                        const seg = segments.find(s => s.id === currentId);
+                                        const seg = segmentsRef.current.find(s => s.id === currentId);
                                         if (!seg) return;
 
                                         setPlayingSegmentId(currentId);
 
+                                        // Kick off look-ahead for the NEXT GROUP while we deal with this one
+                                        const currentGroup = getGroupSegmentIds(idx);
+                                        const nextGroupStartIdx = idx + currentGroup.length - (currentGroup.indexOf(currentId));
+                                        lookAheadGenerate(nextGroupStartIdx);
+
                                         if (!seg.audio_file_path || seg.audio_status !== 'done') {
-                                            // Audio isn't ready yet — poll until it is
-                                            let attempts = 0;
-                                            const pollForAudio = setInterval(async () => {
-                                                attempts++;
-                                                const updated = await api.fetchSegments(chapterId);
-                                                setSegments(updated);
-                                                const refreshedSeg = updated.find((s: any) => s.id === currentId);
-                                                if (refreshedSeg?.audio_file_path && refreshedSeg.audio_status === 'done') {
-                                                    clearInterval(pollForAudio);
-                                                    setGeneratingSegmentIds(prev => {
-                                                        const next = new Set(prev);
-                                                        next.delete(currentId);
-                                                        return next;
-                                                    });
-                                                    startAudio(refreshedSeg, idx);
-                                                } else if (attempts > 60) {
-                                                    clearInterval(pollForAudio);
-                                                    setGeneratingSegmentIds(prev => {
-                                                        const next = new Set(prev);
-                                                        next.delete(currentId);
-                                                        return next;
-                                                    });
-                                                    playFromIndex(idx + 1);
-                                                }
-                                            }, 1000);
+                                            // This segment's group isn't ready yet. Generate the whole group.
+                                            const groupIds = getGroupSegmentIds(idx);
+                                            const missingInGroup = groupIds.filter(id => {
+                                                const s = segmentsRef.current.find(seg => seg.id === id);
+                                                return s && (!s.audio_file_path || s.audio_status !== 'done') && s.audio_status !== 'processing' && !generatingSegmentIds.has(id);
+                                            });
+                                            if (missingInGroup.length > 0) {
+                                                handleGenerate(missingInGroup);
+                                            }
+                                            // Wait for WebSocket update to make it ready, then retry
+                                            if (isPlayingRef.current) {
+                                                setTimeout(() => playFromIndex(idx), 500);
+                                            }
                                             return;
                                         }
 
@@ -576,11 +620,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             ? `/projects/${projectId}/audio/${seg.audio_file_path}`
                                             : `/out/xtts/${seg.audio_file_path}`;
                                         const audio = new Audio(url);
+                                        
                                         audio.onended = () => {
+                                            if (!isPlayingRef.current) return;
+                                            
+                                            // Advance past segments sharing this exact audio file
                                             let nextIdx = idx + 1;
                                             while (nextIdx < playbackQueueRef.current.length) {
                                                 const nextId = playbackQueueRef.current[nextIdx];
-                                                const nextSeg = segments.find(s => s.id === nextId);
+                                                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
                                                 if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
                                                     nextIdx++;
                                                 } else {
@@ -589,10 +637,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                             }
                                             playFromIndex(nextIdx);
                                         };
-                                        audio.onerror = () => playFromIndex(idx + 1);
+                                        
+                                        audio.onerror = () => {
+                                            if (isPlayingRef.current) playFromIndex(idx + 1);
+                                        };
+
                                         audio.play().catch(e => {
                                             console.error("Playback failed", e);
-                                            playFromIndex(idx + 1);
+                                            if (isPlayingRef.current) playFromIndex(idx + 1);
                                         });
                                         audioPlayerRef.current = audio;
                                     };
@@ -659,26 +711,50 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                 </div>
                                             </div>
                                             <div 
-                                                onClick={() => playSegment(group.segments[0].id, allSegmentIds)}
                                                 style={{ 
                                                     flex: 1, 
                                                     color: 'var(--text-secondary)', 
                                                     lineHeight: '1.7', 
                                                     fontSize: '1.05rem', 
                                                     marginTop: '0.2rem',
-                                                    cursor: 'pointer',
                                                     padding: '0.5rem',
                                                     borderRadius: '8px',
-                                                    background: isPlaying ? `${char?.color || '#ffffff'}22` : 'transparent',
                                                     transition: 'background 0.2s ease'
                                                 }}
                                             >
-                                                {group.segments.map((s, sidx) => (
-                                                    <span key={s.id}>
-                                                        {s.text_content}
-                                                        {sidx < group.segments.length - 1 ? ' ' : ''}
-                                                    </span>
-                                                ))}
+                                                {group.segments.map((s, sidx) => {
+                                                    const isSegPlaying = playingSegmentId === s.id || 
+                                                        (playingSegmentId && (() => {
+                                                            const ps = segments.find(ps => ps.id === playingSegmentId);
+                                                            return ps && ps.audio_file_path && s.audio_file_path === ps.audio_file_path;
+                                                        })());
+                                                    const isSegGenerating = s.audio_status === 'processing' || generatingSegmentIds.has(s.id);
+                                                    return (
+                                                        <span 
+                                                            key={s.id}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                playSegment(s.id, allSegmentIds);
+                                                            }}
+                                                            style={{ 
+                                                                cursor: 'pointer',
+                                                                padding: '2px 4px',
+                                                                borderRadius: '4px',
+                                                                background: isSegPlaying 
+                                                                    ? `${char?.color || '#ffffff'}33` 
+                                                                    : isSegGenerating 
+                                                                        ? 'rgba(255,255,255,0.05)' 
+                                                                        : 'transparent',
+                                                                borderBottom: isSegPlaying ? `2px solid ${char?.color || 'var(--accent)'}` : '2px solid transparent',
+                                                                transition: 'all 0.2s ease'
+                                                            }}
+                                                        >
+                                                            {s.text_content}
+                                                            {sidx < group.segments.length - 1 ? ' ' : ''}
+                                                        </span>
+                                                    );
+                                                })}
+
                                                 {(() => {
                                                     const anyGenerating = group.segments.some(s => s.audio_status === 'processing' || generatingSegmentIds.has(s.id));
                                                     const anyMissing = group.segments.some(s => s.audio_status !== 'done' || !s.audio_file_path);
