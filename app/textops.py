@@ -44,6 +44,11 @@ from pathlib import Path
 from typing import List, Tuple
 from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
 
+# Semicolons serve as the pause character for TTS output.
+# They survive all text cleaning (pure ASCII), and xtts_inference.py splits on them
+# to insert a silence tensor. This also means consolidate_single_word_sentences
+# merges short sentences with ";" which naturally becomes a pause in the audio.
+
 CHAPTER_RE = re.compile(r"^(Chapter\s+(\d+)\s*:\s*.+)$", re.MULTILINE)
 SENT_SPLIT_RE = re.compile(r'(.+?[.!?]["\'”’]*)(\s+|$)', re.DOTALL)
 
@@ -262,7 +267,9 @@ def clean_text_for_tts(text: str) -> str:
 def consolidate_single_word_sentences(text: str) -> str:
     """
     TTS engines (especially XTTS) often fail on short sentences.
-    This merges them (<= 2 words) with neighbors using commas for a natural flow.
+    This merges them (<= 2 words) with neighbors using commas.
+    Commas are the most reliable "pause + continuation" signal in XTTS's
+    training data, producing consistent natural micro-pauses (~100-200ms).
     """
     # Filter to only keep sentences that actually contain a word/number.
     # We also strip leading dots/ellipses from sentences here to prevent " . Or was it" issues.
@@ -284,13 +291,12 @@ def consolidate_single_word_sentences(text: str) -> str:
         if word_count <= 2:
             if i < len(sentences) - 1:
                 # Merge with NEXT (favored)
-                # Convert terminal punctuation to semicolon to merge with next in rejoining phase
+                # Strip terminal punctuation and use semicolon — xtts_inference.py
+                # splits on ";" and inserts a silence tensor at each occurrence.
                 new_sentences.append(curr.rstrip(".!?") + ";")
             elif new_sentences:
                 # Last resort: merge with PREVIOUS
                 prev = new_sentences.pop()
-                # Clean up prev if it already ends in a semicolon from a forward merge
-                # then merge with a semicolon
                 new_sentences.append(prev.rstrip(".!?;") + "; " + curr)
             else:
                 new_sentences.append(curr)
@@ -316,7 +322,6 @@ def sanitize_for_xtts(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
 
     # 3. Ensure terminal punctuation (XTTS v2 can fail on short strings without it)
-    # Use regex to check for end-of-sentence punctuation even if followed by quotes/parens
     if text and not re.search(r'[.!?]["\')\]\s]*$', text):
         text += "."
 

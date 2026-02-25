@@ -33,6 +33,8 @@ def main():
     SAMPLE_RATE = 24000
     SENTENCE_PAUSE_MS = 180   # pause between sentences
     PARAGRAPH_PAUSE_MS = 650  # pause at segment boundaries (paragraph breath)
+    PAUSE_CHAR = ";"           # semicolons become silence pauses (stripped before XTTS)
+    PAUSE_CHAR_MS = 400        # duration of a semicolon pause
 
     script = []
     if args.script_json:
@@ -109,6 +111,31 @@ def main():
         from tqdm import tqdm
         all_wav_chunks = []
         par_indices = set()
+        pause_indices = set()  # indices that are already silence tensors from <PAUSE> markers
+
+        def _synthesize_one(text_to_speak, latent_pair, fallback_sw):
+            """Synthesize a single text string, returning the raw wav numpy array."""
+            if latent_pair:
+                gpt_cond, spk_emb = latent_pair
+                out_dict = xtts_model.inference(
+                    text=text_to_speak,
+                    language=args.language,
+                    gpt_cond_latent=gpt_cond,
+                    speaker_embedding=spk_emb,
+                    temperature=args.temperature,
+                    speed=args.speed,
+                    repetition_penalty=args.repetition_penalty
+                )
+                return out_dict['wav']
+            else:
+                return tts.synthesizer.tts(
+                    text=text_to_speak,
+                    speaker_wav=fallback_sw,
+                    language_name=args.language,
+                    speed=args.speed,
+                    repetition_penalty=args.repetition_penalty,
+                    temperature=args.temperature
+                )
 
         with tqdm(total=len(script), unit="seg", desc="Synthesizing", file=sys.stderr) as pbar:
             for i, segment in enumerate(script):
@@ -127,28 +154,23 @@ def main():
                     if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
                         continue
 
-                    if latents:
-                        gpt_cond, spk_emb = latents
-                        out_dict = xtts_model.inference(
-                            text=sentence,
-                            language=args.language,
-                            gpt_cond_latent=gpt_cond,
-                            speaker_embedding=spk_emb,
-                            temperature=args.temperature,
-                            speed=args.speed,
-                            repetition_penalty=args.repetition_penalty
-                        )
-                        wav_chunk = out_dict['wav']
+                    # Handle semicolons: split around them, synthesize each part,
+                    # and insert a silence tensor where each semicolon was.
+                    if PAUSE_CHAR in sentence:
+                        sub_parts = sentence.split(PAUSE_CHAR)
+                        for sp_idx, sub_part in enumerate(sub_parts):
+                            sub_text = sub_part.strip()
+                            if sub_text and any(c.isalnum() for c in sub_text):
+                                wav_chunk = _synthesize_one(sub_text, latents, sw)
+                                all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                            # Insert pause silence after each sub-part except the last
+                            if sp_idx < len(sub_parts) - 1:
+                                pause_samples = int(SAMPLE_RATE * PAUSE_CHAR_MS / 1000)
+                                all_wav_chunks.append(torch.zeros(pause_samples))
+                                pause_indices.add(len(all_wav_chunks) - 1)
                     else:
-                        wav_chunk = tts.synthesizer.tts(
-                            text=sentence,
-                            speaker_wav=sw,
-                            language_name=args.language,
-                            speed=args.speed,
-                            repetition_penalty=args.repetition_penalty,
-                            temperature=args.temperature
-                        )
-                    all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+                        wav_chunk = _synthesize_one(sentence, latents, sw)
+                        all_wav_chunks.append(torch.FloatTensor(wav_chunk))
 
                 if i < len(script) - 1:
                     par_indices.add(len(all_wav_chunks) - 1)
@@ -159,7 +181,7 @@ def main():
             final_parts = []
             for i, wav in enumerate(all_wav_chunks):
                 final_parts.append(wav)
-                if i < len(all_wav_chunks) - 1:
+                if i < len(all_wav_chunks) - 1 and i not in pause_indices:
                     pause_ms = PARAGRAPH_PAUSE_MS if i in par_indices else SENTENCE_PAUSE_MS
                     pause_samples = int(SAMPLE_RATE * pause_ms / 1000)
                     final_parts.append(torch.zeros(pause_samples))
