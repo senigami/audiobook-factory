@@ -122,6 +122,15 @@ def broadcast_queue_update():
     else:
         print(f"DEBUG: Skipping queue_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
+def broadcast_segments_updated(chapter_id: str):
+    """Notify all clients that segment audio status changed for a chapter."""
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "segments_updated", "chapter_id": chapter_id}),
+            loop
+        )
+
 def broadcast_pause_state(paused: bool):
     """Notify all clients of a change in pause status."""
     loop = _main_loop[0]

@@ -16,9 +16,10 @@ interface ChapterEditorProps {
   onNavigateToQueue: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev, segmentUpdate }) => {
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -53,6 +54,31 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   useEffect(() => {
     loadChapter();
   }, [chapterId]);
+
+  // React to WebSocket segment updates for this chapter
+  useEffect(() => {
+    if (!segmentUpdate || segmentUpdate.chapterId !== chapterId || segmentUpdate.tick === 0) return;
+    // Segments changed on the server — re-fetch and clear spinners
+    (async () => {
+      try {
+        const updated = await api.fetchSegments(chapterId);
+        setSegments(updated);
+        // Clear generating state for any segments now done or errored
+        setGeneratingSegmentIds(prev => {
+          const next = new Set(prev);
+          for (const id of prev) {
+            const seg = updated.find((s: any) => s.id === id);
+            if (seg && (seg.audio_status === 'done' || seg.audio_status === 'error')) {
+              next.delete(id);
+            }
+          }
+          return next.size !== prev.size ? next : prev;
+        });
+      } catch (e) {
+        console.error("Failed to refresh segments from WS", e);
+      }
+    })();
+  }, [segmentUpdate, chapterId]);
 
   useEffect(() => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -462,8 +488,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                     });
                                     try {
                                         await api.generateSegments(sids);
+                                        // Completion is handled by the segments_updated WebSocket event
                                     } catch (e) {
                                         console.error(e);
+                                        setGeneratingSegmentIds(prev => {
+                                            const next = new Set(prev);
+                                            sids.forEach(id => next.delete(id));
+                                            return next;
+                                        });
                                     }
                                 };
 

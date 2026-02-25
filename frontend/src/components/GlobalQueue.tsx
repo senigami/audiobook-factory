@@ -70,9 +70,9 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
     });
   }, [jobs]);
 
-  // Safety-net polling: re-fetch every 10s to catch any missed updates
+  // Safety-net polling: infrequent fallback in case a WS event was missed
   useEffect(() => {
-    const timer = setInterval(fetchQueue, 10000);
+    const timer = setInterval(fetchQueue, 30000);
     return () => clearInterval(timer);
   }, []);
 

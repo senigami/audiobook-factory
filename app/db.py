@@ -342,7 +342,22 @@ def update_segment(segment_id: str, **updates) -> bool:
             values.append(segment_id)
             cursor.execute(f"UPDATE chapter_segments SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
-            return cursor.rowcount > 0
+            changed = cursor.rowcount > 0
+
+    # Broadcast via WebSocket if audio_status changed (outside the lock to avoid deadlock)
+    if changed and "audio_status" in updates:
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT chapter_id FROM chapter_segments WHERE id = ?", (segment_id,))
+                row = cursor.fetchone()
+                if row:
+                    from .web import broadcast_segments_updated
+                    broadcast_segments_updated(row["chapter_id"])
+        except Exception as e:
+            print(f"Warning: Failed to broadcast segment update: {e}")
+
+    return changed
 
 def sync_chapter_segments(chapter_id: str, text_content: str):
     """

@@ -15,9 +15,10 @@ interface ProjectViewProps {
   onNavigateToQueue: () => void;
   onOpenPreview: (filename: string) => void;
   refreshTrigger?: number;
+  segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0 }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -337,6 +338,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
               onVoiceChange={setSelectedVoice}
               onNext={nextChapterId ? () => setEditingChapterId(nextChapterId) : undefined}
               onPrev={prevChapterId ? () => setEditingChapterId(prevChapterId) : undefined}
+              segmentUpdate={segmentUpdate}
           />
       );
   }
