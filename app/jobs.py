@@ -459,7 +459,7 @@ def worker_loop(q: "queue.Queue[str]"):
                 # unless it contains other useful info (rare for tqdm).
                 if not is_progress_line:
                     # Track long sentence warnings as job alerts
-                    if "exceeds the character limit of 250" in s:
+                    if "exceeds the character limit of 500" in s:
                         current_warnings = getattr(j, 'warning_count', 0) + 1
                         j.warning_count = current_warnings
                         update_job(jid, warning_count=current_warnings)

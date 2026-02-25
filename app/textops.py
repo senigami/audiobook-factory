@@ -34,7 +34,7 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
        while correctly ignoring trailing quotes or parentheses.
 
 3. FINAL SEGMENTATION (pack_text_to_limit)
-   - Greedily packs the cleaned sentences into blocks <= 250 characters (SENT_CHAR_LIMIT).
+   - Greedily packs the cleaned sentences into blocks <= 500 characters (SENT_CHAR_LIMIT).
    - This ensures the speech engine receives enough context for natural prosody
      while staying strictly within the reliability threshold of the model.
 """
@@ -311,43 +311,89 @@ def clean_text_for_tts(text: str) -> str:
 def consolidate_single_word_sentences(text: str) -> str:
     """
     TTS engines (especially XTTS) often fail on short sentences.
-    This merges them (<= 2 words) with neighbors using commas.
-    Commas are the most reliable "pause + continuation" signal in XTTS's
-    training data, producing consistent natural micro-pauses (~100-200ms).
+    This merges them (<= 2 words) with neighbors using semicolons.
+    Semicolons are mapped to pauses in xtts_inference.py.
+    
+    If text contains newlines, they are preserved as boundaries. 
+    If a merge happens across a newline, we use ';; ' to indicate 
+    a paragraph-level break/pause while merging the text units.
     """
-    # Filter to only keep sentences that actually contain a word/number.
-    # We also strip leading dots/ellipses from sentences here to prevent " . Or was it" issues.
-    sentences_raw = [s.strip() for s, _, _ in split_sentences(text)]
-    sentences = []
-    for s in sentences_raw:
-        cleaned = s.lstrip(" .…!?,")
-        if re.search(r'\w', cleaned):
-            sentences.append(cleaned)
+    # Split into lines to detect where merges cross paragraph boundaries
+    lines = text.split('\n')
+    processed_lines = []
 
-    if len(sentences) <= 1:
+    # We want to maintain sentence splitting relative to the whole text 
+    # but respect where newlines occurred.
+
+    all_sentences_with_meta = []
+    for line_idx, line in enumerate(lines):
+        sents = [s.strip() for s, _, _ in split_sentences(line)]
+        for s in sents:
+            cleaned = s.lstrip(" .…!?,")
+            if re.search(r'\w', cleaned):
+                all_sentences_with_meta.append({
+                    "text": cleaned,
+                    "line_idx": line_idx
+                })
+
+    if len(all_sentences_with_meta) <= 1:
         return text
 
-    new_sentences = []
-    for i, curr in enumerate(sentences):
-        # Count actual words (containing at least one alphanumeric)
-        word_count = len([w for w in curr.split() if re.search(r'\w', w)])
+    consolidated = []
+    skip_next = False
+
+    for i, curr in enumerate(all_sentences_with_meta):
+        if skip_next:
+            skip_next = False
+            continue
+
+        word_count = len([w for w in curr['text'].split() if re.search(r'\w', w)])
 
         if word_count <= 2:
-            if i < len(sentences) - 1:
-                # Merge with NEXT (favored)
-                # Strip terminal punctuation and use semicolon — xtts_inference.py
-                # splits on ";" and inserts a silence tensor at each occurrence.
-                new_sentences.append(curr.rstrip(".!?") + ";")
-            elif new_sentences:
-                # Last resort: merge with PREVIOUS
-                prev = new_sentences.pop()
-                new_sentences.append(prev.rstrip(".!?;") + "; " + curr)
-            else:
-                new_sentences.append(curr)
-        else:
-            new_sentences.append(curr)
+            if i < len(all_sentences_with_meta) - 1:
+                # Merge with NEXT
+                next_sent = all_sentences_with_meta[i+1]
+                # Use ;; if they were on different lines
+                sep = ";; " if curr['line_idx'] != next_sent['line_idx'] else "; "
 
-    return " ".join(new_sentences)
+                merged_text = curr['text'].rstrip(".!?") + sep + next_sent['text']
+                consolidated.append({
+                    "text": merged_text,
+                    "line_idx": next_sent['line_idx']
+                })
+                skip_next = True
+            elif consolidated:
+                # Last resort: merge with PREVIOUS
+                prev = consolidated.pop()
+                sep = ";; " if prev['line_idx'] != curr['line_idx'] else "; "
+                consolidated.append({
+                    "text": prev['text'].rstrip(".!?;") + sep + curr['text'],
+                    "line_idx": curr['line_idx']
+                })
+            else:
+                consolidated.append(curr)
+        else:
+            consolidated.append(curr)
+
+    # Reconstruct lines based on line_idx changes
+    final_output = []
+    current_line = 0
+    buffer = []
+
+    for item in consolidated:
+        if item['line_idx'] > current_line:
+            final_output.append(" ".join(buffer))
+            # Add back the correct number of newlines
+            final_output.extend([""] * (item['line_idx'] - current_line - 1))
+            buffer = [item['text']]
+            current_line = item['line_idx']
+        else:
+            buffer.append(item['text'])
+
+    if buffer:
+        final_output.append(" ".join(buffer))
+
+    return "\n".join(final_output)
 
 def sanitize_for_xtts(text: str) -> str:
     """
