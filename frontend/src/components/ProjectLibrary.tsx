@@ -256,9 +256,14 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     {projects.map(project => (
                         <motion.div
                             key={project.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            whileHover="hover"
+                            initial="initial"
+                            animate="visible"
+                            whileHover="cardHovered"
+                            variants={{
+                                initial: { opacity: 0, y: 10 },
+                                visible: { opacity: 1, y: 0 },
+                                cardHovered: { y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }
+                            }}
                             onClick={() => onSelectProject(project.id)}
                             style={{ 
                                 cursor: 'pointer',
@@ -359,26 +364,40 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 
                                 <motion.button 
                                     variants={{
-                                        hover: { opacity: 1, y: 0 },
-                                        initial: { opacity: 0, y: 5 }
+                                        initial: { opacity: 0, y: 8, scale: 1 },
+                                        cardHovered: { opacity: 1, y: 0, scale: 1 },
+                                        buttonHover: { 
+                                            scale: 1.1, 
+                                            backgroundColor: 'rgba(239, 68, 68, 0.9)', 
+                                            borderColor: 'rgba(255, 255, 255, 0.4)',
+                                            boxShadow: '0 8px 24px rgba(239, 68, 68, 0.3)'
+                                        }
                                     }}
-                                    initial="initial"
-                                    className="btn-danger" 
-                                    onClick={(e) => handleDeleteProject(e, project.id, project.name)}
+                                    whileHover="buttonHover"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteProject(e, project.id, project.name);
+                                    }}
                                     style={{ 
                                         position: 'absolute',
                                         top: '12px',
                                         right: '12px',
-                                        padding: '8px', 
-                                        borderRadius: '8px',
-                                        background: 'rgba(255, 255, 255, 0.9)',
-                                        backdropFilter: 'blur(8px)',
-                                        boxShadow: 'var(--shadow-md)',
-                                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                                        zIndex: 10
+                                        width: '40px',
+                                        height: '40px',
+                                        borderRadius: '12px',
+                                        background: 'rgba(15, 23, 42, 0.4)', 
+                                        backdropFilter: 'blur(30px)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        zIndex: 20,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                        padding: 0
                                     }}
                                 >
-                                    <Trash2 size={16} />
+                                    <Trash2 size={18} color="white" strokeWidth={2} />
                                 </motion.button>
                             </div>
                             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface)', zIndex: 11 }}>
