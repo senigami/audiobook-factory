@@ -256,14 +256,14 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     {projects.map(project => (
                         <motion.div
                             key={project.id}
-                            initial="initial"
-                            animate="visible"
-                            whileHover="projectHover"
+                            initial="hidden"
+                            animate="base"
+                            whileHover="revealed"
                             variants={{
-                                initial: { opacity: 0, y: 10 },
-                                visible: { opacity: 1, y: 0 },
-                                projectHover: { 
-                                    y: -4, 
+                                hidden: { opacity: 0, scale: 0.95 },
+                                base: { opacity: 1, scale: 1 },
+                                revealed: { 
+                                    scale: 1.02, 
                                     boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)'
                                 }
                             }}
@@ -366,16 +366,29 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 
                                 <motion.button 
                                     variants={{
-                                        initial: { opacity: 0, y: 120, scale: 1, pointerEvents: 'none' },
-                                        visible: { opacity: 0, y: 120, scale: 1, pointerEvents: 'none' },
-                                        projectHover: { 
+                                        hidden: { 
+                                            opacity: 0, 
+                                            y: 20, 
+                                            scale: 1, 
+                                            pointerEvents: 'none', 
+                                            backgroundColor: 'rgba(15, 23, 42, 0.4)' 
+                                        },
+                                        base: {
+                                            opacity: 0, 
+                                            y: 20, 
+                                            scale: 1, 
+                                            pointerEvents: 'none', 
+                                            backgroundColor: 'rgba(15, 23, 42, 0.4)'
+                                        },
+                                        revealed: { 
                                             opacity: 1, 
                                             y: 0, 
+                                            scale: 1,
                                             pointerEvents: 'auto',
+                                            backgroundColor: 'rgba(15, 23, 42, 0.4)',
                                             transition: { 
-                                                duration: 1.18, 
-                                                ease: [0.1, 1, 0.1, 1], // Aggressive ease-out for immediate slide
-                                                opacity: { duration: 1.12 } // Sync fade slightly with start
+                                                duration: 0.25, 
+                                                ease: [0.22, 1, 0.36, 1] 
                                             }
                                         }
                                     }}
@@ -407,7 +420,8 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         justifyContent: 'center',
                                         cursor: 'pointer',
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                        padding: 0
+                                        padding: 0,
+                                        transition: 'none' // CRITICAL: Stop index.css transition: all 0.2s from fighting Framer Motion
                                     }}
                                 >
                                     <Trash2 size={18} color="white" strokeWidth={2} />
