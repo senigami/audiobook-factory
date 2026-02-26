@@ -125,9 +125,12 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
             <header style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '4rem 0 2rem 0',
-                borderBottom: '1px solid var(--border)'
+                alignItems: 'center', 
+                padding: '4rem 3rem',
+                margin: '1.5rem -3rem 0 -3rem',
+                borderBottom: '1px solid var(--border)',
+                background: 'linear-gradient(180deg, var(--as-info-tint) 0%, transparent 100%)',
+                borderRadius: '40px'
             }}>
                 <div style={{ maxWidth: '600px' }}>
                     <h2 style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '1rem' }}>
@@ -160,7 +163,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <div style={{ 
                         position: 'absolute', 
                         inset: 0, 
-                        background: 'linear-gradient(135deg, rgba(43, 110, 255, 0.05) 0%, transparent 100%)' 
+                        background: 'linear-gradient(135deg, var(--as-info-tint) 0%, transparent 100%)' 
                     }} />
                     <img src="/logo.png" alt="Audiobook Studio" style={{ height: '160px', opacity: 0.8, position: 'relative', zIndex: 1 }} />
                 </div>

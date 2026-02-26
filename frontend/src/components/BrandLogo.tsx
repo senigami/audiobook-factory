@@ -29,6 +29,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({ scale = 1, className = '',
     >
       {showIcon && (
         <div style={{ 
+          width: `${85.516 * scale}px`,
           height: `${80 * scale}px`,
           display: 'flex',
           alignItems: 'center',
@@ -36,7 +37,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({ scale = 1, className = '',
           flexShrink: 0
         }}>
           <img 
-            src="/logo-simple.png" 
+            src="/logo.png" 
             alt="" 
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
           />

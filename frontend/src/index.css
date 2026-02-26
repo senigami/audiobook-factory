@@ -39,6 +39,7 @@
   --as-muted: #4B5563;      /* slate */
   --as-blue: #2B6EFF;       /* primary */
   --as-amber: #FF8A1F;      /* accent */
+  --as-info-tint: #EAF1FF;  /* blue wash for hero sections */
 }
 
 * {
