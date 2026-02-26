@@ -1,14 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Plus, Trash2, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Book, Plus, Trash2, Clock, User, Image as ImageIcon, Loader2, Settings, Check, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Project } from '../types';
 import { api } from '../api';
 
 interface ProjectLibraryProps {
     onSelectProject: (projectId: string) => void;
+    settings: any;
+    onRefresh: () => void;
+    hideFinished: boolean;
+    onToggleHideFinished: () => void;
 }
 
-export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject }) => {
+export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ 
+    onSelectProject, 
+    settings, 
+    onRefresh, 
+    hideFinished, 
+    onToggleHideFinished 
+}) => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -23,6 +33,10 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [importing, setImporting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Settings Tray state
+    const [showSettings, setShowSettings] = useState(false);
+    const [savingSettings, setSavingSettings] = useState(false);
 
     const loadProjects = async () => {
         try {
@@ -148,12 +162,28 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <h2 style={{ fontSize: '1.75rem', fontWeight: 600 }}>Library shelf</h2>
                     <p style={{ color: 'var(--text-muted)' }}>Manage your audiobook projects</p>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <button 
+                        onClick={() => setShowSettings(!showSettings)}
+                        className={`btn-ghost ${showSettings ? 'active' : ''}`}
+                        style={{ 
+                            padding: '0.75rem', 
+                            borderRadius: '12px', 
+                            border: '1px solid var(--border)',
+                            color: showSettings ? 'var(--accent)' : 'var(--text-muted)',
+                            background: showSettings ? 'rgba(139, 92, 246, 0.1)' : 'var(--glass)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                        title="Synthesis Preferences"
+                    >
+                        <Settings size={20} className={showSettings ? 'animate-spin-slow' : ''} />
+                    </button>
+
                     <button 
                         onClick={handleImport}
                         disabled={importing}
                         className="btn-ghost" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)' }}
+                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)', borderRadius: '12px' }}
                     >
                         {importing ? <Loader2 size={18} className="animate-spin" /> : <Book size={18} />}
                         Import Legacy Data
@@ -161,12 +191,127 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <button 
                         onClick={() => setShowModal(true)}
                         className="btn-primary" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px' }}
                     >
                         <Plus size={18} /> New Project
                     </button>
                 </div>
             </header>
+
+            {/* Synthesis Preferences Tray */}
+            {showSettings && (
+                <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="glass-panel"
+                    style={{ 
+                        padding: '1.5rem', 
+                        border: '1px solid var(--accent)', 
+                        background: 'rgba(10, 10, 12, 0.5)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1.5rem'
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Settings size={16} color="var(--accent)" />
+                            <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Synthesis Preferences</h3>
+                        </div>
+                        {savingSettings && <span style={{ fontSize: '0.75rem', color: 'var(--accent)', animation: 'pulse 2s infinite' }}>Saving...</span>}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Safe Mode</h4>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Prevent TTS engine crashes</p>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        setSavingSettings(true);
+                                        try {
+                                            const formData = new URLSearchParams();
+                                            formData.append('safe_mode', (!settings?.safe_mode).toString());
+                                            await fetch('/settings', { method: 'POST', body: formData });
+                                            onRefresh();
+                                        } finally { setSavingSettings(false); }
+                                    }}
+                                    className={settings?.safe_mode ? 'btn-primary' : 'btn-glass'} 
+                                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                                >
+                                    {settings?.safe_mode ? <Check size={12} /> : null} {settings?.safe_mode ? 'On' : 'Off'}
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Produce MP3</h4>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Compatible with all browsers</p>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        setSavingSettings(true);
+                                        try {
+                                            const formData = new URLSearchParams();
+                                            formData.append('make_mp3', (!settings?.make_mp3).toString());
+                                            await fetch('/settings', { method: 'POST', body: formData });
+                                            onRefresh();
+                                        } finally { setSavingSettings(false); }
+                                    }}
+                                    className={settings?.make_mp3 ? 'btn-primary' : 'btn-glass'} 
+                                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                                >
+                                    {settings?.make_mp3 ? <Check size={12} /> : null} {settings?.make_mp3 ? 'On' : 'Off'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <h4 style={{ fontSize: '0.85rem', marginBottom: '2px' }}>Hide Finished</h4>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Filter active chapters only</p>
+                                </div>
+                                <button onClick={onToggleHideFinished} className={hideFinished ? 'btn-primary' : 'btn-glass'} style={{ fontSize: '0.75rem', padding: '6px 12px' }}>
+                                    {hideFinished ? <Check size={12} /> : null} {hideFinished ? 'Active' : 'Off'}
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            await fetch('/queue/backfill_mp3', { method: 'POST' });
+                                            onRefresh();
+                                            alert('Sync process started.');
+                                        } catch(e) { console.error(e); }
+                                    }}
+                                    className="btn-glass" 
+                                    style={{ flex: 1, fontSize: '0.75rem', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                >
+                                    <RefreshCw size={14} /> Sync Files
+                                </button>
+                                <button 
+                                    onClick={async () => {
+                                        if (confirm('Wipe all jobs and logs?')) {
+                                            try {
+                                                await fetch('/queue/clear', { method: 'POST' });
+                                                onRefresh();
+                                            } catch(e) { console.error(e); }
+                                        }
+                                    }}
+                                    className="btn-ghost" 
+                                    style={{ flex: 1, fontSize: '0.75rem', padding: '10px', color: 'var(--error-muted)', border: '1px solid rgba(239, 68, 68, 0.1)' }}
+                                >
+                                    Wipe History
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
 
             {projects.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>

@@ -38,6 +38,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         return `${m}m ${s}s`;
     };
 
+
     const loadPrepData = async () => {
         setLoading(true);
         try {
@@ -143,9 +144,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
             {/* Left Sidebar: Library */}
             <aside className="library-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', borderRight: '1px solid var(--border)', paddingRight: '1.5rem', position: 'sticky', top: '0', height: 'calc(100vh - 120px)', overflowY: 'auto' }}>
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>The Library</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>The Library</h3>
+                    </div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{audiobooks.length} Books</span>
                 </header>
+
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {audiobooks.length === 0 ? (

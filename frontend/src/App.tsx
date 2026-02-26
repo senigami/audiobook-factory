@@ -147,6 +147,10 @@ function App() {
               ) : (
                 <ProjectLibrary
                   onSelectProject={setActiveProjectId}
+                  settings={initialData?.settings}
+                  onRefresh={handleRefresh}
+                  hideFinished={hideFinished}
+                  onToggleHideFinished={() => setHideFinished(!hideFinished)}
                 />
               )
             )}
