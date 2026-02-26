@@ -14,7 +14,7 @@ describe('Layout', () => {
 
         expect(screen.getByText(/AUDIOBOOK/i)).toBeTruthy()
         expect(screen.getByText(/STUDIO/i)).toBeTruthy()
-        expect(screen.getByAltText(/Audiobook Studio/i)).toBeTruthy()
+        expect(screen.getByLabelText(/Audiobook Studio/i)).toBeTruthy()
     })
 
     it('renders navigation tabs', () => {

@@ -36,9 +36,11 @@ describe('ProjectLibrary', () => {
         }) as any
     })
 
-    it('renders project library and fetches projects', async () => {
+    it('renders project library and hero section', async () => {
         render(<ProjectLibrary onSelectProject={vi.fn()} />)
         
+        expect(await screen.findByText(/Create Natural-Sounding Audiobooks with AI/i)).toBeTruthy()
+
         await waitFor(() => {
             expect(screen.getByText('Test Project')).toBeTruthy()
         })
