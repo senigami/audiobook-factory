@@ -40,14 +40,14 @@ describe('App', () => {
     render(<App />)
     
     await waitFor(() => {
-      expect(screen.getByText('AUDIOBOOK')).toBeTruthy()
+      expect(screen.getByText('Audiobook')).toBeTruthy()
     })
   })
 
   it('switches tabs', async () => {
     render(<App />)
     await waitFor(() => {
-        expect(screen.getByText('AUDIOBOOK')).toBeTruthy()
+        expect(screen.getByText('Audiobook')).toBeTruthy()
     })
 
     const queueTab = screen.getByText('Queue')
