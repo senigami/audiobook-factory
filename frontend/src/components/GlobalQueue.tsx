@@ -158,10 +158,20 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
 
                           return (
                           <div key={job.id} style={{
-                              background: 'rgba(139, 92, 246, 0.1)', border: '1px solid var(--accent)',
+                              background: 'var(--surface)', border: '1px solid var(--accent)',
                               borderRadius: '12px', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem',
-                              boxShadow: '0 0 20px rgba(139, 92, 246, 0.15)'
+                              boxShadow: 'var(--shadow-md)',
+                              position: 'relative',
+                              overflow: 'hidden'
                           }}>
+                              <div style={{ 
+                                  position: 'absolute', 
+                                  left: 0, 
+                                  top: 0, 
+                                  bottom: 0, 
+                                  width: '4px', 
+                                  background: 'var(--accent)' 
+                              }} />
                               <Play size={24} color="var(--accent)" className="animate-pulse" />
                               <div style={{ flex: 1 }}>
                                   <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>{job.chapter_title}</h4>
@@ -192,7 +202,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                                 background: 'var(--surface)', borderRadius: '12px', padding: '1.25rem', border: '1px solid var(--border)',
                                 display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'grab'
                             }}
-                            whileDrag={{ scale: 1.02, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
+                            whileDrag={{ scale: 1.02, boxShadow: 'var(--shadow-lg)', zIndex: 50, cursor: 'grabbing' }}
                           >
                             <div style={{ cursor: 'grab', color: 'var(--text-muted)' }} title="Drag to reorder"><GripVertical size={20} /></div>
                             <Clock size={20} color="var(--text-muted)" />

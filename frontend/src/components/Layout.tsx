@@ -19,24 +19,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw' }}>
-      <header className="glass-panel header-container" style={{
+      <header className="header-container" style={{
         height: 'var(--header-height, 72px)',
         width: '100%',
         position: 'fixed',
         top: 0,
         left: 0,
-        borderRadius: 0,
-        borderTop: 'none',
-        borderLeft: 'none',
-        borderRight: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 2.5rem',
         zIndex: 100,
-        backgroundColor: 'rgba(10, 10, 12, 0.8)',
-        backdropFilter: 'blur(40px)',
-        borderBottom: '1px solid var(--border)'
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
           {/* Logo Section */}
@@ -46,52 +43,40 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           >
             <div style={{
               position: 'relative',
-              width: '42px',
-              height: '42px',
+              width: '40px',
+              height: '40px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <div style={{
-                position: 'absolute',
-                inset: '-8px',
-                background: 'var(--accent)',
-                borderRadius: '14px',
-                opacity: 0.15,
-                filter: 'blur(12px)'
-              }} />
               <img
-                src="/logo.svg"
+                src="/logo.png"
                 alt="Audiobook Studio"
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
-                  filter: 'drop-shadow(0 4px 12px rgba(139, 92, 246, 0.3))',
                   zIndex: 1
                 }}
               />
             </div>
             <div className="header-logo-text" style={{ display: 'flex', flexDirection: 'column' }}>
               <h1 style={{
-                fontSize: '1.1rem',
-                fontWeight: 900,
-                letterSpacing: '-0.03em',
+                fontSize: '1.2rem',
+                fontWeight: 800,
+                letterSpacing: '-0.04em',
                 margin: 0,
-                background: 'linear-gradient(to bottom, #fff, #94a3b8)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                color: 'var(--text-primary)',
                 lineHeight: 1
               }}>
-                AUDIOBOOK
+                Audiobook
               </h1>
               <span style={{
-                fontSize: '0.8rem',
-                fontWeight: 800,
+                fontSize: '0.75rem',
+                fontWeight: 600,
                 color: 'var(--accent)',
-                letterSpacing: '0.6em',
+                letterSpacing: '0.35em',
                 textTransform: 'uppercase',
-                opacity: 0.8,
                 marginTop: '1px'
               }}>
                 STUDIO
@@ -110,19 +95,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  padding: '10px 18px',
-                  borderRadius: '10px',
+                  padding: '9px 18px',
+                  borderRadius: '12px',
                   background: activeTab === item.id ? 'var(--accent)' : 'transparent',
-                  boxShadow: activeTab === item.id ? '0 8px 20px var(--accent-glow)' : 'none',
                   color: activeTab === item.id ? 'white' : 'var(--text-secondary)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  transition: 'all 0.2s ease'
                 }}
               >
                 <item.icon size={16} opacity={activeTab === item.id ? 1 : 0.6} />
                 <span className="nav-label" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
                 {item.id === 'queue' && queueCount !== undefined && queueCount > 0 && (
                    <div style={{ 
-                       background: 'var(--accent)', color: 'white', borderRadius: '10px', 
+                       background: 'var(--accent)', color: 'white', borderRadius: '8px', 
                        padding: '2px 8px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '4px' 
                    }}>{queueCount}</div>
                 )}
@@ -143,7 +127,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 height: '42px',
                 borderRadius: '12px',
                 color: showLogs ? 'var(--accent)' : 'var(--text-muted)',
-                background: showLogs ? 'rgba(139, 92, 246, 0.1)' : 'var(--glass)',
+                background: showLogs ? 'var(--accent-glow)' : 'transparent',
                 border: showLogs ? '1px solid var(--accent)' : '1px solid var(--border)',
                 transition: 'all 0.2s ease',
                 display: 'flex',
@@ -167,7 +151,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        padding: '2.5rem'
+        padding: '3rem 2.5rem'
       }}>
         <div style={{ maxWidth: '1600px', width: '100%', margin: '0 auto' }}>
           {children}

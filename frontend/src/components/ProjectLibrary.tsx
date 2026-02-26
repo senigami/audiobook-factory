@@ -120,21 +120,49 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     }
 
     return (
-        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minHeight: '100%' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 600 }}>Library shelf</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Manage your audiobook projects</p>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-
+        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '3rem', minHeight: '100%' }}>
+            {/* Hero Section */}
+            <header style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '4rem 0 2rem 0',
+                borderBottom: '1px solid var(--border)'
+            }}>
+                <div style={{ maxWidth: '600px' }}>
+                    <h2 style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '1rem' }}>
+                        Create Natural-Sounding Audiobooks with AI
+                    </h2>
+                    <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '2rem' }}>
+                        Professional AI voice generation lab for content creators and authors.
+                    </p>
                     <button 
                         onClick={() => setShowModal(true)}
                         className="btn-primary" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px' }}
+                        style={{ padding: '0.85rem 2rem', fontSize: '1rem', borderRadius: '14px' }}
                     >
-                        <Plus size={18} /> New Project
+                        <Plus size={20} /> New Project
                     </button>
+                </div>
+                <div style={{ 
+                    width: '320px', 
+                    height: '240px', 
+                    background: 'var(--surface)', 
+                    borderRadius: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: 'var(--shadow-lg)',
+                    border: '1px solid var(--border)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}>
+                    <div style={{ 
+                        position: 'absolute', 
+                        inset: 0, 
+                        background: 'linear-gradient(135deg, rgba(43, 110, 255, 0.05) 0%, transparent 100%)' 
+                    }} />
+                    <img src="/logo.png" alt="Audiobook Studio" style={{ width: '80px', height: '80px', opacity: 0.8, position: 'relative', zIndex: 1 }} />
                 </div>
             </header>
 
@@ -156,7 +184,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             key={project.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="glass-panel hover-lift"
+                            className="hover-lift"
                             onClick={() => onSelectProject(project.id)}
                             style={{ 
                                 cursor: 'pointer',
@@ -164,7 +192,12 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 flexDirection: 'column',
                                 overflow: 'hidden',
                                 padding: 0,
-                                position: 'relative'
+                                position: 'relative',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-lg)',
+                                boxShadow: 'var(--shadow-sm)',
+                                transition: 'all 0.2s ease'
                             }}
                         >
                             <div style={{ 
@@ -221,8 +254,18 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="glass-panel"
-                        style={{ width: '100%', maxWidth: '500px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', border: '1px solid var(--border)' }}
+                        style={{ 
+                            width: '100%', 
+                            maxWidth: '520px', 
+                            padding: '2.5rem', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '2rem', 
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            boxShadow: 'var(--shadow-lg)',
+                            border: '1px solid var(--border)'
+                        }}
                     >
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create New Project</h3>
                         <form onSubmit={handleCreateProject} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

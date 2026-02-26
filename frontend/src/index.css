@@ -1,30 +1,37 @@
 :root {
-  --bg: #0a0a0c;
-  --surface: #121217;
-  --surface-alt: #1e1e26;
-  --accent: #8b5cf6;
-  --accent-hover: #a78bfa;
-  --accent-active: #7c3aed;
-  --accent-glow: rgba(139, 92, 246, 0.3);
+  --bg: #f7f9fc;
+  --surface: #ffffff;
+  --surface-alt: #f1f5f9;
+  --accent: #2b6eff;
+  --accent-secondary: #ff8a1f;
+  --accent-hover: #1d54da;
+  --accent-active: #1642b5;
+  --accent-glow: rgba(43, 110, 255, 0.2);
   --success: #10b981;
-  --success-muted: rgba(16, 185, 129, 0.4);
+  --success-muted: rgba(16, 185, 129, 0.1);
   --error: #ef4444;
-  --error-muted: rgba(239, 68, 68, 0.4);
+  --error-muted: rgba(239, 68, 68, 0.1);
   --warning: #f59e0b;
-  --warning-muted: rgba(245, 158, 11, 0.4);
-  --text-primary: #ffffff;
-  --text-secondary: #cbd5e1;
-  /* Lighter for better contrast */
-  --text-muted: #94a3b8;
-  /* Lighter for better contrast */
-  --border: rgba(255, 255, 255, 0.08);
-  --glass: rgba(255, 255, 255, 0.02);
-  --glass-hover: rgba(255, 255, 255, 0.06);
-  --glass-active: rgba(255, 255, 255, 0.1);
-  --surface-light: #1a1a21;
+  --warning-muted: rgba(245, 158, 11, 0.1);
+  --text-primary: #0b1220;
+  --text-secondary: #4b5563;
+  --text-muted: #64748b;
+  --border: #e6eaf2;
+  --glass: rgba(255, 255, 255, 0.7);
+  --glass-hover: rgba(255, 255, 255, 0.9);
+  --glass-active: rgba(255, 255, 255, 1);
+  --surface-light: #f8fafc;
   --background: var(--bg);
   --text: var(--text-primary);
   --header-height: 72px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 * {
@@ -37,11 +44,11 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background-color: #0c0c0e;
+  background-color: var(--bg);
   color: var(--text-primary);
   font-family:
-    "Outfit",
     "Inter",
+    system-ui,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
@@ -53,32 +60,14 @@ body {
   overflow-x: hidden;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: -20px;
-  background-image: url("/background.png");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  filter: blur(10px) brightness(0.7);
-  z-index: -2;
-  pointer-events: none;
-}
-
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   background:
     radial-gradient(
-      circle at 50% 0%,
-      rgba(139, 92, 246, 0.12) 0%,
-      transparent 70%
-    ),
-    radial-gradient(
-      circle at 0% 100%,
-      rgba(59, 130, 246, 0.08) 0%,
+      circle at 80% 0%,
+      rgba(43, 110, 255, 0.05) 0%,
       transparent 50%
     );
   pointer-events: none;
@@ -106,18 +95,19 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .btn-primary {
   background: var(--accent);
   color: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--accent-glow);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -132,23 +122,23 @@ button {
 }
 
 .btn-glass {
-  background: var(--glass);
+  background: #ffffff;
   color: var(--text-primary);
   border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-glass:hover:not(:disabled) {
-  background: var(--glass-hover);
-  border-color: var(--text-muted);
+  background: var(--surface-alt);
+  border-color: #cbd5e1;
 }
 
 .btn-glass:active:not(:disabled) {
-  background: var(--glass-active);
+  background: #e2e8f0;
 }
 
 .btn-glass:disabled {
-  opacity: 0.3;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -179,12 +169,10 @@ button {
 }
 
 .glass-panel {
-  background: rgba(23, 23, 28, 0.6);
-  backdrop-filter: blur(25px);
-  -webkit-backdrop-filter: blur(25px);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .divider {
@@ -209,10 +197,10 @@ button {
 
 .input-group input,
 .input-group textarea {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--surface-light);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  color: #fff;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
   padding: 0.75rem 1rem;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -229,7 +217,7 @@ button {
 .input-field {
   background: var(--surface-light);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   padding: 0.5rem 0.75rem;
   font-size: 0.9rem;
@@ -243,19 +231,18 @@ button {
 }
 
 .select-glass {
-  background: var(--glass);
+  background: #ffffff;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   padding: 0.5rem 0.75rem;
   font-size: 0.9rem;
   outline: none;
   cursor: pointer;
-  backdrop-filter: blur(8px);
 }
 
 .select-glass:hover {
-  background: var(--glass-hover);
+  background: var(--surface-alt);
 }
 
 /* Scrollbar */
@@ -272,9 +259,9 @@ button {
   font-family: "JetBrains Mono", "Fira Code", monospace;
   font-size: 0.8rem;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.02);
+  background: #f8fafc;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-bottom: 0.75rem;
   white-space: pre;
   overflow-x: auto;
@@ -315,12 +302,12 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: #cbd5e1;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: #94a3b8;
 }
 
 @keyframes progress-stripes {
@@ -396,7 +383,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--glass);
+  background: #f1f5f9;
   border-radius: 50%;
   color: var(--accent);
 }

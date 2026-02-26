@@ -465,32 +465,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
 
       {/* Assembly Progress */}
       {activeAssemblyJob && (
-          <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
+          <div style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: '12px', padding: '1.5rem', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontWeight: 600 }}>Assembling {project.name}...</h3>
+                  <h3 style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Assembling {project.name}...</h3>
                   <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                       {Math.round(activeAssemblyJob.progress * 100)}%
                   </div>
               </div>
-              <div style={{ width: '100%', height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${activeAssemblyJob.progress * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  ETA: {activeAssemblyJob.eta_seconds ? `${Math.floor(activeAssemblyJob.eta_seconds / 60)}m ${activeAssemblyJob.eta_seconds % 60}s` : 'Calculating...'}
-              </div>
-          </div>
-      )}
-
-      {/* Assembly Progress */}
-      {activeAssemblyJob && (
-          <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontWeight: 600 }}>Assembling {project.name}...</h3>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      {Math.round(activeAssemblyJob.progress * 100)}%
-                  </div>
-              </div>
-              <div style={{ width: '100%', height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${activeAssemblyJob.progress * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
@@ -500,9 +482,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       )}
 
       {finishedAssemblyJob && !activeAssemblyJob && (
-          <div style={{ background: 'var(--success-muted)', color: '#fff', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ background: 'var(--success-muted)', color: 'var(--success)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
               <CheckCircle size={20} />
-              <span>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
+              <span style={{ fontWeight: 600 }}>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
           </div>
       )}
 
@@ -627,7 +609,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                   cursor: 'grab',
                   background: 'var(--surface)'
                 }}
-                whileDrag={{ background: 'var(--surface-alt)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
+                whileDrag={{ background: 'var(--surface-alt)', boxShadow: 'var(--shadow-lg)', zIndex: 50, cursor: 'grabbing' }}
                 dragListener={!isAssemblyMode}
                 onClick={() => {
                     if (isAssemblyMode && chap.audio_status === 'done') {

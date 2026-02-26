@@ -108,7 +108,7 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                 </div>
             </div>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Speed</span>
@@ -357,10 +357,10 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </button>
 
                         <div style={{
-                            background: 'rgba(255, 255, 255, 0.1)',
+                            background: 'var(--accent-glow)',
                             borderRadius: '12px',
                             padding: '1.25rem',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            border: '1px solid var(--accent)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: '0.75rem'
@@ -456,10 +456,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     style={{
                                         fontSize: '1.1rem',
                                         fontWeight: 600,
-                                        background: 'rgba(255,255,255,0.1)',
+                                        background: 'var(--surface-light)',
+                                        border: '1px solid var(--border)',
                                         borderRadius: '8px',
                                         padding: '10px 14px',
-                                        flex: 1
+                                        flex: 1,
+                                        color: 'var(--text-primary)'
                                     }}
                                 />
                                 {editedName.trim() !== editingProfile.name && editedName.trim() !== '' && (
