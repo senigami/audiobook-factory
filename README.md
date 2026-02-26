@@ -1,6 +1,6 @@
-# 🎧 Audiobook Factory
+# 🎧 Audiobook Studio
 
-Audiobook Factory is a modern, self-hosted web dashboard for turning chapter-marked text files into high-quality audiobook audio using **local AI speech synthesis**.
+Audiobook Studio is a modern, self-hosted web dashboard for turning chapter-marked text files into high-quality audiobook audio using **local AI speech synthesis**.
 
 - **XTTS-v2 (Native Voice Cloning)**: Clone any voice from just 60 seconds of audio.
 - **Modern Glassmorphism UI**: High-performance dashboard with deep customization.
@@ -8,10 +8,10 @@ Audiobook Factory is a modern, self-hosted web dashboard for turning chapter-mar
 - **Auto-Tuning ETA**: Progress tracking that learns from your hardware's speed.
 - **Interactive Assembly**: Smart interface for renaming, reordering, and building final M4B files.
 
-![Audiobook Factory Dashboard](docs/assets/home.jpg)
+![Audiobook Studio Dashboard](docs/assets/home.jpg)
 
 > [!TIP]
-> **View Live Project Overview**: 🎙️ [Audiobook Factory Live Showcase](https://senigami.github.io/audiobook-factory/)
+> **View Live Project Overview**: 🎙️ [Audiobook Studio Live Showcase](https://senigami.github.io/audiobook-studio/)
 > _(Includes an embedded audio player and interactive feature tour)_
 
 It runs entirely locally and supports queued batch processing, live progress tracking, and browser-based audio preview.
@@ -49,8 +49,8 @@ No cloud required. No subscriptions. Total privacy.
 ## 1️⃣ Clone Repository
 
 ```bash
-git clone https://github.com/senigami/audiobook-factory.git
-cd audiobook-factory
+git clone https://github.com/senigami/audiobook-studio.git
+cd audiobook-studio
 ```
 
 ---
@@ -111,12 +111,12 @@ The system will automatically detect these profiles in the Dashboard.
 
 ---
 
-# ▶ Running Audiobook Factory
+# ▶ Running Audiobook Studio
 
 1. **Start the backend**:
 
 ```bash
-cd audiobook-factory
+cd audiobook-studio
 source venv/bin/activate
 uvicorn run:app --port 8123
 ```
@@ -138,7 +138,7 @@ uvicorn run:app --port 8123
 
 # 🧪 Testing
 
-Audiobook Factory includes a comprehensive suite of automated tests covering text sanitization, API endpoints, and job logic.
+Audiobook Studio includes a comprehensive suite of automated tests covering text sanitization, API endpoints, and job logic.
 
 ```bash
 source venv/bin/activate
@@ -179,6 +179,6 @@ MIT License.
 
 ---
 
-# 🎧 Why Audiobook Factory?
+# 🎧 Why Audiobook Studio?
 
 Because turning a manuscript into a high-quality audiobook shouldn't require a cloud subscription or technical wizardry—just a local machine and the right machinery.

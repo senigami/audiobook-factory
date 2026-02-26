@@ -2,7 +2,7 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-DB_PATH = Path("audiobook_factory.db")
+DB_PATH = Path("audiobook_studio.db")
 XTTS_OUT_DIR = Path("xtts_audio")
 
 def get_duration(file_path):

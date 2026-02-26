@@ -122,6 +122,15 @@ def broadcast_queue_update():
     else:
         print(f"DEBUG: Skipping queue_updated broadcast, loop instance: {id(loop) if loop else 'None'}, running: {loop.is_running() if loop else 'False'}")
 
+def broadcast_segments_updated(chapter_id: str):
+    """Notify all clients that segment audio status changed for a chapter."""
+    loop = _main_loop[0]
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast({"type": "segments_updated", "chapter_id": chapter_id}),
+            loop
+        )
+
 def broadcast_pause_state(paused: bool):
     """Notify all clients of a change in pause status."""
     loop = _main_loop[0]
@@ -142,29 +151,35 @@ def startup_event():
     except RuntimeError:
         pass
 
-    # Re-populate in-memory queue from state on restart
+    # Clear the in-memory queue and strictly "queued" or "running" jobs from state on restart
+    # users want a clean slate when they restart the server, not auto-resume of partial jobs.
     existing = get_jobs()
-    count = 0
+    to_delete = []
     for jid, j in existing.items():
         if j.status == "queued" or j.status == "running":
-            # Reset stale jobs to 'cancelled' on startup to prevent auto-start
-            update_job(jid,
-                       status="cancelled",
-                       progress=0.0,
-                       started_at=None,
-                       log="Reset on startup.",
-                       finished_at=None,
-                       eta_seconds=None,
-                       error="Restarted",
-                       warning_count=0)
-            count += 1
-    if count > 0:
-        print(f"recovered {count} jobs from state")
+            to_delete.append(jid)
 
-    # 2. Reconcile DB queue with what's actually still in memory/state
-    from .db import reconcile_queue_status
-    active_ids = list(get_jobs().keys()) # Only jobs that still exist in state.json
-    reconcile_queue_status(active_ids)
+    if to_delete:
+        from .state import delete_jobs
+        delete_jobs(to_delete)
+        print(f"Cleared {len(to_delete)} pending/running jobs on startup.")
+
+    # 2. Reconcile DB queue - clear everything pending since we want a clean slate
+    from .db import get_connection
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Mark any non-finished chapters back to unprocessed if they were in the middle of generation
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed' 
+                WHERE audio_status = 'processing'
+            """)
+            # Clear the queue entirely of non-finished items
+            cursor.execute("DELETE FROM processing_queue WHERE status NOT IN ('done', 'failed', 'cancelled')")
+            conn.commit()
+    except Exception as e:
+        print(f"Warning: Failed to clear DB queue on startup: {e}")
 
     # Register bridge between state updates and WebSocket broadcast
     from .state import add_job_listener
@@ -391,6 +406,11 @@ async def api_create_chapter(
             actual_text = content.decode('latin-1', errors='replace')
 
     cid = create_chapter(project_id, title, actual_text, sort_order)
+
+    if actual_text:
+        from .db import sync_chapter_segments
+        sync_chapter_segments(cid, actual_text)
+
     new_chapter = get_chapter(cid)
     return JSONResponse({"status": "success", "chapter": new_chapter})
 
@@ -420,6 +440,9 @@ async def api_update_chapter_details(
 
     if updates:
         update_chapter(chapter_id, **updates)
+        if "text_content" in updates:
+            from .db import sync_chapter_segments
+            sync_chapter_segments(chapter_id, updates["text_content"])
 
     return JSONResponse({"status": "success", "chapter": get_chapter(chapter_id)})
 
@@ -437,6 +460,184 @@ def api_reset_chapter_audio(chapter_id: str):
     if success:
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+# --- Chapter Segments API ---
+
+@app.get("/api/chapters/{chapter_id}/segments")
+def api_list_segments(chapter_id: str):
+    from .db import get_chapter_segments
+    return JSONResponse({"status": "success", "segments": get_chapter_segments(chapter_id)})
+
+@app.post("/api/segments/generate")
+def api_generate_segments(segment_ids: List[str] = Form(...)):
+    """Queues generation for specific segments."""
+    # Handle both ["id1,id2"] and ["id1", "id2"]
+    actual_ids = []
+    for item in segment_ids:
+        if "," in item:
+            actual_ids.extend([s.strip() for s in item.split(",") if s.strip()])
+        else:
+            actual_ids.append(item.strip())
+
+    print(f"DEBUG: api_generate_segments called with: {actual_ids}")
+    sids = [s for s in actual_ids if s]
+    if not sids:
+        return JSONResponse({"status": "error", "message": "No segment IDs provided"}, status_code=400)
+
+    from .db import get_connection
+    # Find chapter_id from first segment to group them
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chapter_id FROM chapter_segments WHERE id = ?", (sids[0],))
+        row = cursor.fetchone()
+        if not row:
+            return JSONResponse({"status": "error", "message": "Segment not found"}, status_code=404)
+        chapter_id = row['chapter_id']
+
+        # Get project_id for output paths
+        cursor.execute("SELECT project_id, title FROM chapters WHERE id = ?", (chapter_id,))
+        chap = cursor.fetchone()
+        project_id = chap['project_id']
+        chapter_title = chap['title']
+
+    from .jobs import enqueue
+    from .models import Job
+    import uuid
+
+    job = Job(
+        id=str(uuid.uuid4()),
+        engine="xtts",
+        chapter_file=f"[Performance] {chapter_title}", # Clearer label for granular jobs
+        status="queued",
+        created_at=time.time(),
+        project_id=project_id,
+        chapter_id=chapter_id,
+        segment_ids=sids
+    )
+    enqueue(job)
+    return JSONResponse({"status": "success", "job_id": job.id})
+
+@app.put("/api/segments/{segment_id}")
+def api_update_segment(
+    segment_id: str,
+    character_id: Optional[str] = Form(None),
+    audio_status: Optional[str] = Form(None)
+):
+    updates = {}
+    if character_id is not None:
+        # allow clearing character
+        updates["character_id"] = character_id if character_id != "" else None
+    if audio_status is not None:
+        updates["audio_status"] = audio_status
+
+    if updates:
+        from .db import update_segment
+        update_segment(segment_id, **updates)
+
+    return JSONResponse({"status": "success"})
+
+@app.put("/api/segments")
+async def api_update_segments_bulk(
+    segment_ids: List[str] = Form(...),
+    character_id: Optional[str] = Form(None),
+    audio_status: Optional[str] = Form(None)
+):
+    # Handle both ["id1,id2"] and ["id1", "id2"]
+    actual_ids = []
+    for item in segment_ids:
+        if "," in item:
+            actual_ids.extend([s.strip() for s in item.split(",") if s.strip()])
+        else:
+            actual_ids.append(item.strip())
+
+    updates = {}
+    if character_id is not None:
+        updates["character_id"] = character_id if character_id != "" else None
+    if audio_status is not None:
+        updates["audio_status"] = audio_status
+
+    if updates and actual_ids:
+        from .db import update_segments_bulk
+        update_segments_bulk(actual_ids, **updates)
+
+    return JSONResponse({"status": "success"})
+
+@app.post("/api/chapters/{chapter_id}/bake")
+def api_bake_chapter(chapter_id: str):
+    """Stitches all segments of a chapter into a final audio file."""
+    from .db import get_connection
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT project_id, title FROM chapters WHERE id = ?", (chapter_id,))
+        chap = cursor.fetchone()
+        if not chap:
+            return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+        project_id = chap['project_id']
+        chapter_title = chap['title']
+
+    from .jobs import enqueue
+    from .models import Job
+    import uuid
+
+    job = Job(
+        id=str(uuid.uuid4()),
+        engine="xtts",
+        chapter_file=f"{chapter_title}.txt",
+        status="queued",
+        created_at=time.time(),
+        project_id=project_id,
+        chapter_id=chapter_id,
+        is_bake=True
+    )
+    enqueue(job)
+    return JSONResponse({"status": "success", "job_id": job.id})
+
+# --- Characters API ---
+
+@app.get("/api/projects/{project_id}/characters")
+def api_list_characters(project_id: str):
+    from .db import get_characters
+    return JSONResponse({"status": "success", "characters": get_characters(project_id)})
+
+@app.post("/api/projects/{project_id}/characters")
+def api_create_character(
+    project_id: str,
+    name: str = Form(...),
+    speaker_profile_name: Optional[str] = Form(None),
+    default_emotion: Optional[str] = Form(None),
+    color: Optional[str] = Form(None)
+):
+    from .db import create_character
+    char_id = create_character(project_id, name, speaker_profile_name, default_emotion, color=color)
+    return JSONResponse({"status": "success", "character_id": char_id})
+
+@app.put("/api/characters/{character_id}")
+def api_update_character(
+    character_id: str,
+    name: Optional[str] = Form(None),
+    speaker_profile_name: Optional[str] = Form(None),
+    default_emotion: Optional[str] = Form(None),
+    color: Optional[str] = Form(None)
+):
+    updates = {}
+    if name is not None: updates["name"] = name
+    if speaker_profile_name is not None: updates["speaker_profile_name"] = speaker_profile_name
+    if default_emotion is not None: updates["default_emotion"] = default_emotion
+    if color is not None: updates["color"] = color
+
+    if updates:
+        from .db import update_character
+        update_character(character_id, **updates)
+
+    return JSONResponse({"status": "success"})
+
+@app.delete("/api/characters/{character_id}")
+def api_delete_character(character_id: str):
+    from .db import delete_character
+    success = delete_character(character_id)
+    if success:
+        return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "error", "message": "Character not found"}, status_code=404)
 
 import json  # noqa: E402
 @app.post("/api/projects/{project_id}/reorder_chapters")
@@ -491,7 +692,94 @@ async def api_analyze_text(text_content: str = Form(...)):
         "uncleanable": uncleanable,
         "uncleanable_sentences": uncleanable_sentences,
         "threshold": SENT_CHAR_LIMIT,
-        "safe_text": packed_text
+        "safe_text": packed_text,
+        "split_sentences": split_text.split('\n')
+    })
+
+@app.get("/api/chapters/{chapter_id}/analyze")
+async def api_analyze_chapter(chapter_id: str):
+    from .db import get_chapter, get_chapter_segments, get_characters
+    from .config import SENT_CHAR_LIMIT
+
+    chap = get_chapter(chapter_id)
+    if not chap:
+        return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+
+    segs = get_chapter_segments(chapter_id)
+    chars = get_characters(chap['project_id'])
+    char_map = {c['id']: c for c in chars}
+
+    # 1. Group segments by consecutive character (matches Performance tab logic)
+    groups = []
+    if segs:
+        curr_group = {"character_id": segs[0]['character_id'], "segments": [segs[0]]}
+        for i in range(1, len(segs)):
+            s = segs[i]
+            if s['character_id'] == curr_group['character_id']:
+                curr_group['segments'].append(s)
+            else:
+                groups.append(curr_group)
+                curr_group = {"character_id": s['character_id'], "segments": [s]}
+        groups.append(curr_group)
+
+    # 2. Within each group, reproduce the exact character-limit grouping from jobs.py
+    voice_chunks = []
+    from .textops import sanitize_for_xtts, safe_split_long_sentences
+
+    for g in groups:
+        char = char_map.get(g['character_id'])
+        char_name = char['name'] if char else "NARRATOR"
+        char_color = char['color'] if char else "#94a3b8"
+
+        segs_in_group = g['segments']
+        if not segs_in_group:
+            continue
+
+        # Greedy packing within consecutive-character group
+        current_batch = [segs_in_group[0]]
+        for i in range(1, len(segs_in_group)):
+            curr_seg = segs_in_group[i]
+
+            # Match jobs.py logic: "".join then check len
+            current_batch_text = "".join([s['text_content'] for s in current_batch])
+            combined_len = len(current_batch_text) + len(curr_seg['text_content'])
+
+            if combined_len <= SENT_CHAR_LIMIT:
+                current_batch.append(curr_seg)
+            else:
+                # Commit previous batch
+                combined = "".join([s['text_content'] for s in current_batch])
+                # Clean/Split as the engine does
+                final_text = sanitize_for_xtts(combined)
+                final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
+
+                voice_chunks.append({
+                    "character_name": char_name,
+                    "character_color": char_color,
+                    "text": final_text,
+                    "raw_length": len(final_text),
+                    "sent_count": len(current_batch)
+                })
+                current_batch = [curr_seg]
+
+        # Final batch in group
+        if current_batch:
+            combined = "".join([s['text_content'] for s in current_batch])
+            final_text = sanitize_for_xtts(combined)
+            final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
+
+            voice_chunks.append({
+                "character_name": char_name,
+                "character_color": char_color,
+                "text": final_text,
+                "raw_length": len(final_text),
+                "sent_count": len(current_batch)
+            })
+
+    return JSONResponse({
+        "status": "success",
+        "voice_chunks": voice_chunks,
+        "threshold": SENT_CHAR_LIMIT
     })
 # --------------------
 
@@ -499,7 +787,7 @@ async def api_analyze_text(text_content: str = Form(...)):
 def api_welcome():
     """Welcome endpoint for the API."""
     return {
-        "name": "Audiobook Factory API",
+        "name": "Audiobook Studio API",
         "status": "online",
         "frontend": "Please use the React frontend (usually on port 5173 in dev or served on this port in production if built).",
         "endpoints": {
@@ -1125,13 +1413,15 @@ def delete_audiobook(filename: str):
 
 @app.post("/api/chapter/reset")
 def reset_chapter(chapter_file: str = Form(...)):
+    from .state import update_job as state_update_job
     existing = get_jobs()
     stem = Path(chapter_file).stem
 
-    # 1. Stop any running jobs and delete files
+    # 1. Stop any running jobs and update their status
     for jid, j in existing.items():
         if j.chapter_file == chapter_file:
             cancel_job(jid)
+            state_update_job(jid, status="cancelled", log="Cancelled by chapter reset.")
 
     # 2. Delete files on disk
     count = 0
@@ -1142,20 +1432,38 @@ def reset_chapter(chapter_file: str = Form(...)):
                 f.unlink()
                 count += 1
 
-    # 3. Update job records to 'cancelled' so they don't auto-start
-    # but preserve custom titles etc.
-    for jid, j in existing.items():
-        if j.chapter_file == chapter_file:
-            update_job(jid,
-                       status="cancelled",
-                       progress=0.0,
-                       output_wav=None,
-                       output_mp3=None,
-                       log="Audio reset by user.",
-                       error=None,
-                       warning_count=0)
+    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files and cancelled active jobs"})
 
-    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
+@app.post("/api/chapters/{chapter_id}/cancel")
+def cancel_chapter_generation(chapter_id: str):
+    """Cancels all active jobs (granular or full chapter) associated with this chapter id."""
+    from .jobs import cancel as cancel_job, get_jobs
+    from .state import update_job
+    from .db import get_connection
+
+    # 1. Cancel in-memory jobs from state.json
+    existing = get_jobs()
+    cancelled_count = 0
+    for jid, j in existing.items():
+        # Granular jobs have chapter_id, full chapter jobs match project/chapter_file logic
+        # check both for safety
+        if getattr(j, 'chapter_id', None) == chapter_id or j.chapter_file == chapter_id:
+            cancel_job(jid)
+            update_job(jid, status="cancelled", log="Cancelled by user via chapter editor.")
+            cancelled_count += 1
+
+    # 2. Update DB processing queue
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE processing_queue SET status = 'cancelled' WHERE chapter_id = ? AND status IN ('queued', 'running')", (chapter_id,))
+            cursor.execute("UPDATE chapters SET audio_status = 'unprocessed' WHERE id = ? AND audio_status = 'processing'", (chapter_id,))
+            cursor.execute("UPDATE chapter_segments SET audio_status = 'unprocessed' WHERE chapter_id = ? AND audio_status = 'processing'", (chapter_id,))
+            conn.commit()
+    except Exception as e:
+        print(f"Error cancelling chapter {chapter_id} in DB: {e}")
+
+    return JSONResponse({"status": "ok", "cancelled_count": cancelled_count})
 
 @app.delete("/api/chapter/{filename}")
 def api_delete_legacy_chapter(filename: str):
@@ -1599,6 +1907,10 @@ def api_add_to_queue(
             temp_path = text_dir / temp_filename
             temp_path.write_text(text_content or "", encoding="utf-8", errors="replace")
 
+            # Check if this chapter has Performance tab segments defined
+            from .db import get_chapter_segments
+            has_segments = len(get_chapter_segments(chapter_id)) > 0
+
             # Create legacy Job
             settings = get_settings()
             from .models import Job
@@ -1609,6 +1921,7 @@ def api_add_to_queue(
             j = Job(
                 id=qid, 
                 project_id=project_id,
+                chapter_id=chapter_id,
                 engine="xtts",
                 chapter_file=temp_filename, 
                 status="queued",
@@ -1617,7 +1930,8 @@ def api_add_to_queue(
                 make_mp3=True,
                 bypass_pause=False,
                 custom_title=title, # Ensures frontend shows the chapter title globally
-                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile")
+                speaker_profile=speaker_profile or get_settings().get("default_speaker_profile"),
+                is_bake=has_segments  # Use bake flow to honor Performance tab segments
             )
             put_job(j)
             enqueue(j)
@@ -1694,7 +2008,7 @@ def api_preview(chapter_file: str, processed: bool = False):
 
 @app.post("/api/projects/{project_id}/assemble")
 def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
-    from .db import get_project, get_chapters
+    from .db import get_project
     from .jobs import enqueue
     from .state import put_job
     from .models import Job
@@ -1705,7 +2019,7 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     if not project:
         return JSONResponse({"error": "Project not found"}, status_code=404)
 
-    chapters = get_chapters(project_id)
+    chapters = db_list_chapters(project_id)
     if not chapters:
         return JSONResponse({"error": "No chapters found in project"}, status_code=400)
 
@@ -1750,7 +2064,7 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
         make_mp3=False,
         bypass_pause=True,
         author_meta=project.get('author', ''),
-        narrator_meta="Generated by Audiobook Factory",
+        narrator_meta="Generated by Audiobook Studio",
         chapter_list=chapter_list,
         cover_path=project.get('cover_image_path', None)
     )

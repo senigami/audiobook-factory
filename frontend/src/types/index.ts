@@ -11,6 +11,27 @@ export interface Project {
   updated_at: number;
 }
 
+export interface Character {
+  id: string;
+  project_id: string;
+  name: string;
+  speaker_profile_name: string | null;
+  default_emotion: string | null;
+  color: string;
+}
+
+export interface ChapterSegment {
+  id: string;
+  chapter_id: string;
+  segment_order: number;
+  text_content: string;
+  sanitized_text?: string;
+  character_id: string | null;
+  audio_file_path: string | null;
+  audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
+  audio_generated_at: number | null;
+}
+
 export interface Chapter {
   id: string;
   project_id: string;
@@ -60,6 +81,7 @@ export interface Job {
   status: Status;
   created_at: number;
   project_id?: string;
+  chapter_id?: string;
   started_at?: number;
   finished_at?: number;
   safe_mode: boolean;

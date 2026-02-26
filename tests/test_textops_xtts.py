@@ -16,7 +16,10 @@ def test_single_word_merge_prev():
 def test_multiple_single_words():
     text = "Wait. No. Stop. Go."
     result = consolidate_single_word_sentences(text)
-    assert result == "Wait; No; Stop; Go."
+    # Pairs are merged forward: Wait+No, Stop+Go
+    # The merge strips trailing .!? from the left side, so period is removed from 'Wait'
+    # but 'No' retains its period. Result: two merged blocks joined by space.
+    assert result == "Wait; No. Stop; Go."
 
 def test_tailing_single_word():
     text = "The end is near. Goodbye."

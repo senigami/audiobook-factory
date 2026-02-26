@@ -3,7 +3,7 @@ import type { Job } from '../types';
 import { api } from '../api';
 import { useWebSocket } from './useWebSocket';
 
-export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, onPauseUpdate?: (paused: boolean) => void) => {
+export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, onPauseUpdate?: (paused: boolean) => void, onSegmentsUpdate?: (chapterId: string) => void) => {
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
   const prevJobsRef = useRef<Record<string, Job>>({});
@@ -48,8 +48,10 @@ export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, 
     } else if (data.type === 'test_progress') {
       const { name, progress, started_at } = data;
       setTestProgress(prev => ({ ...prev, [name]: { progress, started_at } }));
+    } else if (data.type === 'segments_updated') {
+      if (onSegmentsUpdate) onSegmentsUpdate(data.chapter_id);
     }
-  }, [refreshJobs, onQueueUpdate, onPauseUpdate]);
+  }, [refreshJobs, onQueueUpdate, onPauseUpdate, onSegmentsUpdate]);
 
   const { connected } = useWebSocket('/ws', handleUpdate);
 

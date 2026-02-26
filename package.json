@@ -1,7 +1,7 @@
 {
-    "name": "audiobook-factory",
+    "name": "audiobook-studio",
     "version": "1.0.0",
-    "description": "Audiobook Factory Application",
+    "description": "Audiobook Studio Application",
     "scripts": {
         "update-xtts": "./scripts/update_xtts.sh",
         "dev": "./scripts/dev.sh"

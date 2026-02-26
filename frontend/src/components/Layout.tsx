@@ -43,7 +43,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           {/* Logo Section */}
           <div
             style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
-            onClick={() => onTabChange('synthesis')}
+            onClick={() => onTabChange('library-root')}
           >
             <div style={{
               position: 'relative',
@@ -63,7 +63,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
               }} />
               <img
                 src="/logo.svg"
-                alt="Audiobook Factory"
+                alt="Audiobook Studio"
                 style={{
                   width: '100%',
                   height: '100%',
@@ -95,7 +95,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 opacity: 0.8,
                 marginTop: '1px'
               }}>
-                FACTORY
+                STUDIO
               </span>
             </div>
           </div>

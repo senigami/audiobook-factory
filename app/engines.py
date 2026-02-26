@@ -119,13 +119,30 @@ def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_c
         text = re.sub(r'[^\x00-\x7F]+', '', text) # ASCII only
         text = text.strip()
 
-    text = pack_text_to_limit(text, pad=True)
+    text = pack_text_to_limit(text, pad=True) or " "
+
+    cmd = (
+        f"export PYTHONUNBUFFERED=1 && . {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
+        f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
+        f"--text {shlex.quote(text)} "
+        f"--speaker_wav {shlex.quote(sw)} "
+        f"--language en "
+        f"--repetition_penalty 2.0 "
+        f"--speed {speed} "
+        f"--out_path {shlex.quote(str(out_wav))}"
+    )
+    return run_cmd_stream(cmd, on_output, cancel_check)
+
+
+def xtts_generate_script(script_json_path: Path, out_wav: Path, on_output, cancel_check, speed: float = 1.0) -> int:
+    if not XTTS_ENV_ACTIVATE.exists():
+        on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")
+        return 1
 
     cmd = (
         f"export PYTHONUNBUFFERED=1 && source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
         f"python3 {shlex.quote(str(BASE_DIR / 'app' / 'xtts_inference.py'))} "
-        f"--text {shlex.quote(text)} "
-        f"--speaker_wav {shlex.quote(sw)} "
+        f"--script_json {shlex.quote(str(script_json_path))} "
         f"--language en "
         f"--repetition_penalty 2.0 "
         f"--speed {speed} "
@@ -158,7 +175,7 @@ def get_speaker_latent_path(speaker_wavs_str: str) -> Optional[Path]:
         combined_paths = os.path.abspath(speaker_wavs_str)
 
     speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
-    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-factory/voices"))
+    voice_dir = Path(os.path.expanduser("~/.cache/audiobook-studio/voices"))
     return voice_dir / f"{speaker_id}.pth"
 
 def assemble_audiobook(
@@ -314,9 +331,30 @@ def generate_video_sample(
     else:
         logo_filter = '-map 0:v '
 
-    cmd = (
-        f"ffmpeg -y {inputs} "
-        f"{logo_filter} -map 1:a -c:v libx264 -tune stillimage -c:a aac -b:a 192k "
-        f"-pix_fmt yuv420p -shortest -t {max_duration} {shlex.quote(str(output_video))}"
-    )
+    cmd = f"ffmpeg -y {inputs} {logo_filter} -map 1:a -c:v libx264 -c:a copy -t {max_duration} -shortest {shlex.quote(str(output_video))}"
     return run_cmd_stream(cmd, on_output, cancel_check)
+
+def stitch_segments(
+    pdir: Path,
+    segment_wavs: List[Path],
+    output_path: Path,
+    on_output,
+    cancel_check
+) -> int:
+    """Concatenates multiple segments into one final file."""
+    if not segment_wavs:
+        on_output("No segments to stitch.\n")
+        return 1
+
+    list_file = output_path.with_suffix(".list.txt")
+    try:
+        with open(list_file, 'w') as lf:
+            for sw in segment_wavs:
+                # Use absolute path for safety with safe 0
+                lf.write(f"file '{sw.absolute()}'\n")
+
+        # Simple concat for segments (they should all be same sample rate/channels from XTTS)
+        cmd = f'ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} -c copy {shlex.quote(str(output_path))}'
+        return run_cmd_stream(cmd, on_output, cancel_check)
+    finally:
+        if list_file.exists(): list_file.unlink()

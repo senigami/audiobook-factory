@@ -39,8 +39,9 @@ def test_safe_split_long_sentences():
     assert split_src
 
 def test_pack_text_to_limit():
+    # pack_text_to_limit preserves newlines as paragraph separators
     blocks = pack_text_to_limit("A\nB", limit=5)
-    assert blocks == "A B"
+    assert blocks == "A\nB"
 
 def test_safe_filename():
     assert safe_filename("Hello World: A Test/Subtitle") == "Hello World: A TestSubtitle"

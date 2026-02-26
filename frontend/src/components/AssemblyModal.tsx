@@ -227,7 +227,7 @@ export const AssemblyModal: React.FC<AssemblyModalProps> = ({ isOpen, onClose, o
                         alignItems: 'center',
                         gap: '8px',
                         padding: '8px',
-                        background: 'rgba(255,255,255,0.03)',
+                        background: 'rgba(255,255,255,0.1)',
                         borderRadius: '6px',
                         border: '1px solid transparent',
                         opacity: selectedFiles.has(c.filename) ? 1 : 0.5,

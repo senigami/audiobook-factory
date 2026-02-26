@@ -357,7 +357,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </button>
 
                         <div style={{
-                            background: 'rgba(255, 255, 255, 0.03)',
+                            background: 'rgba(255, 255, 255, 0.1)',
                             borderRadius: '12px',
                             padding: '1.25rem',
                             border: '1px solid rgba(255, 255, 255, 0.05)',
@@ -456,7 +456,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     style={{
                                         fontSize: '1.1rem',
                                         fontWeight: 600,
-                                        background: 'rgba(255,255,255,0.03)',
+                                        background: 'rgba(255,255,255,0.1)',
                                         borderRadius: '8px',
                                         padding: '10px 14px',
                                         flex: 1

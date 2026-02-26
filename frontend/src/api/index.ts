@@ -41,6 +41,36 @@ export const api = {
     return res.json();
   },
 
+  // --- Characters ---
+  fetchCharacters: async (projectId: string): Promise<import('../types').Character[]> => {
+    const res = await fetch(`/api/projects/${projectId}/characters`);
+    const data = await res.json();
+    return data.characters || [];
+  },
+  createCharacter: async (projectId: string, name: string, speaker_profile_name?: string, default_emotion?: string, color?: string): Promise<{status: string, character_id: string}> => {
+    const formData = new FormData();
+    formData.append('name', name);
+    if (speaker_profile_name) formData.append('speaker_profile_name', speaker_profile_name);
+    if (default_emotion) formData.append('default_emotion', default_emotion);
+    if (color) formData.append('color', color);
+    const res = await fetch(`/api/projects/${projectId}/characters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+  updateCharacter: async (characterId: string, name?: string, speaker_profile_name?: string, default_emotion?: string, color?: string): Promise<{status: string}> => {
+    const formData = new FormData();
+    if (name) formData.append('name', name);
+    // Allowing empty strings to clear the profile
+    if (speaker_profile_name !== undefined) formData.append('speaker_profile_name', speaker_profile_name);
+    if (default_emotion !== undefined) formData.append('default_emotion', default_emotion);
+    if (color !== undefined) formData.append('color', color);
+    const res = await fetch(`/api/characters/${characterId}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  deleteCharacter: async (characterId: string): Promise<{status: string}> => {
+    const res = await fetch(`/api/characters/${characterId}`, { method: 'DELETE' });
+    return res.json();
+  },
+
   // --- Chapters ---
   fetchChapters: async (projectId: string): Promise<Chapter[]> => {
     const res = await fetch(`/api/projects/${projectId}/chapters`);
@@ -70,6 +100,46 @@ export const api = {
     const formData = new FormData();
     formData.append('chapter_ids', JSON.stringify(chapterIds));
     const res = await fetch(`/api/projects/${projectId}/reorder_chapters`, { method: 'POST', body: formData });
+    return res.json();
+  },
+  analyzeChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/analyze`);
+    return res.json();
+  },
+
+  // --- Segments ---
+  fetchSegments: async (chapterId: string): Promise<import('../types').ChapterSegment[]> => {
+    const res = await fetch(`/api/chapters/${chapterId}/segments`);
+    const data = await res.json();
+    return data.segments || [];
+  },
+  updateSegment: async (segmentId: string, data: { character_id?: string | null; audio_status?: string }): Promise<any> => {
+    const formData = new FormData();
+    if (data.character_id !== undefined) formData.append('character_id', data.character_id || "");
+    if (data.audio_status) formData.append('audio_status', data.audio_status);
+    const res = await fetch(`/api/segments/${segmentId}`, { method: 'PUT', body: formData });
+    return res.json();
+  },
+  updateSegmentsBulk: async (segmentIds: string[], data: { character_id?: string | null; audio_status?: string }): Promise<any> => {
+    const formData = new FormData();
+    formData.append('segment_ids', segmentIds.join(','));
+    if (data.character_id !== undefined) formData.append('character_id', data.character_id || "");
+    if (data.audio_status) formData.append('audio_status', data.audio_status);
+    const res = await fetch('/api/segments', { method: 'PUT', body: formData });
+    return res.json();
+  },
+  generateSegments: async (segmentIds: string[]): Promise<any> => {
+    const formData = new FormData();
+    formData.append('segment_ids', segmentIds.join(','));
+    const res = await fetch('/api/segments/generate', { method: 'POST', body: formData });
+    return res.json();
+  },
+  bakeChapter: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/bake`, { method: 'POST' });
+    return res.json();
+  },
+  cancelChapterGeneration: async (chapterId: string): Promise<any> => {
+    const res = await fetch(`/api/chapters/${chapterId}/cancel`, { method: 'POST' });
     return res.json();
   },
 

@@ -1,6 +1,6 @@
 ---
 name: ✨ Feature Request
-about: Suggest a new capability or improvement for The Audiobook Factory
+about: Suggest a new capability or improvement for The Audiobook Studio
 title: "[FEATURE] "
 labels: enhancement
 assignees: ""
@@ -10,7 +10,7 @@ assignees: ""
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
 **Describe the enhancement**
-A clear and concise description of what you want to see added to the Factory logic, UI, or processing pipeline.
+A clear and concise description of what you want to see added to the Audiobook Studio logic, UI, or processing pipeline.
 
 **Use Case**
 Describe how this would improve your audiobook production workflow or the quality of the generated audio.

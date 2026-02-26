@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.append(str(Path.cwd()))
 from app.textops import clean_text_for_tts
 
-DB_PATH = Path("audiobook_factory.db")
+DB_PATH = Path("audiobook_studio.db")
 
 def backfill():
     if not DB_PATH.exists():

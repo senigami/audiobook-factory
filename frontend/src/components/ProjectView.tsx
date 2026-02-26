@@ -5,6 +5,7 @@ import { api } from '../api';
 import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types';
 import { ChapterEditor } from './ChapterEditor';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
+import { CharactersTab } from './CharactersTab';
 
 interface ProjectViewProps {
   projectId: string;
@@ -14,12 +15,14 @@ interface ProjectViewProps {
   onNavigateToQueue: () => void;
   onOpenPreview: (filename: string) => void;
   refreshTrigger?: number;
+  segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0 }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentTab, setCurrentTab] = useState<'chapters' | 'characters'>('chapters');
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const skipBlurSaveId = useRef<string | null>(null);
@@ -335,6 +338,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
               onVoiceChange={setSelectedVoice}
               onNext={nextChapterId ? () => setEditingChapterId(nextChapterId) : undefined}
               onPrev={prevChapterId ? () => setEditingChapterId(prevChapterId) : undefined}
+              segmentUpdate={segmentUpdate}
           />
       );
   }
@@ -477,13 +481,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
           </div>
       )}
 
-      {finishedAssemblyJob && !activeAssemblyJob && (
-          <div style={{ background: 'var(--success-muted)', color: '#fff', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <CheckCircle size={20} />
-              <span>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
-          </div>
-      )}
-
       {/* Assembly Progress */}
       {activeAssemblyJob && (
           <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
@@ -509,6 +506,50 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
           </div>
       )}
 
+      {/* Project Tabs */}
+      {!activeAssemblyJob && !finishedAssemblyJob && (
+          <div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
+              <button 
+                  onClick={() => setCurrentTab('chapters')}
+                  style={{ 
+                      padding: '1rem 0.5rem', 
+                      background: 'none', 
+                      border: 'none', 
+                      color: currentTab === 'chapters' ? 'var(--accent)' : 'var(--text-muted)',
+                      fontWeight: 600,
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                      borderBottom: currentTab === 'chapters' ? '2px solid var(--accent)' : '2px solid transparent',
+                      transition: 'all 0.2s',
+                      marginBottom: '-1px'
+                  }}
+              >
+                  Chapters
+              </button>
+              <button 
+                  onClick={() => setCurrentTab('characters')}
+                  style={{ 
+                      padding: '1rem 0.5rem', 
+                      background: 'none', 
+                      border: 'none', 
+                      color: currentTab === 'characters' ? 'var(--accent)' : 'var(--text-muted)',
+                      fontWeight: 600,
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                      borderBottom: currentTab === 'characters' ? '2px solid var(--accent)' : '2px solid transparent',
+                      transition: 'all 0.2s',
+                      marginBottom: '-1px'
+                  }}
+              >
+                  Characters
+              </button>
+          </div>
+      )}
+
+      {currentTab === 'characters' ? (
+          <CharactersTab projectId={projectId} speakerProfiles={speakerProfiles} />
+      ) : (
+          <>
       {/* Chapters List */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -868,7 +909,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
           </Reorder.Group>
         )}
       </div>
+          </>
+      )}
 
+
+
+      {/* Modals */}
       {/* Cover Image Modal */}
       {showCoverModal && project.cover_image_path && (
         <div style={{

@@ -9,7 +9,7 @@ import threading
 
 # Use a connection pool or a single connection with a lock
 _db_lock = threading.Lock()
-DB_PATH = Path(os.getenv("DB_PATH", "audiobook_factory.db"))
+DB_PATH = Path(os.getenv("DB_PATH", "audiobook_studio.db"))
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -69,6 +69,41 @@ def init_db():
                 )
             """)
 
+            # Characters table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS characters (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    speaker_profile_name TEXT,
+                    default_emotion TEXT,
+                    color TEXT DEFAULT '#8b5cf6',
+                    FOREIGN KEY (project_id) REFERENCES projects (id)
+                )
+            """)
+
+            # Chapter Segments table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chapter_segments (
+                    id TEXT PRIMARY KEY,
+                    chapter_id TEXT NOT NULL,
+                    segment_order INTEGER NOT NULL,
+                    text_content TEXT NOT NULL,
+                    sanitized_text TEXT,
+                    character_id TEXT,
+                    audio_file_path TEXT,
+                    audio_status TEXT DEFAULT 'unprocessed',
+                    audio_generated_at REAL,
+                    FOREIGN KEY (chapter_id) REFERENCES chapters (id),
+                    FOREIGN KEY (character_id) REFERENCES characters (id)
+                )
+            """)
+            # Migration
+            try:
+                cursor.execute("ALTER TABLE chapter_segments ADD COLUMN sanitized_text TEXT")
+            except:
+                pass
+
             conn.commit()
 
 # --- Project Functions ---
@@ -110,10 +145,11 @@ def update_project(project_id: str, **updates) -> bool:
             for k, v in updates.items():
                 fields.append(f"{k} = ?")
                 values.append(v)
-            values.append(time.time()) # updated_at
+            fields.append("updated_at = ?")
+            values.append(time.time())
             values.append(project_id)
 
-            cursor.execute(f"UPDATE projects SET {', '.join(fields)}, updated_at = ? WHERE id = ?", values)
+            cursor.execute(f"UPDATE projects SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
             return cursor.rowcount > 0
 
@@ -121,11 +157,62 @@ def delete_project(project_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            # Delete associated chapters first
+            # Delete related characters
+            cursor.execute("DELETE FROM characters WHERE project_id = ?", (project_id,))
+            # Delete related segments implicitly if we delete chapters, or explicitly
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id IN (SELECT id FROM chapters WHERE project_id = ?)", (project_id,))
+            cursor.execute("DELETE FROM processing_queue WHERE project_id = ?", (project_id,))
             cursor.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
             cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+# --- Character Functions ---
+def create_character(project_id: str, name: str, speaker_profile_name: Optional[str] = None, default_emotion: str = "Neutral", **updates) -> str:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            char_id = str(uuid.uuid4())
+            color = updates.get('color', '#8b5cf6')
+            cursor.execute("""
+                INSERT INTO characters (id, project_id, name, speaker_profile_name, default_emotion, color)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (char_id, project_id, name, speaker_profile_name, default_emotion, color))
+            conn.commit()
+            return char_id
+
+def get_characters(project_id: str) -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM characters WHERE project_id = ? ORDER BY name ASC", (project_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_character(character_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(character_id)
+            cursor.execute(f"UPDATE characters SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def delete_character(character_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Nullify assignments in segments
+            cursor.execute("UPDATE chapter_segments SET character_id = NULL WHERE character_id = ?", (character_id,))
+            cursor.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
 
 # --- Chapter Functions ---
 def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:
@@ -179,6 +266,8 @@ def delete_chapter(chapter_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+            cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
             cursor.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
             conn.commit()
             return cursor.rowcount > 0
@@ -193,6 +282,7 @@ def reorder_chapters(chapter_ids: List[str]) -> bool:
             return True
 
 def reset_chapter_audio(chapter_id: str) -> bool:
+    """Resets the audio generation status of a chapter and all its segments to unprocessed."""
     from .config import get_project_audio_dir
     with _db_lock:
         with get_connection() as conn:
@@ -204,17 +294,27 @@ def reset_chapter_audio(chapter_id: str) -> bool:
 
             project_id = row[0]
             audio_file = row[1]
+            p_audio_dir = get_project_audio_dir(project_id)
 
-            # 1. Delete file on disk if it exists
+            # 1. Delete chapter audio file on disk if it exists
             if project_id and audio_file:
-                p_audio_dir = get_project_audio_dir(project_id)
                 stem = Path(audio_file).stem
                 for ext in [".wav", ".mp3"]:
                     f = p_audio_dir / f"{stem}{ext}"
                     if f.exists():
                         f.unlink()
 
-            # 2. Reset database fields
+            # 2. Delete all segment audio files
+            cursor.execute("SELECT audio_file_path FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+            segments = cursor.fetchall()
+            for s_row in segments:
+                s_audio_file = s_row[0]
+                if s_audio_file:
+                    f = p_audio_dir / s_audio_file
+                    if f.exists():
+                        f.unlink()
+
+            # 3. Reset database fields for chapter
             cursor.execute("""
                 UPDATE chapters 
                 SET audio_status = 'unprocessed', 
@@ -224,11 +324,163 @@ def reset_chapter_audio(chapter_id: str) -> bool:
                 WHERE id = ?
             """, (chapter_id,))
 
-            # also remove from processing_queue if it's there
+            # 4. Reset database fields for segments
+            cursor.execute("""
+                UPDATE chapter_segments
+                SET audio_status = 'unprocessed',
+                    audio_file_path = NULL,
+                    audio_generated_at = NULL
+                WHERE chapter_id = ?
+            """, (chapter_id,))
+
+            # 5. Remove from processing_queue if it's there
             cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
 
             conn.commit()
             return True
+
+# --- Chapter Segment Functions ---
+
+def get_chapter_segments(chapter_id: str) -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.*, c.speaker_profile_name, c.color as character_color, c.name as character_name
+                FROM chapter_segments s
+                LEFT JOIN characters c ON s.character_id = c.id
+                WHERE s.chapter_id = ? 
+                ORDER BY s.segment_order ASC
+            """, (chapter_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_segment(segment_id: str, broadcast: bool = True, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(segment_id)
+            cursor.execute(f"UPDATE chapter_segments SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            changed = cursor.rowcount > 0
+
+    # Broadcast via WebSocket if audio_status changed (outside the lock to avoid deadlock)
+    if broadcast and changed and "audio_status" in updates:
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT chapter_id FROM chapter_segments WHERE id = ?", (segment_id,))
+                row = cursor.fetchone()
+                if row:
+                    from .web import broadcast_segments_updated
+                    broadcast_segments_updated(row["chapter_id"])
+        except Exception as e:
+            print(f"Warning: Failed to broadcast segment update: {e}")
+
+    return changed
+
+def update_segments_bulk(segment_ids: List[str], **updates) -> bool:
+    if not updates or not segment_ids: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+
+            placeholders = ",".join(["?"] * len(segment_ids))
+            sql = f"UPDATE chapter_segments SET {', '.join(fields)} WHERE id IN ({placeholders})"
+            cursor.execute(sql, (*values, *segment_ids))
+            conn.commit()
+            changed = cursor.rowcount > 0
+
+    # Broadcast via WebSocket if audio_status changed
+    if changed:
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT chapter_id FROM chapter_segments WHERE id = ?", (segment_ids[0],))
+                row = cursor.fetchone()
+                if row:
+                    from .web import broadcast_segments_updated
+                    broadcast_segments_updated(row["chapter_id"])
+        except (ImportError, IndexError, Exception):
+            pass
+    return changed
+
+def sync_chapter_segments(chapter_id: str, text_content: str):
+    """
+    Parses the text into sentences (segments) and syncs the chapter_segments table.
+    Attempts to preserve IDs and assignments for sentences that haven't changed.
+    """
+    from .textops import split_sentences, preprocess_text, normalize_newlines
+
+    # Split into actual sentences while preserving trailing spaces/newlines
+    sentences = [s for s, _, _ in split_sentences(text_content, preserve_gap=True)]
+
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Fetch existing segments
+            cursor.execute("SELECT * FROM chapter_segments WHERE chapter_id = ? ORDER BY segment_order ASC", (chapter_id,))
+            existing_segments = [dict(row) for row in cursor.fetchall()]
+
+            # Simple matching strategy: if text matches exactly, keep it.
+            existing_texts = {seg['text_content']: seg for seg in existing_segments}
+
+            # Delete all existing segments for this chapter
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+
+            # Re-insert in order, preserving IDs and attributes if an exact text match is found
+            from .textops import clean_text_for_tts, preprocess_text
+
+            for i, text in enumerate(sentences):
+                old_seg = existing_texts.get(text)
+
+                # Compute sanitized version for Performance view (strips brackets/quotes but keeps commas/punc)
+                # We use clean_text_for_tts which now does a full but line-by-line safe clean.
+                sanitized = clean_text_for_tts(text)
+
+                if old_seg:
+                    # Reuse old segment attributes
+                    seg_id = old_seg['id']
+                    char_id = old_seg['character_id']
+                    audio_path = old_seg['audio_file_path']
+                    audio_status = old_seg['audio_status']
+                    audio_gen_at = old_seg['audio_generated_at']
+
+                    # Ensure we only reuse an old segment once
+                    del existing_texts[text]
+                else:
+                    # New segment
+                    seg_id = str(uuid.uuid4())
+                    char_id = None
+                    audio_path = None
+                    audio_status = 'unprocessed'
+                    audio_gen_at = None
+
+                cursor.execute("""
+                    INSERT INTO chapter_segments 
+                    (id, chapter_id, segment_order, text_content, sanitized_text, character_id, audio_file_path, audio_status, audio_generated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (seg_id, chapter_id, i, text, sanitized, char_id, audio_path, audio_status, audio_gen_at))
+
+            conn.commit()
+
+            # Broadcast via WebSocket if text changed
+            try:
+                from .web import broadcast_segments_updated
+                broadcast_segments_updated(chapter_id)
+            except:
+                pass
 
 # --- Processing Queue Functions ---
 def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:

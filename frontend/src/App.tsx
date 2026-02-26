@@ -25,11 +25,13 @@ function App() {
     } catch(e) { console.error('Failed to get queue count', e); }
   };
 
+  const [segmentUpdate, setSegmentUpdate] = useState<{ chapterId: string; tick: number }>({ chapterId: '', tick: 0 });
   const { data: initialData, loading: initialLoading, refetch: refetchHome } = useInitialData();
   const { jobs, refreshJobs, testProgress } = useJobs(
     () => { refetchHome(); setQueueRefreshTrigger(prev => prev + 1); }, 
     () => { fetchQueueCount(); setQueueRefreshTrigger(prev => prev + 1); }, 
-    () => refetchHome()
+    () => refetchHome(),
+    (chapterId: string) => { setSegmentUpdate(prev => ({ chapterId, tick: prev.tick + 1 })); }
   );
   const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -102,7 +104,14 @@ function App() {
     <div className="app-container">
       <Layout
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+        onTabChange={(tab) => {
+          if (tab === 'library-root') {
+            setActiveProjectId(null);
+            setActiveTab('library');
+          } else {
+            setActiveTab(tab as any);
+          }
+        }}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}
@@ -133,6 +142,7 @@ function App() {
                   onNavigateToQueue={() => setActiveTab('queue')}
                   onOpenPreview={(filename) => setPreviewFilename(filename)}
                   refreshTrigger={queueRefreshTrigger}
+                  segmentUpdate={segmentUpdate}
                 />
               ) : (
                 <ProjectLibrary

@@ -13,8 +13,8 @@ describe('Layout', () => {
         render(<Layout {...defaultProps} />)
 
         expect(screen.getByText(/AUDIOBOOK/i)).toBeTruthy()
-        expect(screen.getByText(/FACTORY/i)).toBeTruthy()
-        expect(screen.getByAltText(/Audiobook Factory/i)).toBeTruthy()
+        expect(screen.getByText(/STUDIO/i)).toBeTruthy()
+        expect(screen.getByAltText(/Audiobook Studio/i)).toBeTruthy()
     })
 
     it('renders navigation tabs', () => {

@@ -9,6 +9,8 @@ import torch
 import torchaudio
 import argparse
 import warnings
+import json
+import hashlib
 
 # Suppress common XTTS/Torch warnings that clutter logs
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -16,123 +18,200 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 def main():
     parser = argparse.ArgumentParser(description="XTTS Streaming Inference Script")
-    parser.add_argument("--text", required=True, help="Text to synthesize")
-    parser.add_argument("--speaker_wav", required=True, help="Path to reference speaker wav(s). Can be a single path or a comma-separated list.")
+    parser.add_argument("--text", help="Text to synthesize (ignored if --script_json is provided)")
+    parser.add_argument("--speaker_wav", help="Path to reference speaker wav(s). (ignored if --script_json is provided)")
     parser.add_argument("--language", default="en", help="Language code")
     parser.add_argument("--out_path", required=True, help="Output wav path")
     parser.add_argument("--repetition_penalty", type=float, default=2.0, help="Repetition penalty")
     parser.add_argument("--temperature", type=float, default=0.75, help="Temperature")
     parser.add_argument("--speed", type=float, default=1.0, help="Speaking speed (1.0 = normal)")
+    parser.add_argument("--script_json", help="Path to a JSON file containing segments: list of {'text', 'speaker_wav'}")
 
     args = parser.parse_args()
 
-    # Handle multiple speaker WAVs (Idiap fork feature)
-    # We support comma-separated paths or a single path
-    if "," in args.speaker_wav:
-        speaker_wavs = [s.strip() for s in args.speaker_wav.split(",") if s.strip()]
-    else:
-        speaker_wavs = args.speaker_wav
+    # Silence durations (in samples at 24kHz)
+    SAMPLE_RATE = 24000
+    SENTENCE_PAUSE_MS = 180   # pause between sentences
+    PARAGRAPH_PAUSE_MS = 650  # pause at segment boundaries (paragraph breath)
+    PAUSE_CHAR = ";"           # semicolons become silence pauses (stripped before XTTS)
+    PAUSE_CHAR_MS = 400        # duration of a semicolon pause
 
-    # Voice Caching setup
-    import hashlib
-    if isinstance(speaker_wavs, list):
-        combined_paths = "|".join(sorted([os.path.abspath(p) for p in speaker_wavs]))
+    script = []
+    if args.script_json:
+        if not os.path.exists(args.script_json):
+            print(f"[error] Script JSON not found: {args.script_json}", file=sys.stderr)
+            sys.exit(1)
+        with open(args.script_json, 'r') as f:
+            script = json.load(f)
     else:
-        combined_paths = os.path.abspath(speaker_wavs)
+        if not args.text or not args.speaker_wav:
+            print("[error] Either --text and --speaker_wav OR --script_json MUST be provided.", file=sys.stderr)
+            sys.exit(1)
+        # Legacy mode: split by \n to preserve paragraph padding logic
+        chunks = [p.strip() for p in args.text.split('\n') if p.strip()]
+        for c in chunks:
+            script.append({"text": c, "speaker_wav": args.speaker_wav})
 
-    speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
-    voice_dir = os.path.expanduser("~/.cache/audiobook-factory/voices")
+    voice_dir = os.path.expanduser("~/.cache/audiobook-studio/voices")
     os.makedirs(voice_dir, exist_ok=True)
+
+    def get_latents(speaker_wav_paths, device, tts_model):
+        if isinstance(speaker_wav_paths, list):
+            combined_paths = "|".join(sorted([os.path.abspath(p) for p in speaker_wav_paths]))
+            wav_input = speaker_wav_paths
+        elif "," in speaker_wav_paths:
+            wavs = [s.strip() for s in speaker_wav_paths.split(",") if s.strip()]
+            combined_paths = "|".join(sorted([os.path.abspath(p) for p in wavs]))
+            wav_input = wavs
+        else:
+            combined_paths = os.path.abspath(speaker_wav_paths)
+            wav_input = speaker_wav_paths
+
+        speaker_id = hashlib.md5(combined_paths.encode()).hexdigest()
+        latent_file = os.path.join(voice_dir, f"{speaker_id}.pth")
+
+        if os.path.exists(latent_file):
+            print(f"Loading cached latents for {speaker_id}...", file=sys.stderr)
+            latents = torch.load(latent_file, map_location=device, weights_only=False)
+            return latents["gpt_cond_latent"], latents["speaker_embedding"]
+        else:
+            print(f"Computing latents for {speaker_id}...", file=sys.stderr)
+            gpt_cond_latent, speaker_embedding = tts_model.get_conditioning_latents(audio_path=wav_input)
+            torch.save({
+                "gpt_cond_latent": gpt_cond_latent,
+                "speaker_embedding": speaker_embedding
+            }, latent_file)
+            return gpt_cond_latent, speaker_embedding
 
     # Load model (quietly)
     print("Loading XTTS model...", file=sys.stderr)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Simple redirect to capture engine initialization noise
     original_stderr = sys.stderr
     try:
         from TTS.api import TTS
         tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to(device)
+        xtts_model = tts.synthesizer.tts_model
     finally:
         sys.stderr = original_stderr
 
-    # Compute or load latents manually for the speaker_id
-    latent_file = os.path.join(voice_dir, f"{speaker_id}.pth")
-    try:
-        if os.path.exists(latent_file):
-            print(f"Loading cached latents for {speaker_id}...", file=sys.stderr)
-            latents = torch.load(latent_file, map_location=device, weights_only=False)
-            gpt_cond_latent = latents["gpt_cond_latent"]
-            speaker_embedding = latents["speaker_embedding"]
-        else:
-            print(f"Computing latents for {speaker_id}...", file=sys.stderr)
-            # Access the model directly to compute latents
-            # XTTS model has get_conditioning_latents
-            xtts_model = tts.synthesizer.tts_model
-            gpt_cond_latent, speaker_embedding = xtts_model.get_conditioning_latents(audio_path=speaker_wavs)
-            torch.save({
-                "gpt_cond_latent": gpt_cond_latent,
-                "speaker_embedding": speaker_embedding
-            }, latent_file)
+    # Pre-load all unique latents
+    unique_speakers = list(set(s['speaker_wav'] for s in script))
+    speaker_latents = {}
+    for sw in unique_speakers:
+        try:
+            speaker_latents[sw] = get_latents(sw, device, xtts_model)
+        except Exception as e:
+            print(f"Warning: Failed to compute latents for {sw}: {e}", file=sys.stderr)
+            speaker_latents[sw] = None
 
-        # We don't inject into speaker_manager anymore to prevent shape errors.
-        # We will directly call `xtts_model.inference` which bypasses the TTS wrapper.
-    except Exception as e:
-        print(f"Warning: Latent caching/injection failed: {e}. Falling back to standard processing.", file=sys.stderr)
-        speaker_id = None # Fallback to using speaker_wav every time
-
-    print(f"Synthesizing to {args.out_path} at {args.speed}x speed...", file=sys.stderr)
+    print(f"Synthesizing {len(script)} segments to {args.out_path}...", file=sys.stderr)
 
     try:
         from tqdm import tqdm
-
-        # Split text into sentences for granular progress
-        if hasattr(tts, 'synthesizer') and hasattr(tts.synthesizer, 'split_into_sentences'):
-            sentences = tts.synthesizer.split_into_sentences(args.text)
-        elif hasattr(tts, 'tts_tokenizer'):
-            sentences = tts.tts_tokenizer.split_sentences(args.text)
-        else:
-            # Fallback if tokenizer not exposed as expected
-            sentences = [args.text]
-
-        print(f"Total sentences to process: {len(sentences)}", file=sys.stderr)
-
         all_wav_chunks = []
+        pause_indices = set()  # indices that are already silence tensors from <PAUSE> markers
 
-        # tqdm progress bar that jobs.py can parse (it looks for "XX%|")
-        with tqdm(total=len(sentences), unit="sent", desc="Synthesizing", file=sys.stderr) as pbar:
-            for i, sentence in enumerate(sentences):
-                # We use tts() which returns a list of floats
-                if speaker_id:
-                    # Call inference directly to use cached latents properly
-                    out_dict = tts.synthesizer.tts_model.inference(
-                        text=sentence,
-                        language=args.language,
-                        gpt_cond_latent=gpt_cond_latent,
-                        speaker_embedding=speaker_embedding,
-                        temperature=args.temperature,
-                        speed=args.speed,
-                        repetition_penalty=args.repetition_penalty
-                    )
-                    wav_chunk = out_dict['wav']
-                else:
-                    wav_chunk = tts.synthesizer.tts(
-                        text=sentence,
-                        speaker_wav=speaker_wavs,
-                        language_name=args.language,
-                        speed=args.speed,
-                        repetition_penalty=args.repetition_penalty,
-                        temperature=args.temperature
-                    )
-                all_wav_chunks.append(torch.FloatTensor(wav_chunk))
+        def _synthesize_one(text_to_speak, latent_pair, fallback_sw):
+            """Synthesize a single text string, returning the raw wav numpy array."""
+            if latent_pair:
+                gpt_cond, spk_emb = latent_pair
+                out_dict = xtts_model.inference(
+                    text=text_to_speak,
+                    language=args.language,
+                    gpt_cond_latent=gpt_cond,
+                    speaker_embedding=spk_emb,
+                    temperature=args.temperature,
+                    speed=args.speed,
+                    repetition_penalty=args.repetition_penalty
+                )
+                return out_dict['wav']
+            else:
+                return tts.synthesizer.tts(
+                    text=text_to_speak,
+                    speaker_wav=fallback_sw,
+                    language_name=args.language,
+                    speed=args.speed,
+                    repetition_penalty=args.repetition_penalty,
+                    temperature=args.temperature
+                )
+
+        with tqdm(total=len(script), unit="seg", desc="Synthesizing", file=sys.stderr) as pbar:
+            for i, segment in enumerate(script):
+                text = segment['text']
+                sw = segment['speaker_wav']
+                latents = speaker_latents.get(sw)
+
+                # Split by newline to preserve paragraph breaks within a single script entry
+                paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+                segment_wav_chunks = []
+
+                for p_idx, paragraph in enumerate(paragraphs):
+                    if hasattr(tts, 'synthesizer') and hasattr(tts.synthesizer, 'split_into_sentences'):
+                        sentences = tts.synthesizer.split_into_sentences(paragraph)
+                    elif hasattr(tts, 'tts_tokenizer'):
+                        sentences = tts.tts_tokenizer.split_sentences(paragraph)
+                    else:
+                        sentences = [paragraph]
+
+                    for s_idx, sentence in enumerate(sentences):
+                        if not sentence or not sentence.strip() or not any(c.isalnum() for c in sentence):
+                            continue
+
+                        # Handle semicolons: split around them, synthesize each part,
+                        # and insert a silence tensor where each semicolon was.
+                        if PAUSE_CHAR in sentence:
+                            sub_parts = sentence.split(PAUSE_CHAR)
+                            for sp_idx, sub_part in enumerate(sub_parts):
+                                sub_text = sub_part.strip()
+                                if sub_text and any(c.isalnum() for c in sub_text):
+                                    wav_chunk = _synthesize_one(sub_text, latents, sw)
+                                    chunk_tensor = torch.FloatTensor(wav_chunk)
+                                    all_wav_chunks.append(chunk_tensor)
+                                    segment_wav_chunks.append(chunk_tensor)
+                                if sp_idx < len(sub_parts) - 1:
+                                    pause_samples = int(SAMPLE_RATE * PAUSE_CHAR_MS / 1000)
+                                    silence = torch.zeros(pause_samples)
+                                    all_wav_chunks.append(silence)
+                                    segment_wav_chunks.append(silence)
+                                    pause_indices.add(len(all_wav_chunks) - 1)
+                        else:
+                            wav_chunk = _synthesize_one(sentence, latents, sw)
+                            chunk_tensor = torch.FloatTensor(wav_chunk)
+                            all_wav_chunks.append(chunk_tensor)
+                            segment_wav_chunks.append(chunk_tensor)
+
+                        # Add sentence or paragraph pause
+                        is_last_sentence = (s_idx == len(sentences) - 1)
+                        is_last_paragraph = (p_idx == len(paragraphs) - 1)
+
+                        pause_ms = 0
+                        if not (is_last_sentence and is_last_paragraph):
+                            pause_ms = PARAGRAPH_PAUSE_MS if is_last_sentence else SENTENCE_PAUSE_MS
+                        elif i < len(script) - 1:
+                            # End of a script entry (except the very last one)
+                            pause_ms = PARAGRAPH_PAUSE_MS
+
+                        if pause_ms > 0:
+                            pause_samples = int(SAMPLE_RATE * pause_ms / 1000)
+                            silence = torch.zeros(pause_samples)
+                            all_wav_chunks.append(silence)
+                            segment_wav_chunks.append(silence)
+                            pause_indices.add(len(all_wav_chunks) - 1)
+
+                # Save this segment individually if requested (for Performance tab playback)
+                if 'save_path' in segment and segment_wav_chunks:
+                    seg_wav = torch.cat(segment_wav_chunks, dim=0)
+                    torchaudio.save(segment['save_path'], seg_wav.unsqueeze(0), SAMPLE_RATE)
+                    # Signal to parent process that this segment's audio is ready
+                    print(f"[SEGMENT_SAVED] {segment['save_path']}", file=sys.stderr)
+
                 pbar.update(1)
 
         if all_wav_chunks:
-            # Concatenate all chunks
             final_wav = torch.cat(all_wav_chunks, dim=0)
-            # XTTS v2 uses 24kHz sample rate
-            torchaudio.save(args.out_path, final_wav.unsqueeze(0), 24000)
-            print(f"Effectively synthesized {len(sentences)} sentences.", file=sys.stderr)
+            torchaudio.save(args.out_path, final_wav.unsqueeze(0), SAMPLE_RATE)
+            print(f"Successfully synthesized {len(all_wav_chunks)} audio chunks.", file=sys.stderr)
 
     except Exception as e:
         print(f"\n[CRITICAL ERROR] XTTS failed: {str(e)}", file=sys.stderr)

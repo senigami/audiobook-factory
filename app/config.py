@@ -39,8 +39,8 @@ def get_project_m4b_dir(project_id: str) -> Path:
 XTTS_ENV_ACTIVATE = Path.home() / "xtts-env" / "bin" / "activate"
 
 # XTTS warning threshold you saw
-SENT_CHAR_LIMIT = 250
-SAFE_SPLIT_TARGET = 200
+SENT_CHAR_LIMIT = 500
+SAFE_SPLIT_TARGET = 450
 
 PART_CHAR_LIMIT = 30000
 MAKE_MP3_DEFAULT = False
