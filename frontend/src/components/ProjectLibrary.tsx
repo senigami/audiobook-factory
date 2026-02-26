@@ -128,9 +128,10 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                 alignItems: 'center', 
                 padding: '4rem 3rem',
                 margin: '1.5rem -3rem 0 -3rem',
-                borderBottom: '1px solid var(--border)',
-                background: 'linear-gradient(180deg, var(--as-info-tint) 0%, transparent 100%)',
-                borderRadius: '40px'
+                border: '1px solid var(--border)',
+                background: 'linear-gradient(180deg, var(--as-info-tint) 0%, var(--surface) 100%)',
+                borderRadius: '40px',
+                boxShadow: 'var(--shadow-md)'
             }}>
                 <div style={{ maxWidth: '600px' }}>
                     <h2 style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '1rem' }}>

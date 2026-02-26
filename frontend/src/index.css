@@ -68,20 +68,6 @@ body {
   overflow-x: hidden;
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(
-      circle at 80% 0%,
-      rgba(43, 110, 255, 0.05) 0%,
-      transparent 50%
-    );
-  pointer-events: none;
-  z-index: -1;
-}
-
 h1,
 h2,
 h3,
