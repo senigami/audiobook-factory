@@ -20,7 +20,6 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    const [importing, setImporting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,27 +104,6 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
         }
     };
 
-    const handleImport = async () => {
-        if (!window.confirm("This will scan for existing files in 'chapters_out' and 'xtts_audio' and create a new project for them. Continue?")) return;
-        setImporting(true);
-        try {
-            const res = await api.importLegacyData();
-            if (res.status === 'success') {
-                alert(res.message);
-                loadProjects();
-                if (res.project_id) {
-                    onSelectProject(res.project_id);
-                }
-            } else {
-                alert("Import failed: " + res.message);
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Import failed. Check console for details.");
-        } finally {
-            setImporting(false);
-        }
-    };
 
     const formatDate = (timestamp: number) => {
         return new Date(timestamp * 1000).toLocaleDateString(undefined, {
@@ -150,15 +128,6 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
 
-                    <button 
-                        onClick={handleImport}
-                        disabled={importing}
-                        className="btn-ghost" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)', borderRadius: '12px' }}
-                    >
-                        {importing ? <Loader2 size={18} className="animate-spin" /> : <Book size={18} />}
-                        Import Legacy Data
-                    </button>
                     <button 
                         onClick={() => setShowModal(true)}
                         className="btn-primary" 

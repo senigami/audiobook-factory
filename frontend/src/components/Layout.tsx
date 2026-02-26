@@ -15,7 +15,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
     { id: 'library', label: 'Library', icon: Library },
     { id: 'queue', label: 'Queue', icon: Zap },
     { id: 'voices', label: 'Voices', icon: Mic },
-    { id: 'assembly', label: 'Assembly', icon: Library },
   ];
 
   return (

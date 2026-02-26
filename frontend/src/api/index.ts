@@ -229,8 +229,4 @@ export const api = {
     const res = await fetch('/api/processing_queue', { method: 'DELETE' });
     return res.json();
   },
-  importLegacyData: async (): Promise<any> => {
-    const res = await fetch('/api/migration/import_legacy', { method: 'POST' });
-    return res.json();
-  }
 };
