@@ -174,8 +174,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Icon size={14} color={`var(--${status}-text)` || config.color} />
-            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: `var(--${status}-text)` || config.color, textTransform: 'uppercase' }}>
+            <Icon size={14} color={config.color} />
+            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: config.color, textTransform: 'uppercase' }}>
               {config.label}
             </span>
           </div>
