@@ -18,7 +18,7 @@ describe('BrandLogo', () => {
         const { container } = render(<BrandLogo showIcon={true} />)
         const img = container.querySelector('img')
         expect(img).toBeTruthy()
-        expect(img?.getAttribute('src')).toBe('/logo-simple.png')
+        expect(img?.getAttribute('src')).toBe('/logo.png')
     })
 
     it('does not render the icon when showIcon is false', () => {
