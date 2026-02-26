@@ -162,7 +162,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                         inset: 0, 
                         background: 'linear-gradient(135deg, rgba(43, 110, 255, 0.05) 0%, transparent 100%)' 
                     }} />
-                    <img src="/logo.png" alt="Audiobook Studio" style={{ width: '80px', height: '80px', opacity: 0.8, position: 'relative', zIndex: 1 }} />
+                    <img src="/logo.png" alt="Audiobook Studio" style={{ height: '160px', opacity: 0.8, position: 'relative', zIndex: 1 }} />
                 </div>
             </header>
 

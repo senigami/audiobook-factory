@@ -1,4 +1,5 @@
 import { Mic, Zap, Library, Terminal } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -38,50 +39,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
           {/* Logo Section */}
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             onClick={() => onTabChange('library-root')}
           >
-            <div style={{
-              position: 'relative',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <img
-                src="/logo.png"
-                alt="Audiobook Studio"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  zIndex: 1
-                }}
-              />
-            </div>
-            <div className="header-logo-text" style={{ display: 'flex', flexDirection: 'column' }}>
-              <h1 style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                letterSpacing: '-0.04em',
-                margin: 0,
-                color: 'var(--text-primary)',
-                lineHeight: 1
-              }}>
-                Audiobook
-              </h1>
-              <span style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--accent)',
-                letterSpacing: '0.35em',
-                textTransform: 'uppercase',
-                marginTop: '1px'
-              }}>
-                STUDIO
-              </span>
-            </div>
+            <BrandLogo scale={0.5} showIcon={true} />
           </div>
 
           {/* Navigation Section */}

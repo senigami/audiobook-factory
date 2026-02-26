@@ -33,6 +33,12 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.12);
   --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.15);
+
+  /* Brand tokens */
+  --as-ink: #0B1220;        /* near-black, not harsh */
+  --as-muted: #4B5563;      /* slate */
+  --as-blue: #2B6EFF;       /* primary */
+  --as-amber: #FF8A1F;      /* accent */
 }
 
 * {
@@ -514,3 +520,43 @@ button {
     display: flex;
   }
 }
+
+/* Audiobook Studio Wordmark */
+.as-wordmark {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  line-height: 1;
+  display: inline-block;
+  user-select: none;
+}
+
+.as-title {
+  font-weight: 800;
+  font-size: var(--as-title-fs, clamp(32px, 4vw, 64px));
+  letter-spacing: -0.02em;
+  color: var(--as-ink);
+}
+
+.as-subline {
+  margin-top: 0.15em;
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+}
+
+.as-sub {
+  font-weight: 600;
+  font-size: var(--as-sub-fs, clamp(14px, 1.2vw, 18px));
+  letter-spacing: 0.45em;
+  padding-left: 0.45em; /* keeps spacing visually centered */
+  color: var(--as-blue);
+}
+
+.as-rule {
+  height: 2px;
+  flex: 1;
+  min-width: 1.5em;
+  background: color-mix(in srgb, var(--as-ink) 20%, transparent);
+  border-radius: 999px;
+}
+.as-rule-right { background: color-mix(in srgb, var(--as-amber) 80%, transparent); }
+.as-rule-left { background: color-mix(in srgb, var(--as-blue) 80%, transparent); }
