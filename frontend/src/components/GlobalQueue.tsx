@@ -124,15 +124,15 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                     gap: '8px', 
                     padding: '10px 16px', 
                     borderRadius: '12px', 
-                    border: '1px solid var(--border)', 
                     color: localPaused ? 'var(--warning-text)' : 'var(--success-text)',
-                    background: localPaused ? 'var(--warning-muted)' : 'var(--success-muted)'
+                    background: 'var(--surface)',
+                    border: localPaused ? '1px solid var(--warning)' : '1px solid var(--success)'
                 }}
             >
                 {localPaused ? <Play size={16} /> : <Pause size={16} />}
                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{localPaused ? 'Resume Processing' : 'Pause All Jobs'}</span>
             </button>
-            <button onClick={async () => { await api.clearProcessingQueue(); fetchQueue(); }} className="btn-ghost" style={{ color: 'var(--error-muted)' }}>
+            <button onClick={async () => { await api.clearProcessingQueue(); fetchQueue(); }} className="btn-ghost" style={{ color: 'var(--error-text)' }}>
               Clear Queue
             </button>
         </div>
@@ -212,7 +212,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Project: {job.project_name} • Part {job.split_part + 1}</div>
                             </div>
 
-                            <button onClick={() => handleRemove(job.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }}>
+                            <button onClick={() => handleRemove(job.id)} className="btn-danger" style={{ padding: '0.5rem' }}>
                                 <Trash2 size={18} />
                             </button>
                           </Reorder.Item>
@@ -231,12 +231,12 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                               background: 'var(--surface)', border: '1px solid var(--border)',
                               borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1.5rem',
                           }}>
-                              {job.status === 'done' ? <CheckCircle size={20} color="var(--success-muted)" /> : <XCircle size={20} color="var(--error-muted)" />}
+                              {job.status === 'done' ? <CheckCircle size={20} color="var(--success-text)" /> : <XCircle size={20} color="var(--error-text)" />}
                               <div style={{ flex: 1 }}>
-                                  <h4 style={{ fontWeight: 600, fontSize: '1.1rem', textDecoration: job.status === 'cancelled' ? 'line-through' : 'none' }}>{job.chapter_title}</h4>
+                                  <h4 style={{ fontWeight: 600, fontSize: '1.1rem', textDecoration: job.status === 'cancelled' ? 'line-through' : 'none', color: 'var(--text-primary)' }}>{job.chapter_title}</h4>
                                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Project: {job.project_name} • Status: {job.status}</div>
                               </div>
-                              <button onClick={() => handleRemove(job.id)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--text-secondary)' }}>
+                              <button onClick={() => handleRemove(job.id)} className="btn-danger" style={{ padding: '0.5rem' }}>
                                 <Trash2 size={16} />
                               </button>
                           </div>

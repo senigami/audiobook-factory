@@ -146,7 +146,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                         }
                                     }}
                                     className="btn-ghost" 
-                                    style={{ flex: 1, fontSize: '0.7rem', padding: '8px', color: 'var(--error-muted)' }}
+                                    style={{ flex: 1, fontSize: '0.7rem', padding: '8px', color: 'var(--error-text)' }}
                                 >
                                     Wipe History
                                 </button>

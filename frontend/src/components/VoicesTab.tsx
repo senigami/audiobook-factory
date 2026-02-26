@@ -84,7 +84,7 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                         className="btn-ghost"
                         style={{
                             padding: '8px',
-                            color: profile.is_default ? 'var(--warning)' : 'var(--text-muted)',
+                            color: profile.is_default ? 'var(--warning-text)' : 'var(--text-muted)',
                             transition: 'all 0.3s ease',
                             cursor: 'pointer',
                             zIndex: 10
@@ -99,8 +99,8 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                             e.stopPropagation();
                             onDelete(profile.name);
                         }}
-                        className="btn-ghost"
-                        style={{ color: 'var(--error)', padding: '8px' }}
+                        className="btn-danger"
+                        style={{ padding: '8px' }}
                         title="Delete Profile"
                     >
                         <Trash2 size={14} />
@@ -357,10 +357,10 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </button>
 
                         <div style={{
-                            background: 'var(--accent-glow)',
+                            background: 'var(--surface-alt)',
                             borderRadius: '12px',
                             padding: '1.25rem',
-                            border: '1px solid var(--accent)',
+                            border: '1px solid var(--border)',
                             display: 'flex',
                             flexDirection: 'column',
                             gap: '0.75rem'
@@ -414,27 +414,14 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             </div>
 
             {editingProfile && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0,0,0,0.8)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000,
-                    backdropFilter: 'blur(8px)'
-                }}>
-                    <div className="glass-panel animate-in" style={{
+                <div className="overlay-blur" onClick={() => setEditingProfile(null)}>
+                    <div className="popover-panel animate-in" style={{
                         width: '90%',
                         maxWidth: '600px',
-                        padding: '2rem',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '1.5rem'
-                    }}>
+                    }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <FileEdit color="var(--accent)" size={20} />
@@ -473,7 +460,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                         </div>
 
                         <div className="input-group">
-                            <label>The narrative text used for voice previews</label>
+                            <label style={{ color: 'var(--text-muted)' }}>The narrative text used for voice previews</label>
                             <textarea
                                 value={testText}
                                 onChange={(e) => setTestText(e.target.value)}

@@ -232,9 +232,9 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         <Clock size={12} /> {formatDate(project.updated_at)}
                                     </p>
                                     <button 
-                                        className="btn-ghost" 
+                                        className="btn-danger" 
                                         onClick={(e) => handleDeleteProject(e, project.id, project.name)}
-                                        style={{ padding: '4px', color: 'var(--error-muted)' }}
+                                        style={{ padding: '4px' }}
                                     >
                                         <Trash2 size={14} />
                                     </button>
@@ -282,7 +282,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         flexShrink: 0,
                                         borderRadius: '8px',
                                         border: isDragging ? '2px solid var(--accent)' : '2px dashed var(--border)',
-                                        background: isDragging ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface)',
+                                        background: isDragging ? 'var(--accent-glow)' : 'var(--surface)',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
@@ -297,7 +297,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                             <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Cover Preview" />
                                             {isDragging && (
-                                                <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-glow)', opacity: 0.8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     <ImageIcon size={32} color="white" />
                                                 </div>
                                             )}

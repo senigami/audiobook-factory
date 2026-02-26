@@ -109,8 +109,8 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                                     {previewData?.analysis && (
                                         <div style={{
                                             padding: '1.25rem',
-                                            background: 'var(--accent-glow)',
-                                            border: '1px solid var(--accent)',
+                                            background: 'var(--surface-alt)',
+                                            border: '1px solid var(--border)',
                                             borderRadius: '12px'
                                         }}>
                                             <pre style={{

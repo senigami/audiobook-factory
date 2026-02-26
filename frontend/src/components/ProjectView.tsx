@@ -482,7 +482,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       )}
 
       {finishedAssemblyJob && !activeAssemblyJob && (
-          <div style={{ background: 'var(--success-muted)', color: 'var(--success-text)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
+          <div style={{ background: 'var(--surface)', color: 'var(--success-text)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
               <CheckCircle size={20} />
               <span style={{ fontWeight: 600 }}>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
           </div>
@@ -960,9 +960,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                 {newFile ? newFile.name : 'Choose .txt File...'}
                             </button>
                             {newFile && (
-                                <button type="button" onClick={() => setNewFile(null)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }}>
-                                    <Trash2 size={16} />
-                                </button>
+                                <button className="btn-danger" onClick={() => handleDeleteSelected()} style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}>
+                          <Trash2 size={14} /> Delete Selected
+                        </button>
                             )}
                         </div>
                     </div>

@@ -23,9 +23,10 @@ const getStatusConfig = (status: Status) => {
   const config = {
     queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
     running: { icon: Clock, color: 'var(--accent)', label: 'Processing' },
-    done: { icon: CheckCircle2, color: 'var(--success)', label: 'Ready' },
-    failed: { icon: AlertCircle, color: 'var(--error)', label: 'Failed' },
+    done: { icon: CheckCircle2, color: 'var(--success-text)', label: 'Ready' },
+    failed: { icon: AlertCircle, color: 'var(--error-text)', label: 'Failed' },
     cancelled: { icon: AlertCircle, color: 'var(--text-muted)', label: 'Cancelled' },
+    error: { icon: AlertCircle, color: 'var(--error-text)', label: 'Error' },
   };
 
   return config[status] || config.queued;
@@ -37,7 +38,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
   const [showMenu, setShowMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const status = job?.status || 'queued';
+  const status = job?.status === 'failed' ? 'error' : (job?.status || 'queued');
 
   useEffect(() => {
     if (!showMenu) return;
@@ -146,7 +147,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 autoFocus
                 value={editedTitle}
                 onChange={e => setEditedTitle(e.target.value)}
-                style={{ background: 'var(--surface)', border: '1px solid var(--accent)', color: '#fff', fontSize: '0.8rem', padding: '2px 4px', width: '100%' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontSize: '0.8rem', padding: '2px 4px', width: '100%' }}
               />
               <button type="submit" style={{ background: 'none', border: 'none', color: 'var(--success)', padding: 0 }}><Save size={14} /></button>
               <button onClick={() => setIsEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--error)', padding: 0 }}><X size={14} /></button>
@@ -173,8 +174,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Icon size={14} color={config.color} />
-            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: config.color, textTransform: 'uppercase' }}>
+            <Icon size={14} color={`var(--${status}-text)` || config.color} />
+            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: `var(--${status}-text)` || config.color, textTransform: 'uppercase' }}>
               {config.label}
             </span>
           </div>
@@ -327,8 +328,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                       }
                     }
                   }}
-                  className="btn-ghost"
-                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', justifyContent: 'flex-start' }}
+                  className="btn-danger"
+                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start' }}
                   title="Permanently delete the chapter text file and all generated audio"
                 >
                   <Trash2 size={12} /> Delete Chapter
@@ -364,7 +365,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         )}
 
         {job?.warning_count ? (
-          <span style={{ fontSize: '0.7rem', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--warning-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <AlertCircle size={12} /> {job.warning_count} Warnings
           </span>
         ) : null}
