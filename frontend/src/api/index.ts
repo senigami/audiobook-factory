@@ -175,10 +175,6 @@ export const api = {
     const res = await fetch(`/api/chapters/${chapterId}/reset`, { method: 'POST' });
     return res.json();
   },
-  deleteLegacyChapter: async (filename: string): Promise<any> => {
-    const res = await fetch(`/api/chapter/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-    return res.json();
-  },
   enqueueSingle: async (filename: string, engine: 'xtts', voice?: string): Promise<any> => {
     const formData = new FormData();
     formData.append('chapter_file', filename);

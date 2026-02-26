@@ -23,6 +23,5 @@ describe('Layout', () => {
         expect(screen.getByText(/Voices/i)).toBeTruthy()
         expect(screen.getByText(/Queue/i)).toBeTruthy()
         expect(screen.getByText(/Library/i)).toBeTruthy()
-        expect(screen.getByText(/Assembly/i)).toBeTruthy()
     })
 })

@@ -67,9 +67,6 @@ describe('api methods', () => {
         await api.fetchPreview('f1', true)
         expect(global.fetch).toHaveBeenCalledWith('/api/preview/f1?processed=true')
 
-        await api.deleteLegacyChapter('f1')
-        expect(global.fetch).toHaveBeenCalledWith('/api/chapter/f1', expect.objectContaining({ method: 'DELETE' }))
-
         await api.enqueueSingle('f1', 'xtts', 'v1')
         expect(global.fetch).toHaveBeenCalledWith('/api/queue/single', expect.objectContaining({ method: 'POST' }))
 
@@ -96,8 +93,5 @@ describe('api methods', () => {
 
         await api.clearProcessingQueue()
         expect(global.fetch).toHaveBeenCalledWith('/api/processing_queue', expect.objectContaining({ method: 'DELETE' }))
-
-        await api.importLegacyData()
-        expect(global.fetch).toHaveBeenCalledWith('/api/migration/import_legacy', expect.objectContaining({ method: 'POST' }))
     })
 })
