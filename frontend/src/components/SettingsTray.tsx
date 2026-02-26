@@ -36,23 +36,23 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
         <div style={{ position: 'relative' }}>
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className={`btn-ghost ${isOpen ? 'active' : ''}`}
+                className="btn-ghost"
                 style={{ 
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '12px',
-                    color: isOpen ? 'var(--accent)' : 'var(--text-muted)',
-                    background: isOpen ? 'var(--accent-glow)' : 'var(--surface)',
-                    border: isOpen ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: 'var(--radius-button)',
+                    color: isOpen ? 'var(--accent)' : 'var(--text-secondary)',
+                    background: isOpen ? 'var(--accent-glow)' : 'transparent',
+                    border: '1px solid ' + (isOpen ? 'var(--accent-glow)' : 'var(--border)'),
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     padding: 0,
-                    boxShadow: isOpen ? 'var(--shadow-sm)' : 'none'
+                    transition: 'all 0.2s ease'
                 }}
                 title="Synthesis Preferences"
             >
-                <Settings size={18} className={isOpen ? 'animate-spin-slow' : ''} />
+                <Settings size={18} strokeWidth={2} className={isOpen ? 'animate-spin-slow' : ''} />
             </button>
 
             <AnimatePresence>

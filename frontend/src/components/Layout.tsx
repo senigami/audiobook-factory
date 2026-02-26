@@ -19,7 +19,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw', backgroundColor: 'var(--bg)' }}>
       <header className="header-container" style={{
         height: 'var(--header-height, 72px)',
         width: '100%',
@@ -29,47 +29,65 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 2.5rem',
+        padding: '0 2rem',
         zIndex: 100,
         backgroundColor: 'rgba(255, 255, 255, 0.8)',
         backdropFilter: 'blur(20px)',
         borderBottom: '1px solid var(--border)',
-        boxShadow: 'var(--shadow-sm)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2.5rem' }}>
           {/* Logo Section */}
           <div
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             onClick={() => onTabChange('library-root')}
           >
-            <BrandLogo scale={0.5} showIcon={true} />
+            <BrandLogo scale={0.8} showIcon={true} />
           </div>
 
           {/* Navigation Section */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
-                className={activeTab === item.id ? 'btn-primary' : 'btn-ghost'}
+                className="btn-ghost"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  padding: '9px 18px',
-                  borderRadius: '12px',
-                  background: activeTab === item.id ? 'var(--accent)' : 'transparent',
-                  color: activeTab === item.id ? 'white' : 'var(--text-secondary)',
-                  transition: 'all 0.2s ease'
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-button)',
+                  background: activeTab === item.id ? 'var(--accent-glow)' : 'transparent',
+                  color: activeTab === item.id ? 'var(--accent)' : 'var(--text-secondary)',
+                  position: 'relative',
+                  transition: 'all 0.2s ease',
+                  border: 'none',
+                  boxShadow: 'none'
                 }}
               >
-                <item.icon size={16} opacity={activeTab === item.id ? 1 : 0.6} />
+                <item.icon size={16} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                 <span className="nav-label" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
                 {item.id === 'queue' && queueCount !== undefined && queueCount > 0 && (
                    <div style={{ 
-                       background: 'var(--accent)', color: 'white', borderRadius: '8px', 
-                       padding: '2px 8px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '4px' 
+                       background: 'var(--accent)', 
+                       color: 'white', 
+                       borderRadius: '6px', 
+                       padding: '1px 6px', 
+                       fontSize: '0.7rem', 
+                       fontWeight: 700, 
+                       marginLeft: '4px' 
                    }}>{queueCount}</div>
+                )}
+                {activeTab === item.id && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '4px',
+                    left: '16px',
+                    right: '16px',
+                    height: '2px',
+                    background: 'var(--accent)',
+                    borderRadius: '2px'
+                  }} />
                 )}
               </button>
             ))}
@@ -77,19 +95,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         </div>
 
         {/* Global Controls Section */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {onToggleLogs && (
             <button
               onClick={onToggleLogs}
               className="btn-ghost"
               title={showLogs ? "Hide Console" : "Show Console"}
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '12px',
-                color: showLogs ? 'var(--accent)' : 'var(--text-muted)',
+                width: '40px',
+                height: '40px',
+                borderRadius: 'var(--radius-button)',
+                color: showLogs ? 'var(--accent)' : 'var(--text-secondary)',
                 background: showLogs ? 'var(--accent-glow)' : 'transparent',
-                border: showLogs ? '1px solid var(--accent)' : '1px solid var(--border)',
+                border: '1px solid ' + (showLogs ? 'var(--accent-glow)' : 'var(--border)'),
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
@@ -97,7 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 padding: 0
               }}
             >
-              <Terminal size={18} />
+              <Terminal size={18} strokeWidth={2} />
             </button>
           )}
           {headerRight}

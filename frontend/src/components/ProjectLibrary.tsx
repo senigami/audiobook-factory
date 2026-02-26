@@ -126,47 +126,117 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 alignItems: 'center', 
-                padding: '4rem 3rem',
-                margin: '1.5rem -3rem 0 -3rem',
+                padding: '3rem',
+                margin: '1.5rem 0 0 0',
                 border: '1px solid var(--border)',
-                background: 'linear-gradient(180deg, var(--as-info-tint) 0%, var(--surface) 100%)',
-                borderRadius: '40px',
-                boxShadow: 'var(--shadow-md)'
+                background: 'linear-gradient(135deg, var(--as-info-tint) 0%, var(--surface) 100%)',
+                borderRadius: 'var(--radius-panel)',
+                boxShadow: 'var(--shadow-md)',
+                flexWrap: 'wrap',
+                gap: '2rem'
             }}>
-                <div style={{ maxWidth: '600px' }}>
-                    <h2 style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', marginBottom: '1rem' }}>
-                        Create Natural-Sounding Audiobooks with AI
+                <div style={{ flex: '1', minWidth: '300px', maxWidth: '640px' }}>
+                    <h2 style={{ 
+                        fontSize: '2.75rem', 
+                        fontWeight: 900, 
+                        letterSpacing: '-0.04em', 
+                        color: 'var(--text-primary)', 
+                        marginBottom: '0.75rem',
+                        lineHeight: 1.1 
+                    }}>
+                        Natural AI Audio Lab
                     </h2>
-                    <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '2rem' }}>
-                        Professional AI voice generation lab for content creators and authors.
+                    <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '2.5rem', fontWeight: 500 }}>
+                        Professional AI voice generation for creators and authors.
                     </p>
-                    <button 
-                        onClick={() => setShowModal(true)}
-                        className="btn-primary" 
-                        style={{ padding: '0.85rem 2rem', fontSize: '1rem', borderRadius: '14px' }}
-                    >
-                        <Plus size={20} /> New Project
-                    </button>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button 
+                            onClick={() => setShowModal(true)}
+                            className="btn-primary" 
+                            style={{ padding: '0.85rem 2.5rem', fontSize: '1rem', borderRadius: 'var(--radius-button)' }}
+                        >
+                            <Plus size={20} strokeWidth={2.5} /> New Project
+                        </button>
+                        <button 
+                            className="btn-ghost" 
+                            style={{ 
+                                padding: '0.85rem 2rem', 
+                                fontSize: '1rem', 
+                                borderRadius: 'var(--radius-button)',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)'
+                            }}
+                            onClick={() => window.open('/docs', '_blank')}
+                        >
+                            View Docs
+                        </button>
+                    </div>
                 </div>
                 <div style={{ 
-                    width: '320px', 
-                    height: '240px', 
-                    background: 'var(--surface)', 
-                    borderRadius: '24px',
+                    flex: '1',
+                    minWidth: '280px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: 'var(--shadow-lg)',
-                    border: '1px solid var(--border)',
                     position: 'relative',
-                    overflow: 'hidden'
+                    padding: '1rem'
                 }}>
-                    <div style={{ 
-                        position: 'absolute', 
-                        inset: 0, 
-                        background: 'linear-gradient(135deg, var(--as-info-tint) 0%, transparent 100%)' 
-                    }} />
-                    <img src="/logo.png" alt="Audiobook Studio" style={{ height: '160px', opacity: 0.8, position: 'relative', zIndex: 1 }} />
+                    <div style={{
+                        position: 'relative',
+                        width: '100%',
+                        maxWidth: '360px',
+                        aspectRatio: '4/3',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <img 
+                            src="/logo.png" 
+                            alt="Audiobook Studio" 
+                            style={{ 
+                                height: '80%', 
+                                width: 'auto',
+                                filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.15))',
+                                position: 'relative', 
+                                zIndex: 1 
+                            }} 
+                        />
+                        {/* Status Tags / Decoration */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '10%',
+                            right: '0',
+                            background: 'var(--surface)',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            boxShadow: 'var(--shadow-md)',
+                            border: '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            zIndex: 2
+                        }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />
+                            Model: XTTS-v2
+                        </div>
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '15%',
+                            left: '5%',
+                            background: 'var(--surface)',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            boxShadow: 'var(--shadow-md)',
+                            border: '1px solid var(--border)',
+                            zIndex: 2
+                        }}>
+                            Status: Ready
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -188,7 +258,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             key={project.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="hover-lift"
+                            whileHover="hover"
                             onClick={() => onSelectProject(project.id)}
                             style={{ 
                                 cursor: 'pointer',
@@ -199,18 +269,20 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 position: 'relative',
                                 background: 'var(--surface)',
                                 border: '1px solid var(--border)',
-                                borderRadius: 'var(--radius-lg)',
+                                borderRadius: 'var(--radius-card)',
                                 boxShadow: 'var(--shadow-sm)',
                                 transition: 'all 0.2s ease'
                             }}
                         >
                             <div style={{ 
                                 aspectRatio: '1/1', 
-                                background: 'var(--surface)', 
+                                background: 'linear-gradient(45deg, var(--surface-alt) 0%, var(--surface) 100%)', 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 justifyContent: 'center',
-                                borderBottom: '1px solid var(--border)'
+                                borderBottom: '1px solid var(--border)',
+                                position: 'relative',
+                                overflow: 'hidden'
                             }}>
                                 {project.cover_image_path ? (
                                     <img 
@@ -219,29 +291,66 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                                     />
                                 ) : (
-                                    <Book size={48} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+                                    <div style={{ 
+                                        width: '100%', 
+                                        height: '100%', 
+                                        display: 'flex', 
+                                        flexDirection: 'column',
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        gap: '12px'
+                                    }}>
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            opacity: 0.05,
+                                            background: `repeating-linear-gradient(45deg, var(--accent) 0, var(--accent) 2px, transparent 0, transparent 50%)`,
+                                            backgroundSize: '10px 10px'
+                                        }} />
+                                        <Book size={48} color="var(--accent)" style={{ opacity: 0.2 }} />
+                                    </div>
                                 )}
+                                
+                                <motion.button 
+                                    variants={{
+                                        hover: { opacity: 1, y: 0 },
+                                        initial: { opacity: 0, y: 5 }
+                                    }}
+                                    initial="initial"
+                                    className="btn-danger" 
+                                    onClick={(e) => handleDeleteProject(e, project.id, project.name)}
+                                    style={{ 
+                                        position: 'absolute',
+                                        top: '12px',
+                                        right: '12px',
+                                        padding: '8px', 
+                                        borderRadius: '8px',
+                                        background: 'rgba(255, 255, 255, 0.9)',
+                                        backdropFilter: 'blur(4px)',
+                                        boxShadow: 'var(--shadow-md)',
+                                        border: '1px solid rgba(239, 68, 68, 0.2)'
+                                    }}
+                                >
+                                    <Trash2 size={16} />
+                                </motion.button>
                             </div>
-                            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.name}>
+                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={project.name}>
                                     {project.name}
                                 </h3>
-                                {project.author && (
-                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <User size={12} /> {project.author}
+                                {project.author ? (
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                                        <User size={14} opacity={0.7} /> {project.author}
+                                    </p>
+                                ) : (
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        No author specified
                                     </p>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Clock size={12} /> {formatDate(project.updated_at)}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                                        <Clock size={14} opacity={0.7} /> {formatDate(project.updated_at)}
                                     </p>
-                                    <button 
-                                        className="btn-danger" 
-                                        onClick={(e) => handleDeleteProject(e, project.id, project.name)}
-                                        style={{ padding: '4px' }}
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
                                 </div>
                             </div>
                         </motion.div>
