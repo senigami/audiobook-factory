@@ -193,7 +193,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
               <button 
                 onClick={() => handleDelete(char.id)}
                 className="btn-danger"
-                style={{ padding: '0.4rem', opacity: 0.6 }}
+                style={{ padding: '0.4rem' }}
                 title="Delete Character"
               >
                 <Trash2 size={16} />

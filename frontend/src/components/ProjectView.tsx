@@ -876,8 +876,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                           <RefreshCw size={14} /> Reset Audio
                         </button>
                         <button 
-                          className="btn-ghost" 
-                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem', color: 'var(--error)' }}
+                          className="btn-danger" 
+                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem' }}
                           onClick={() => { setOpenMenuId(null); handleDeleteChapter(chap.id); }}
                         >
                           <Trash2 size={14} /> Delete Chapter
@@ -959,10 +959,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                             >
                                 {newFile ? newFile.name : 'Choose .txt File...'}
                             </button>
-                            {newFile && (
-                                <button className="btn-danger" onClick={() => handleDeleteSelected()} style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}>
-                          <Trash2 size={14} /> Delete Selected
-                        </button>
+                             {newFile && (
+                                <button type="button" onClick={() => setNewFile(null)} className="btn-danger" style={{ padding: '0.5rem' }}>
+                                    <Trash2 size={16} />
+                                </button>
                             )}
                         </div>
                     </div>
@@ -1061,7 +1061,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                     flexShrink: 0,
                                     borderRadius: '8px',
                                     border: isDraggingEditCover ? '2px solid var(--accent)' : '2px dashed var(--border)',
-                                    background: isDraggingEditCover ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface-light)',
+                                    background: isDraggingEditCover ? 'var(--accent-glow)' : 'var(--surface-light)',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
@@ -1075,11 +1075,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                 {editCoverPreview ? (
                                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                         <img src={editCoverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="New Cover Preview" />
-                                        {isDraggingEditCover && (
-                                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <ImageIcon size={24} color="white" />
-                                            </div>
-                                        )}
+                                            {isDraggingEditCover && (
+                                                <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-glow)', opacity: 0.8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <ImageIcon size={24} color="white" />
+                                                </div>
+                                            )}
                                     </div>
                                 ) : (
                                     <div style={{ textAlign: 'center', padding: '0.5rem' }}>
@@ -1111,8 +1111,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                         <button 
                                             type="button" 
                                             onClick={() => { setEditCover(null); setEditCoverPreview(null); }} 
-                                            className="btn-ghost" 
-                                            style={{ padding: '0.5rem', color: 'var(--error-muted)' }}
+                                            className="btn-danger" 
+                                            style={{ padding: '0.5rem' }}
                                         >
                                             <Trash2 size={16} />
                                         </button>
