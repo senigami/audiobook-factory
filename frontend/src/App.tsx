@@ -10,6 +10,7 @@ import { ProjectView } from './components/ProjectView';
 import { GlobalQueue } from './components/GlobalQueue';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
+import { SettingsTray } from './components/SettingsTray';
 import type { Job } from './types';
 
 function App() {
@@ -115,6 +116,14 @@ function App() {
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}
+        headerRight={
+          <SettingsTray 
+            settings={initialData?.settings}
+            onRefresh={handleRefresh}
+            hideFinished={hideFinished}
+            onToggleHideFinished={() => setHideFinished(!hideFinished)}
+          />
+        }
       >
         <div style={{
           flex: 1,
@@ -147,10 +156,6 @@ function App() {
               ) : (
                 <ProjectLibrary
                   onSelectProject={setActiveProjectId}
-                  settings={initialData?.settings}
-                  onRefresh={handleRefresh}
-                  hideFinished={hideFinished}
-                  onToggleHideFinished={() => setHideFinished(!hideFinished)}
                 />
               )
             )}
