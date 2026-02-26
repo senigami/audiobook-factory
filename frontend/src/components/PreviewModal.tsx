@@ -28,17 +28,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
     if (!isOpen) return null;
 
     return (
-        <div style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.85)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-            padding: '2rem'
-        }} onClick={onClose}>
+        <div className="overlay-blur" onClick={onClose}>
             <div
                 className="glass-panel animate-in"
                 style={{
@@ -49,7 +39,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                     flexDirection: 'column',
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+                    boxShadow: 'var(--shadow-xl)'
                 }}
                 onClick={e => e.stopPropagation()}
             >
@@ -74,7 +64,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                     </button>
                 </header>
 
-                <div style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+                <div style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-light)' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                             onClick={() => setPreviewMode('raw')}
@@ -117,10 +107,10 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, fil
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                     {previewData?.analysis && (
-                                        <div className="glass-panel" style={{
+                                        <div style={{
                                             padding: '1.25rem',
-                                            background: 'rgba(139, 92, 246, 0.05)',
-                                            border: '1px solid rgba(139, 92, 246, 0.2)',
+                                            background: 'var(--accent-glow)',
+                                            border: '1px solid var(--accent)',
                                             borderRadius: '12px'
                                         }}>
                                             <pre style={{

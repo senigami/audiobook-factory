@@ -88,15 +88,14 @@ export const PredictiveProgressBar: React.FC<PredictiveProgressBarProps> = ({
                     </span>
                 )}
             </div>
-            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
                 <div
                     className="progress-bar-animated"
                     style={{
                         height: '100%',
                         width: `${localProgress * 100}%`,
                         background: 'var(--accent)',
-                        transition: 'width 0.5s linear',
-                        boxShadow: '0 0 10px var(--accent)'
+                        transition: 'width 0.5s linear'
                     }}
                 />
             </div>

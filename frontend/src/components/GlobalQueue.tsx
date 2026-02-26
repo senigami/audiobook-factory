@@ -125,8 +125,8 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                     padding: '10px 16px', 
                     borderRadius: '12px', 
                     border: '1px solid var(--border)', 
-                    color: localPaused ? 'var(--warning)' : 'var(--success)',
-                    background: localPaused ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'
+                    color: localPaused ? 'var(--warning-text)' : 'var(--success-text)',
+                    background: localPaused ? 'var(--warning-muted)' : 'var(--success-muted)'
                 }}
             >
                 {localPaused ? <Play size={16} /> : <Pause size={16} />}

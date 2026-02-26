@@ -482,7 +482,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       )}
 
       {finishedAssemblyJob && !activeAssemblyJob && (
-          <div style={{ background: 'var(--success-muted)', color: 'var(--success)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
+          <div style={{ background: 'var(--success-muted)', color: 'var(--success-text)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
               <CheckCircle size={20} />
               <span style={{ fontWeight: 600 }}>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
           </div>

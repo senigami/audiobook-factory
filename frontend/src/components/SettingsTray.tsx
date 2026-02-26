@@ -42,12 +42,13 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                     height: '42px',
                     borderRadius: '12px',
                     color: isOpen ? 'var(--accent)' : 'var(--text-muted)',
-                    background: isOpen ? 'rgba(139, 92, 246, 0.1)' : 'var(--glass)',
+                    background: isOpen ? 'var(--accent-glow)' : 'var(--surface)',
                     border: isOpen ? '1px solid var(--accent)' : '1px solid var(--border)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: 0
+                    padding: 0,
+                    boxShadow: isOpen ? 'var(--shadow-sm)' : 'none'
                 }}
                 title="Synthesis Preferences"
             >
@@ -65,21 +66,12 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="glass-panel"
+                            className="popover-panel"
                             style={{ 
                                 position: 'absolute',
                                 top: 'calc(100% + 12px)',
                                 right: 0,
-                                width: '320px',
-                                padding: '1.5rem',
-                                border: '1px solid var(--border)',
-                                background: 'rgba(10, 10, 12, 0.95)',
-                                backdropFilter: 'blur(20px)',
-                                boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
-                                zIndex: 999,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '1.5rem'
+                                width: '320px'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
