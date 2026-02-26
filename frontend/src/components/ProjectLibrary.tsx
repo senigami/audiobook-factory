@@ -19,6 +19,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [author, setAuthor] = useState('');
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,14 +257,11 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     {projects.map(project => (
                         <motion.div
                             key={project.id}
-                            initial="initial"
-                            animate="visible"
-                            whileHover="cardHovered"
-                            variants={{
-                                initial: { opacity: 0, y: 10 },
-                                visible: { opacity: 1, y: 0 },
-                                cardHovered: { y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }
-                            }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            onMouseEnter={() => setHoveredProjectId(project.id)}
+                            onMouseLeave={() => setHoveredProjectId(null)}
+                            whileHover={{ y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }}
                             onClick={() => onSelectProject(project.id)}
                             style={{ 
                                 cursor: 'pointer',
@@ -275,8 +273,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 background: 'var(--surface)',
                                 border: '1px solid var(--border)',
                                 borderRadius: 'var(--radius-card)',
-                                boxShadow: 'var(--shadow-sm)',
-                                transition: 'all 0.2s ease'
+                                boxShadow: 'var(--shadow-sm)'
                             }}
                         >
                             <div style={{ 
@@ -363,17 +360,26 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 )}
                                 
                                 <motion.button 
-                                    variants={{
-                                        initial: { opacity: 0, y: 8, scale: 1 },
-                                        cardHovered: { opacity: 1, y: 0, scale: 1 },
-                                        buttonHover: { 
-                                            scale: 1.1, 
-                                            backgroundColor: 'rgba(239, 68, 68, 0.9)', 
-                                            borderColor: 'rgba(255, 255, 255, 0.4)',
-                                            boxShadow: '0 8px 24px rgba(239, 68, 68, 0.3)'
-                                        }
+                                    initial={{ opacity: 0, y: 12, scale: 1, pointerEvents: 'none' }}
+                                    animate={{ 
+                                        opacity: hoveredProjectId === project.id ? 1 : 0, 
+                                        y: hoveredProjectId === project.id ? 0 : 12, 
+                                        scale: 1,
+                                        pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
                                     }}
-                                    whileHover="buttonHover"
+                                    whileHover={{ 
+                                        scale: 1.1, 
+                                        backgroundColor: 'rgba(239, 68, 68, 1)', 
+                                        borderColor: 'rgba(255, 255, 255, 0.6)',
+                                        boxShadow: '0 8px 32px rgba(239, 68, 68, 0.4)',
+                                        opacity: 1,
+                                        transition: { duration: 0.1, ease: 'easeOut' }
+                                    }}
+                                    whileTap={{ scale: 0.95 }}
+                                    transition={{ 
+                                        duration: 0.2,
+                                        ease: 'easeOut'
+                                    }}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteProject(e, project.id, project.name);
