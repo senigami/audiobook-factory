@@ -275,8 +275,8 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             }}
                         >
                             <div style={{ 
-                                aspectRatio: '1/1', 
-                                background: 'linear-gradient(45deg, var(--surface-alt) 0%, var(--surface) 100%)', 
+                                aspectRatio: '2/3', 
+                                background: 'linear-gradient(135deg, var(--surface-alt) 0%, var(--surface) 100%)', 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 justifyContent: 'center',
@@ -285,11 +285,53 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 overflow: 'hidden'
                             }}>
                                 {project.cover_image_path ? (
-                                    <img 
-                                        src={project.cover_image_path} 
-                                        alt={project.name} 
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                                    />
+                                    <>
+                                        {/* Background Layer (Blurred Bleed) */}
+                                        <img 
+                                            src={project.cover_image_path} 
+                                            alt="" 
+                                            style={{ 
+                                                position: 'absolute',
+                                                width: '150%', 
+                                                height: '150%', 
+                                                objectFit: 'cover',
+                                                filter: 'blur(80px) saturate(3) brightness(2)',
+                                                opacity: .75,
+                                                zIndex: 0
+                                            }} 
+                                        />
+                                        
+                                        {/* Gradient Overlay for Vignette Effect */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            background: 'radial-gradient(circle, transparent 60%, rgba(255,255,255,0.4) 100%)',
+                                            zIndex: 1
+                                        }} />
+
+                                        {/* Foreground Layer (Contain) */}
+                                        <img 
+                                            src={project.cover_image_path} 
+                                            alt={project.name} 
+                                            style={{ 
+                                                width: '100%', 
+                                                height: '100%', 
+                                                objectFit: 'contain',
+                                                zIndex: 2,
+                                                filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.2))',
+                                                padding: '1rem'
+                                            }} 
+                                        />
+                                        
+                                        {/* Optional fine inner border for foreground separation */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: '1rem',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            pointerEvents: 'none',
+                                            zIndex: 3
+                                        }} />
+                                    </>
                                 ) : (
                                     <div style={{ 
                                         width: '100%', 
@@ -298,16 +340,20 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         flexDirection: 'column',
                                         alignItems: 'center', 
                                         justifyContent: 'center',
-                                        gap: '12px'
+                                        gap: '12px',
+                                        background: 'linear-gradient(135deg, var(--as-info-tint) 0%, var(--surface) 100%)'
                                     }}>
                                         <div style={{
                                             position: 'absolute',
                                             inset: 0,
-                                            opacity: 0.05,
-                                            background: `repeating-linear-gradient(45deg, var(--accent) 0, var(--accent) 2px, transparent 0, transparent 50%)`,
-                                            backgroundSize: '10px 10px'
+                                            opacity: 0.08,
+                                            background: `repeating-linear-gradient(45deg, var(--accent) 0, var(--accent) 1px, transparent 0, transparent 4px)`,
+                                            backgroundSize: '8px 8px'
                                         }} />
-                                        <Book size={48} color="var(--accent)" style={{ opacity: 0.2 }} />
+                                        <Book size={48} color="var(--accent)" style={{ opacity: 0.25, position: 'relative', zIndex: 1 }} />
+                                        <div style={{ position: 'relative', zIndex: 1, fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, opacity: 0.6, letterSpacing: '0.05em' }}>
+                                            ADD COVER
+                                        </div>
                                     </div>
                                 )}
                                 
@@ -326,15 +372,16 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         padding: '8px', 
                                         borderRadius: '8px',
                                         background: 'rgba(255, 255, 255, 0.9)',
-                                        backdropFilter: 'blur(4px)',
+                                        backdropFilter: 'blur(8px)',
                                         boxShadow: 'var(--shadow-md)',
-                                        border: '1px solid rgba(239, 68, 68, 0.2)'
+                                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                                        zIndex: 10
                                     }}
                                 >
                                     <Trash2 size={16} />
                                 </motion.button>
                             </div>
-                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface)', zIndex: 11 }}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={project.name}>
                                     {project.name}
                                 </h3>
