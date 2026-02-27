@@ -19,6 +19,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [author, setAuthor] = useState('');
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,17 +257,11 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     {projects.map(project => (
                         <motion.div
                             key={project.id}
-                            initial="initial"
-                            animate="visible"
-                            whileHover="projectHover"
-                            variants={{
-                                initial: { opacity: 0, y: 10 },
-                                visible: { opacity: 1, y: 0 },
-                                projectHover: { 
-                                    y: -4, 
-                                    boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)'
-                                }
-                            }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            onMouseEnter={() => setHoveredProjectId(project.id)}
+                            onMouseLeave={() => setHoveredProjectId(null)}
+                            whileHover={{ y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }}
                             onClick={() => onSelectProject(project.id)}
                             style={{ 
                                 cursor: 'pointer',
@@ -302,7 +297,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                                 width: '150%', 
                                                 height: '150%', 
                                                 objectFit: 'cover',
-                                                filter: 'blur(80px) saturate(2) brightness(1.2)',
+                                                filter: 'blur(80px) saturate(3) brightness(2)',
                                                 opacity: .75,
                                                 zIndex: 0
                                             }} 
@@ -365,28 +360,26 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 )}
                                 
                                 <motion.button 
-                                    variants={{
-                                        initial: { opacity: 0, y: 120, scale: 1, pointerEvents: 'none' },
-                                        visible: { opacity: 0, y: 120, scale: 1, pointerEvents: 'none' },
-                                        projectHover: { 
-                                            opacity: 1, 
-                                            y: 0, 
-                                            pointerEvents: 'auto',
-                                            transition: { 
-                                                duration: 1.18, 
-                                                ease: [0.1, 1, 0.1, 1], // Aggressive ease-out for immediate slide
-                                                opacity: { duration: 1.12 } // Sync fade slightly with start
-                                            }
-                                        }
+                                    initial={{ opacity: 0, y: 12, scale: 1, pointerEvents: 'none' }}
+                                    animate={{ 
+                                        opacity: hoveredProjectId === project.id ? 1 : 0, 
+                                        y: hoveredProjectId === project.id ? 0 : 12, 
+                                        scale: 1,
+                                        pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
                                     }}
                                     whileHover={{ 
                                         scale: 1.1, 
                                         backgroundColor: 'rgba(239, 68, 68, 1)', 
                                         borderColor: 'rgba(255, 255, 255, 0.6)',
                                         boxShadow: '0 8px 32px rgba(239, 68, 68, 0.4)',
-                                        transition: { duration: 0.1 }
+                                        opacity: 1,
+                                        transition: { duration: 0.1, ease: 'easeOut' }
                                     }}
                                     whileTap={{ scale: 0.95 }}
+                                    transition={{ 
+                                        duration: 0.2,
+                                        ease: 'easeOut'
+                                    }}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteProject(e, project.id, project.name);
