@@ -4,6 +4,7 @@ import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { VoiceDropzone } from './VoiceDropzone';
 import { RecordingGuide } from './RecordingGuide';
 import { ActionMenu } from './ActionMenu';
+import { ConfirmModal } from './ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SpeakerProfile {
@@ -25,9 +26,10 @@ interface SpeakerCardProps {
     onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
 }
 
-const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, onEditTestText, testStatus }) => {
+const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, onEditTestText, requestConfirm, testStatus }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
@@ -319,32 +321,38 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                                                     </span>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                         <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
-                                                        <button 
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                if (!confirm(`Remove sample "${s}"?`)) return;
-                                                                try {
-                                                                    const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
-                                                                        method: 'DELETE'
-                                                                    });
-                                                                    if (resp.ok) onRefresh();
-                                                                } catch (err) {
-                                                                    console.error('Failed to remove sample', err);
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            requestConfirm({
+                                                                title: 'Remove Sample',
+                                                                message: `Are you sure you want to remove "${s}"? This action cannot be undone.`,
+                                                                isDestructive: true,
+                                                                onConfirm: async () => {
+                                                                    try {
+                                                                        const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
+                                                                            method: 'DELETE'
+                                                                        });
+                                                                        if (resp.ok) onRefresh();
+                                                                    } catch (err) {
+                                                                        console.error('Failed to remove sample', err);
+                                                                    }
                                                                 }
-                                                            }}
-                                                            className="btn-ghost"
-                                                            style={{ padding: '4px', height: 'auto', color: 'var(--error)', opacity: 0.6 }}
-                                                            title="Remove Sample"
-                                                        >
-                                                            <X size={12} />
-                                                        </button>
+                                                            });
+                                                        }}
+                                                        className="btn-ghost"
+                                                        style={{ padding: '4px', height: 'auto', color: 'var(--error)', opacity: 0.6 }}
+                                                        title="Remove Sample"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
                                                     </div>
                                                 </div>
                                             ))}
-                                            <div style={{ 
-                                                marginTop: '4px', 
-                                                padding: '8px', 
-                                                textAlign: 'center', 
+                                            <div style={{
+                                                marginTop: '4px',
+                                                padding: '8px',
+                                                textAlign: 'center',
                                                 borderTop: '1px solid var(--border-light)',
                                                 fontSize: '0.65rem',
                                                 color: 'var(--text-muted)',
@@ -465,6 +473,16 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [editedName, setEditedName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
     const [showGuide, setShowGuide] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState<{ 
+        title: string; 
+        message: string; 
+        onConfirm: () => void; 
+        isDestructive?: boolean 
+    } | null>(null);
+
+    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => {
+        setConfirmConfig(config);
+    };
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
@@ -559,15 +577,21 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     };
 
     const handleDelete = async (name: string) => {
-        if (!confirm(`Delete speaker profile "${name}"?`)) return;
-        try {
-            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(name)}`, {
-                method: 'DELETE',
-            });
-            if (resp.ok) onRefresh();
-        } catch (err) {
-            console.error('Failed to delete profile', err);
-        }
+        handleRequestConfirm({
+            title: 'Delete Narrator',
+            message: `Are you sure you want to delete the narrator "${name}"? This will permanently remove all associated voice samples and previews.`,
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(name)}`, {
+                        method: 'DELETE',
+                    });
+                    if (resp.ok) onRefresh();
+                } catch (err) {
+                    console.error('Failed to delete profile', err);
+                }
+            }
+        });
     };
 
     const handleTest = async (name: string) => {
@@ -720,6 +744,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     setTestText(profile.test_text || '');
                                     setEditedName(profile.name);
                                 }}
+                                requestConfirm={handleRequestConfirm}
                             />
                         ))}
                     </div>
@@ -804,6 +829,19 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                     </div>
                 </div>
             )}
+
+            {/* Global Confirm Modal */}
+            <ConfirmModal
+                isOpen={!!confirmConfig}
+                title={confirmConfig?.title || ''}
+                message={confirmConfig?.message || ''}
+                isDestructive={confirmConfig?.isDestructive}
+                onConfirm={() => {
+                    confirmConfig?.onConfirm();
+                    setConfirmConfig(null);
+                }}
+                onCancel={() => setConfirmConfig(null)}
+            />
         </div>
     );
 };
