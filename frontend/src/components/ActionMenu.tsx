@@ -32,21 +32,22 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ onDelete }) => {
                 whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
                 whileTap={{ scale: 0.95 }}
                 style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'rgba(15, 23, 42, 0.4)',
+                    background: 'rgba(15, 23, 42, 0.25)',
                     backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
                     color: 'white',
                     cursor: 'pointer',
-                    padding: 0
+                    padding: 0,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                 }}
             >
-                <MoreVertical size={18} />
+                <MoreVertical size={16} />
             </motion.button>
 
             <AnimatePresence>
@@ -63,11 +64,12 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ onDelete }) => {
                             marginTop: '8px',
                             minWidth: '160px',
                             background: 'var(--surface)',
-                            borderRadius: '12px',
-                            boxShadow: 'var(--shadow-lg)',
+                            borderRadius: '10px',
+                            boxShadow: 'var(--shadow-md)',
                             border: '1px solid var(--border)',
                             overflow: 'hidden',
-                            zIndex: 100
+                            zIndex: 100,
+                            padding: '4px'
                         }}
                     >
                         <button
@@ -78,21 +80,22 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ onDelete }) => {
                             }}
                             style={{
                                 width: '100%',
-                                padding: '10px 16px',
+                                padding: '8px 12px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '10px',
+                                gap: '8px',
                                 background: 'none',
                                 border: 'none',
+                                borderRadius: '6px',
                                 cursor: 'pointer',
                                 textAlign: 'left',
                                 color: 'var(--error)',
-                                fontSize: '0.875rem',
+                                fontSize: '0.85rem',
                                 fontWeight: 500
                             }}
                             className="menu-item-destructive"
                         >
-                            <Trash2 size={16} />
+                            <Trash2 size={14} />
                             Delete Project
                         </button>
                     </motion.div>

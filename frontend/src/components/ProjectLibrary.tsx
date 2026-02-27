@@ -318,20 +318,28 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                                 width: '120%', 
                                                 height: '120%', 
                                                 objectFit: 'cover',
-                                                filter: 'blur(20px) saturate(2) brightness(1.5)',
-                                                opacity: 0.25,
+                                                filter: 'blur(15px) saturate(2) brightness(1.1) contrast(1.5)',
+                                                opacity: 0.22,
                                                 zIndex: 0
                                             }} 
                                         />
                                         
+                                        {/* Glass Highlight Overlay */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, transparent 40%)',
+                                            zIndex: 1
+                                        }} />
+ 
                                         {/* Gradient Overlay for Vignette Effect */}
                                         <div style={{
                                             position: 'absolute',
                                             inset: 0,
-                                            background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.15) 100%)',
-                                            zIndex: 1
+                                            background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.1) 100%)',
+                                            zIndex: 2
                                         }} />
-
+ 
                                         {/* Foreground Layer (Contain) */}
                                         <div style={{
                                             position: 'absolute',
@@ -340,7 +348,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            zIndex: 2
+                                            zIndex: 3
                                         }}>
                                             <img 
                                                 src={project.cover_image_path} 
@@ -349,9 +357,9 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                                     maxWidth: '100%', 
                                                     maxHeight: '100%', 
                                                     objectFit: 'contain',
-                                                    filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.25))',
+                                                    filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.2))',
                                                     borderRadius: '4px',
-                                                    border: '2px solid rgba(255,255,255,0.25)'
+                                                    border: '1px solid rgba(255,255,255,0.2)'
                                                 }} 
                                             />
                                         </div>
@@ -562,8 +570,9 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
             <ConfirmModal
                 isOpen={deleteModal.isOpen}
                 title="Delete project?"
-                message={`Are you sure you want to delete "${deleteModal.projectName}"? This will permanently remove all chapters and audio files. This action cannot be undone.`}
-                confirmText="Delete Project"
+                message=""
+                projectName={deleteModal.projectName || ''}
+                confirmText="Delete"
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteModal({ isOpen: false, projectId: null, projectName: null })}
                 isDestructive={true}

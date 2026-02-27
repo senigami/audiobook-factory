@@ -8,6 +8,7 @@ interface ConfirmModalProps {
     message: string;
     onConfirm: () => void;
     onCancel: () => void;
+    projectName?: string;
     confirmText?: string;
     cancelText?: string;
     isDestructive?: boolean;
@@ -19,6 +20,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     message,
     onConfirm,
     onCancel,
+    projectName,
     confirmText = 'Confirm',
     cancelText = 'Cancel',
     isDestructive = true
@@ -98,7 +100,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
-                            <p style={{ fontSize: '0.925rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{message}</p>
+                            <p style={{ fontSize: '0.925rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                {projectName ? (
+                                    <>
+                                        Are you sure you want to delete <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>"{projectName}"</span>? This will permanently remove all chapters and audio files. This action cannot be undone.
+                                    </>
+                                ) : message}
+                            </p>
                         </div>
 
                         <div style={{ display: 'flex', gap: '12px', marginTop: '0.5rem' }}>
