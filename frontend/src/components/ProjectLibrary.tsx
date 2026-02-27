@@ -360,11 +360,11 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                 )}
                                 
                                 <motion.button 
-                                    initial={{ opacity: 0, y: 12, scale: 1, pointerEvents: 'none' }}
+                                    initial={{ opacity: 0, y: -20, scale: 0.9, pointerEvents: 'none' }}
                                     animate={{ 
                                         opacity: hoveredProjectId === project.id ? 1 : 0, 
-                                        y: hoveredProjectId === project.id ? 0 : 12, 
-                                        scale: 1,
+                                        y: hoveredProjectId === project.id ? 0 : -20, 
+                                        scale: hoveredProjectId === project.id ? 1 : 0.9,
                                         pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
                                     }}
                                     whileHover={{ 
@@ -377,7 +377,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                     }}
                                     whileTap={{ scale: 0.95 }}
                                     transition={{ 
-                                        duration: 0.2,
+                                        duration: 0.4,
                                         ease: [0.22, 1, 0.36, 1]
                                     }}
                                     onClick={(e) => {
