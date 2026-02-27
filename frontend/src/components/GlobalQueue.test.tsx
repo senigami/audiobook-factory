@@ -70,7 +70,7 @@ describe('GlobalQueue', () => {
     it('calls clear completed from ActionMenu', async () => {
         render(<GlobalQueue />)
         
-        const menuBtn = await screen.findByRole('button', { name: '' }) // The kebab button
+        const menuBtn = await screen.findByRole('button', { name: /more actions/i }) // The kebab button
         fireEvent.click(menuBtn)
         
         const clearCompletedBtn = await screen.findByText(/Clear Completed/i)

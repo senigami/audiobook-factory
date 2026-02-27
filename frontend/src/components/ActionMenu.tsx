@@ -44,6 +44,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                     e.stopPropagation();
                     setIsOpen(!isOpen);
                 }}
+                aria-label="More actions"
                 whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
                 whileTap={{ scale: 0.95 }}
                 style={{
@@ -80,10 +81,10 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                             minWidth: '180px',
                             background: 'var(--surface)',
                             borderRadius: '10px',
-                            boxShadow: 'var(--shadow-md)',
+                            boxShadow: 'var(--shadow-xl)',
                             border: '1px solid var(--border)',
                             overflow: 'hidden',
-                            zIndex: 100,
+                            zIndex: 1000,
                             padding: '4px'
                         }}
                     >
@@ -98,7 +99,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                                     }}
                                     style={{
                                         width: '100%',
-                                        padding: '8px 12px',
+                                        padding: '10px 12px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '10px',
@@ -107,6 +108,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                                         borderRadius: '6px',
                                         cursor: 'pointer',
                                         textAlign: 'left',
+                                        justifyContent: 'flex-start',
                                         color: item.isDestructive ? 'var(--error)' : 'var(--text-primary)',
                                         fontSize: '0.85rem',
                                         fontWeight: 500,

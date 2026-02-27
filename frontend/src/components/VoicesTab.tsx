@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star, ChevronDown, ChevronUp, Sliders, Volume2, Settings2, Pause } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
+import { VoiceDropzone } from './VoiceDropzone';
+import { RecordingGuide } from './RecordingGuide';
+import { ActionMenu } from './ActionMenu';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface SpeakerProfile {
     name: string;
     wav_count: number;
+    samples?: string[];
     speed: number;
     is_default: boolean;
     test_text?: string;
@@ -14,18 +19,22 @@ interface SpeakerProfile {
 interface SpeakerCardProps {
     profile: SpeakerProfile;
     isTesting: boolean;
+    testStatus?: any;
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
     onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    testStatus?: { progress: number; started_at?: number };
 }
 
 const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, onEditTestText, testStatus }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isFavorite, setIsFavorite] = useState(false); // Local UI state for now
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement>(null);
     const speed = localSpeed ?? profile.speed;
 
     useEffect(() => {
@@ -33,6 +42,22 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
             setCacheBuster(Date.now());
         }
     }, [profile.preview_url, isTesting]);
+
+    const handlePlayClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!profile.preview_url) {
+            onTest(profile.name);
+            return;
+        }
+
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play();
+            }
+        }
+    };
 
     const handleSpeedChange = async (val: number) => {
         setIsSaving(true);
@@ -52,118 +77,295 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
         }
     };
 
+    const menuItems = [
+        { label: 'Rename', icon: FileEdit, onClick: () => onEditTestText(profile) },
+        { label: 'Manage Samples', icon: Settings2, onClick: () => setIsExpanded(true) },
+        { label: 'Set as Default', icon: Check, onClick: () => onSetDefault(profile.name) },
+        { isDivider: true, label: '', onClick: () => {} },
+        { label: 'Delete Profile', icon: Trash2, onClick: () => onDelete(profile.name), isDestructive: true }
+    ];
+
     return (
-        <div className="glass-panel animate-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            {/* Audio element for the icon button */}
+            {profile.preview_url && (
+                <audio 
+                    ref={audioRef}
+                    src={`${profile.preview_url}?t=${cacheBuster}`}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                />
+            )}
+
+            {/* Header / Collapsed View */}
+            <div style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="icon-circle">
-                        <Music size={16} />
-                    </div>
+                    <button 
+                        onClick={handlePlayClick}
+                        className="btn-primary"
+                        title={profile.preview_url ? (isPlaying ? "Pause Sample" : "Play Sample") : "Generate Sample"}
+                        style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            padding: 0,
+                            borderRadius: '12px',
+                            flexShrink: 0,
+                            background: isPlaying ? 'var(--accent-active)' : 'var(--accent)',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}
+                    >
+                        {isTesting ? (
+                            <Loader2 size={18} className="animate-spin" />
+                        ) : isPlaying ? (
+                            <Pause size={18} fill="currentColor" />
+                        ) : (
+                            <Play size={18} fill="currentColor" />
+                        )}
+                        {isPlaying && (
+                            <motion.div
+                                layoutId="playing-pulse"
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    border: '2px solid white',
+                                    borderRadius: '12px',
+                                    opacity: 0.5
+                                }}
+                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                            />
+                        )}
+                    </button>
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{profile.name}</h4>
-                            <button
-                                onClick={() => onEditTestText(profile)}
-                                className="btn-ghost"
-                                style={{ padding: '4px', color: 'var(--text-muted)' }}
-                                title="Edit Sample Text"
-                            >
-                                <FileEdit size={12} />
-                            </button>
+                            <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>{profile.name}</h4>
+                            {profile.is_default && (
+                                <span style={{ 
+                                    fontSize: '0.65rem', 
+                                    padding: '2px 6px', 
+                                    background: 'var(--success-text)', 
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase'
+                                }}>Default</span>
+                            )}
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count} samples</span>
                     </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onSetDefault(profile.name);
-                        }}
+                        onClick={() => setIsFavorite(!isFavorite)}
                         className="btn-ghost"
-                        style={{
-                            padding: '8px',
-                            color: profile.is_default ? 'var(--warning-text)' : 'var(--text-muted)',
-                            transition: 'all 0.3s ease',
-                            cursor: 'pointer',
-                            zIndex: 10
-                        }}
-                        title={profile.is_default ? "Default Narrator" : "Set as Default"}
+                        style={{ padding: '8px', color: isFavorite ? 'var(--warning)' : 'var(--text-muted)' }}
+                        title="Favorite"
                     >
-                        <Star size={16} fill={profile.is_default ? 'var(--warning)' : 'none'} />
+                        <Star size={18} fill={isFavorite ? 'var(--warning)' : 'none'} />
                     </button>
+                    
                     <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onDelete(profile.name);
-                        }}
-                        className="btn-danger"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="btn-ghost"
                         style={{ padding: '8px' }}
-                        title="Delete Profile"
+                        title={isExpanded ? "Show less" : "Show more"}
                     >
-                        <Trash2 size={14} />
+                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
+
+                    <ActionMenu items={menuItems} />
                 </div>
             </div>
 
-            <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Speed</span>
-                        {isSaving && <Loader2 size={10} className="animate-spin" color="var(--accent)" />}
-                    </div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
-                        {speed.toFixed(2)}x
-                    </span>
-                </div>
-                <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.05"
-                    value={speed}
-                    onChange={(e) => setLocalSpeed(parseFloat(e.target.value))}
-                    onMouseUp={() => handleSpeedChange(speed)}
-                    onTouchEnd={() => handleSpeedChange(speed)}
-                    style={{ width: '100%', accentColor: 'var(--accent)' }}
-                />
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minHeight: '40px' }}>
-                {isTesting ? (
+            {/* Testing State in Header? No, keep it below header if testing */}
+            {isTesting && (
+                <div style={{ padding: '0 1.25rem 1.25rem' }}>
                     <PredictiveProgressBar
                         progress={testStatus?.progress || 0}
                         startedAt={testStatus?.started_at}
                         etaSeconds={25}
-                        label="Generating Sample..."
+                        label="Generating Preview..."
                     />
-                ) : profile.preview_url ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <audio src={`${profile.preview_url}?t=${cacheBuster}`} controls style={{ flex: 1, height: '32px' }} />
-                        <button
-                            onClick={() => onTest(profile.name)}
-                            className="btn-glass"
-                            disabled={isTesting}
-                            style={{ height: '32px', whiteSpace: 'nowrap' }}
-                            title="Regenerate Preview"
-                        >
-                            <RefreshCw size={14} />
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => onTest(profile.name)}
-                        className="btn-primary"
-                        disabled={isTesting}
-                        style={{ width: '100%' }}
+                </div>
+            )}
+
+            {/* Expansion Content */}
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        style={{ overflow: 'hidden', borderTop: '1px solid var(--border)', background: 'var(--surface-light)' }}
                     >
-                        <Play size={16} />
-                        Generate Preview
-                    </button>
+                        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Sample List - As per original instructions */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                                        <Music size={14} />
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                            Voice Samples
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={() => document.getElementById(`add-samples-${profile.name}`)?.click()}
+                                        className="btn-ghost"
+                                        style={{ fontSize: '0.7rem', padding: '4px 8px', height: 'auto', gap: '4px', color: 'var(--accent)' }}
+                                    >
+                                        <Plus size={12} />
+                                        Add Samples
+                                    </button>
+                                    <input 
+                                        type="file" 
+                                        id={`add-samples-${profile.name}`}
+                                        multiple 
+                                        accept=".wav"
+                                        style={{ display: 'none' }}
+                                        onChange={async (e) => {
+                                            if (!e.target.files?.length) return;
+                                            const formData = new FormData();
+                                            Array.from(e.target.files).forEach(f => formData.append('files', f));
+                                            try {
+                                                const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples`, {
+                                                    method: 'POST',
+                                                    body: formData
+                                                });
+                                                if (resp.ok) onRefresh();
+                                            } catch (err) {
+                                                console.error('Failed to add samples', err);
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ 
+                                    display: 'flex', 
+                                    flexDirection: 'column', 
+                                    gap: '2px',
+                                    background: 'var(--surface)',
+                                    padding: '6px',
+                                    borderRadius: '10px',
+                                    border: '1px solid var(--border)',
+                                    maxHeight: '160px',
+                                    overflowY: 'auto'
+                                }}>
+                                    {profile.samples && profile.samples.length > 0 ? (
+                                        profile.samples.map((s, idx) => (
+                                            <div key={idx} className="sample-row" style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'space-between',
+                                                fontSize: '0.8rem',
+                                                padding: '6px 10px',
+                                                borderRadius: '6px',
+                                                background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                                transition: 'background 0.2s'
+                                            }}>
+                                                <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                                    {s}
+                                                </span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
+                                                    <button 
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            if (!confirm(`Remove sample "${s}"?`)) return;
+                                                            try {
+                                                                const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
+                                                                    method: 'DELETE'
+                                                                });
+                                                                if (resp.ok) onRefresh();
+                                                            } catch (err) {
+                                                                console.error('Failed to remove sample', err);
+                                                            }
+                                                        }}
+                                                        className="btn-ghost"
+                                                        style={{ padding: '4px', height: 'auto', color: 'var(--error)', opacity: 0.6 }}
+                                                        title="Remove Sample"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div style={{ padding: '2rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                            <Music size={24} style={{ opacity: 0.1 }} />
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                Empty profile. Add samples to build voice.
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Settings / Speed */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                                        <Sliders size={14} />
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                            Playback Control
+                                        </span>
+                                    </div>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)' }}>
+                                        {speed.toFixed(2)}x
+                                    </span>
+                                </div>
+                                <div style={{ background: 'var(--surface)', padding: '12px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                                    <input
+                                        type="range"
+                                        min="0.5"
+                                        max="2.0"
+                                        step="0.05"
+                                        value={speed}
+                                        onChange={(e) => setLocalSpeed(parseFloat(e.target.value))}
+                                        onMouseUp={() => handleSpeedChange(speed)}
+                                        style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent)' }}
+                                        disabled={isSaving}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Slower</span>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Faster</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Advanced / Preview Audio */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                                    <Volume2 size={14} />
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Preview Management
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button 
+                                        onClick={() => onEditTestText(profile)}
+                                        className="btn-glass"
+                                        style={{ flex: 1, height: '36px', gap: '8px', fontSize: '0.8rem' }}
+                                    >
+                                        <FileEdit size={14} />
+                                        Edit Script
+                                    </button>
+                                    <button
+                                        onClick={() => onTest(profile.name)}
+                                        className="btn-ghost"
+                                        disabled={isTesting}
+                                        style={{ height: '36px', width: '36px', padding: '0', background: 'var(--surface)', border: '1px solid var(--border)' }}
+                                        title="Regenerate Preview"
+                                    >
+                                        <RefreshCw size={14} className={isTesting ? "animate-spin" : ""} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
                 )}
-            </div>
+            </AnimatePresence>
         </div>
     );
 };
@@ -176,13 +378,14 @@ interface VoicesTabProps {
 
 export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles, testProgress }) => {
     const [newName, setNewName] = useState('');
-    const [files, setFiles] = useState<FileList | null>(null);
+    const [files, setFiles] = useState<File[]>([]);
     const [isBuilding, setIsBuilding] = useState(false);
     const [testingProfile, setTestingProfile] = useState<string | null>(null);
     const [editingProfile, setEditingProfile] = useState<SpeakerProfile | null>(null);
     const [testText, setTestText] = useState('');
     const [editedName, setEditedName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
+    const [showGuide, setShowGuide] = useState(false);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
@@ -243,7 +446,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
 
     const handleBuild = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newName || !files || files.length === 0) return;
+        if (!newName || files.length === 0) return;
 
         setIsBuilding(true);
         const formData = new FormData();
@@ -259,9 +462,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             });
             if (resp.ok) {
                 setNewName('');
-                setFiles(null);
-                const input = document.getElementById('profile-files') as HTMLInputElement;
-                if (input) input.value = '';
+                setFiles([]);
                 onRefresh();
             } else {
                 const errorData = await resp.json();
@@ -323,12 +524,15 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     return (
         <div className="tab-content animate-in">
             <div className="responsive-grid">
-                <section className="glass-panel" style={{ padding: '2rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
-                        <Plus size={20} color="var(--accent)" />
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create Super Voice</h3>
+                <section className="glass-panel" style={{ padding: '2rem', height: 'fit-content' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2rem' }}>
+                        <div className="icon-circle" style={{ width: '40px', height: '40px', background: 'var(--accent-glow)' }}>
+                            <Plus size={20} color="var(--accent)" />
+                        </div>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Build Voice Profile</h3>
                     </div>
-                    <form onSubmit={handleBuild} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    
+                    <form onSubmit={handleBuild} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                         <div className="input-group">
                             <label>Narrator Name</label>
                             <input
@@ -336,25 +540,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 placeholder="e.g. Victorian Gentleman"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="input-group">
-                            <label>Voice Samples (.wav)</label>
-                            <input
-                                id="profile-files"
-                                type="file"
-                                multiple
-                                accept=".wav"
-                                onChange={(e) => setFiles(e.target.files)}
+                                disabled={isBuilding}
                                 required
                             />
                         </div>
 
-                        <button type="submit" className="btn-primary" disabled={isBuilding || !newName || !files}>
-                            {isBuilding ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
-                            {isBuilding ? 'Building Profile...' : 'Build Speaker'}
-                        </button>
+                        <VoiceDropzone onFilesChange={setFiles} />
 
                         <div style={{
                             background: 'var(--surface-alt)',
@@ -363,34 +554,73 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             border: '1px solid var(--border)',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '0.75rem'
+                            gap: '1rem'
                         }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
-                                <Info size={14} />
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Voice optimization</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+                                    <Info size={14} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Voice Optimization</span>
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowGuide(!showGuide)}
+                                    className="btn-ghost" 
+                                    style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto' }}
+                                >
+                                    {showGuide ? 'Hide Guide' : 'View Recording Guide'}
+                                </button>
                             </div>
-                            <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    Ideal sample length is 6 to 10 seconds.
-                                </li>
-                                <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    Use 3 to 5 clean samples for best results.
-                                </li>
-                            </ul>
+
+                            <AnimatePresence>
+                                {showGuide && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        style={{ overflow: 'hidden' }}
+                                    >
+                                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                                            <RecordingGuide />
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                            
+                            {!showGuide && (
+                                <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                        Ideal sample length is 6 to 10 seconds.
+                                    </li>
+                                    <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                        Use 3 to 5 clean samples for best results.
+                                    </li>
+                                </ul>
+                            )}
                         </div>
+
+                        <button type="submit" className="btn-primary" style={{ height: '48px', fontSize: '1rem' }} disabled={isBuilding || !newName || files.length === 0}>
+                            {isBuilding ? <Loader2 className="animate-spin" size={20} /> : <Check size={20} />}
+                            {isBuilding ? 'Building Voice...' : 'Build Voice'}
+                        </button>
                     </form>
                 </section>
 
                 <section>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
-                        <User size={20} color="var(--accent)" />
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Available Narrators</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2rem' }}>
+                        <div className="icon-circle" style={{ width: '40px', height: '40px' }}>
+                            <User size={20} color="var(--accent)" />
+                        </div>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Available Narrators</h3>
                     </div>
+                    
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem' }}>
                         {speakerProfiles.length === 0 && (
-                            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
-                                No narrators found. Create one to begin.
-                            </p>
+                            <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                                <Music size={48} color="var(--text-muted)" style={{ opacity: 0.2, marginBottom: '1.5rem' }} />
+                                <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
+                                    No narrators found. Create one to begin.
+                                </p>
+                            </div>
                         )}
                         {speakerProfiles.map((p) => (
                             <SpeakerCard
@@ -427,7 +657,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 <FileEdit color="var(--accent)" size={20} />
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Edit Narrator: {editingProfile.name}</h3>
                             </div>
-                            <button onClick={() => setEditingProfile(null)} className="btn-ghost">
+                            <button onClick={() => setEditingProfile(null)} className="btn-ghost" style={{ padding: '8px' }}>
                                 <X size={20} />
                             </button>
                         </div>

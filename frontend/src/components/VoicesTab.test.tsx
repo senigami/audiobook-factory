@@ -20,35 +20,42 @@ describe('VoicesTab', () => {
         expect(screen.getByText('Narrator2')).toBeInTheDocument()
     })
 
-    it('highlights the default narrator star', () => {
+    it('shows the default narrator pill', () => {
         render(<VoicesTab {...mockProps} />)
-        // Narrator2 is default. The button should have "Default Narrator" title
-        const defaultBtn = screen.getByTitle('Default Narrator')
-        expect(defaultBtn).toBeInTheDocument()
+        // Narrator2 is default. Should have "Default" pill
+        expect(screen.getByText('Default')).toBeInTheDocument()
     })
 
-    it('calls fetch when setting a new default', async () => {
+    it('calls fetch when setting a new default via ActionMenu', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
         global.fetch = fetchMock
 
         render(<VoicesTab {...mockProps} />)
 
-        // Find the "Set as Default" button for Narrator1
-        const setBtn = screen.getByTitle('Set as Default')
+        // Open ActionMenu for Narrator1
+        const actionMenus = screen.getAllByRole('button', { name: /more actions/i })
+        fireEvent.click(actionMenus[0])
+
+        // Find "Set as Default" in the menu
+        const setBtn = screen.getByText('Set as Default')
         fireEvent.click(setBtn)
 
         expect(fetchMock).toHaveBeenCalledWith('/api/settings/default-speaker', expect.anything())
     })
 
-    it('opens edit modal and allows renaming', async () => {
+    it('opens edit modal and allows renaming via ActionMenu', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
         global.fetch = fetchMock
 
         render(<VoicesTab {...mockProps} />)
 
-        // Open modal for Narrator1
-        const editBtn = screen.getAllByTitle('Edit Sample Text')[0]
-        fireEvent.click(editBtn)
+        // Open ActionMenu for Narrator1
+        const actionMenus = screen.getAllByRole('button', { name: /more actions/i })
+        fireEvent.click(actionMenus[0])
+
+        // Click Rename
+        const renameBtn = screen.getByText('Rename')
+        fireEvent.click(renameBtn)
 
         // Find name input and change it
         const nameInput = screen.getByDisplayValue('Narrator1')

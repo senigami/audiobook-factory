@@ -1149,7 +1149,8 @@ def list_speaker_profiles():
 
     profiles = []
     for d in dirs:
-        wav_count = len(list(d.glob("*.wav")))
+        wav_files = sorted([f.name for f in d.glob("*.wav") if f.name != "sample.wav"])
+        wav_count = len(wav_files)
 
         # Load metadata if exists
         from .jobs import get_speaker_settings
@@ -1163,6 +1164,7 @@ def list_speaker_profiles():
             "name": d.name,
             "is_default": d.name == default_speaker,
             "wav_count": wav_count,
+            "samples": wav_files,
             "speed": speed,
             "test_text": test_text,
             "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
@@ -1345,6 +1347,63 @@ def delete_speaker_profile(name: str):
         shutil.rmtree(profile_dir)
         return {"status": "success"}
     return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+@app.delete("/api/speaker-profiles/{name}/samples/{filename}")
+def delete_speaker_sample(name: str, filename: str):
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+    sample_path = profile_dir / filename
+    if sample_path.exists() and sample_path.is_file():
+        sample_path.unlink()
+
+        # Cleanup cached latents since samples changed
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists(): lp.unlink()
+        except: pass
+
+        return {"status": "success"}
+    return JSONResponse({"status": "error", "message": "Sample not found"}, status_code=404)
+
+@app.post("/api/speaker-profiles/{name}/samples")
+async def add_speaker_samples(name: str, files: List[UploadFile] = File(...)):
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+    saved_count = 0
+    for f in files:
+        if not f.filename or not f.filename.lower().endswith(".wav"):
+            continue
+
+        # Prevent overwriting sample.wav
+        if f.filename.lower() == "sample.wav":
+            continue
+
+        basename = os.path.basename(f.filename)
+        dest = profile_dir / basename
+        content = await f.read()
+        dest.write_bytes(content)
+        saved_count += 1
+
+    if saved_count > 0:
+        # Cleanup cached latents
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists(): lp.unlink()
+        except: pass
+
+    return {"status": "success", "files_added": saved_count}
 
 @app.post("/api/speaker-profiles/test")
 def test_speaker_profile(name: str = Form(...)):
