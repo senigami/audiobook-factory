@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Image as ImageIcon, ArrowUpDown, CheckSquare, Square, MoreVertical, RefreshCw, Download, Video, Loader2 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
@@ -8,17 +9,18 @@ import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { CharactersTab } from './CharactersTab';
 
 interface ProjectViewProps {
-  projectId: string;
   jobs: Record<string, Job>;
   speakerProfiles: SpeakerProfile[];
-  onBack: () => void;
-  onNavigateToQueue: () => void;
   onOpenPreview: (filename: string) => void;
   refreshTrigger?: number;
   segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
+  const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
+  
+  if (!projectId) return <div style={{ padding: '2rem' }}>Error: No project ID provided.</div>;
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,7 +276,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
               await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
           }
           loadData();
-          onNavigateToQueue();
+          navigate('/queue');
       } catch (e) {
           console.error("Failed to enqueue all", e);
           alert("Some chapters failed to queue.");
@@ -333,7 +335,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                   setEditingChapterId(null);
                   loadData();
               }}
-              onNavigateToQueue={onNavigateToQueue}
+              onNavigateToQueue={() => navigate('/queue')}
               selectedVoice={selectedVoice}
               onVoiceChange={setSelectedVoice}
               onNext={nextChapterId ? () => setEditingChapterId(nextChapterId) : undefined}
@@ -394,7 +396,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
         {/* Project Metadata */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem', marginLeft: '-0.5rem' }}>
+                <button onClick={() => navigate('/')} className="btn-ghost" style={{ padding: '0.5rem', marginLeft: '-0.5rem' }}>
                     <ArrowLeft size={20} />
                 </button>
                 <div style={{ background: 'var(--surface-light)', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'inline-block' }}>

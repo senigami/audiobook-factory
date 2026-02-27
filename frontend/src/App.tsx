@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Panel } from './components/Panel';
 import { PreviewModal } from './components/PreviewModal';
@@ -32,8 +33,7 @@ function App() {
     () => refetchHome(),
     (chapterId: string) => { setSegmentUpdate(prev => ({ chapterId, tick: prev.tick + 1 })); }
   );
-  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'queue'>('library');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
@@ -59,15 +59,6 @@ function App() {
   return (
     <div className="app-container">
       <Layout
-        activeTab={activeTab}
-        onTabChange={(tab: any) => {
-          if (tab === 'library-root') {
-            setActiveProjectId(null);
-            setActiveTab('library');
-          } else {
-            setActiveTab(tab as any);
-          }
-        }}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}
@@ -89,40 +80,33 @@ function App() {
           position: 'relative'
         }}>
           <main style={{ flex: 1 }}>
-            {activeTab === 'voices' && (
-              <VoicesTab
-                speakerProfiles={initialData?.speaker_profiles || []}
-                onRefresh={handleRefresh}
-                testProgress={testProgress}
-              />
-            )}
-            {activeTab === 'library' && (
-              activeProjectId ? (
+            <Routes>
+              <Route path="/" element={<ProjectLibrary />} />
+              <Route path="/project/:projectId" element={
                 <ProjectView 
-                  projectId={activeProjectId} 
                   jobs={jobs}
                   speakerProfiles={initialData?.speaker_profiles || []}
-                  onBack={() => setActiveProjectId(null)} 
-                  onNavigateToQueue={() => setActiveTab('queue')}
                   onOpenPreview={(filename: string) => setPreviewFilename(filename)}
                   refreshTrigger={queueRefreshTrigger}
                   segmentUpdate={segmentUpdate}
                 />
-              ) : (
-                <ProjectLibrary
-                  onSelectProject={setActiveProjectId}
-                />
-              )
-            )}
-            
-            {activeTab === 'queue' && (
+              } />
+              <Route path="/queue" element={
                 <GlobalQueue 
-                    paused={initialData?.paused || false} 
-                    jobs={jobs}
-                    refreshTrigger={queueRefreshTrigger}
+                  paused={initialData?.paused || false} 
+                  jobs={jobs}
+                  refreshTrigger={queueRefreshTrigger}
                 />
-            )}
-
+              } />
+              <Route path="/voices" element={
+                <VoicesTab
+                  speakerProfiles={initialData?.speaker_profiles || []}
+                  onRefresh={handleRefresh}
+                  testProgress={testProgress}
+                />
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </main>
 
           {showLogs && (

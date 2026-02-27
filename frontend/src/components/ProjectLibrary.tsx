@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Book, Plus, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ActionMenu } from './ActionMenu';
@@ -7,10 +8,11 @@ import type { Project } from '../types';
 import { api } from '../api';
 
 interface ProjectLibraryProps {
-    onSelectProject: (projectId: string) => void;
+    onSelectProject?: (projectId: string) => void;
 }
 
 export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject }) => {
+    const navigate = useNavigate();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -97,7 +99,8 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                 setCoverFile(null);
                 setCoverPreview(null);
                 loadProjects();
-                onSelectProject(res.project_id);
+                onSelectProject?.(res.project_id);
+                navigate(`/project/${res.project_id}`);
             }
         } catch (e) {
             console.error(e);
@@ -283,7 +286,10 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             onMouseEnter={() => setHoveredProjectId(project.id)}
                             onMouseLeave={() => setHoveredProjectId(null)}
                             whileHover={{ y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }}
-                            onClick={() => onSelectProject(project.id)}
+                            onClick={() => {
+                                onSelectProject?.(project.id);
+                                navigate(`/project/${project.id}`);
+                            }}
                             style={{ 
                                 cursor: 'pointer',
                                 display: 'flex', 

@@ -1,21 +1,34 @@
 import { Mic, Zap, Library, Terminal } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  onTabChange: (tab: any) => void;
   headerRight?: React.ReactNode;
   showLogs?: boolean;
   onToggleLogs?: () => void;
   queueCount?: number;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs, queueCount }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, headerRight, showLogs, onToggleLogs, queueCount }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Derive active tab from path
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path === '/' || path.startsWith('/project/')) return 'library';
+    if (path.startsWith('/queue')) return 'queue';
+    if (path.startsWith('/voices')) return 'voices';
+    return 'library';
+  };
+
+  const activeTab = getActiveTab();
+
   const navItems = [
-    { id: 'library', label: 'Library', icon: Library },
-    { id: 'queue', label: 'Queue', icon: Zap },
-    { id: 'voices', label: 'Voices', icon: Mic },
+    { id: 'library', label: 'Library', icon: Library, path: '/' },
+    { id: 'queue', label: 'Queue', icon: Zap, path: '/queue' },
+    { id: 'voices', label: 'Voices', icon: Mic, path: '/voices' },
   ];
 
   return (
@@ -39,7 +52,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           {/* Logo Section */}
           <div
             style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={() => onTabChange('library-root')}
+            onClick={() => navigate('/')}
           >
             <BrandLogo scale={0.8} showIcon={true} />
           </div>
@@ -49,7 +62,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
             {navItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => onTabChange(item.id)}
+                onClick={() => navigate(item.path)}
                 className="btn-ghost"
                 style={{
                   display: 'flex',
