@@ -785,13 +785,18 @@ async def api_analyze_chapter(chapter_id: str):
     })
 # --------------------
 
+from fastapi.responses import FileResponse
+
 @app.get("/")
 def api_welcome():
-    """Welcome endpoint for the API."""
+    """Serve the frontend index if it exists, otherwise return welcome JSON."""
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     return {
         "name": "Audiobook Studio API",
         "status": "online",
-        "frontend": "Please use the React frontend (usually on port 5173 in dev or served on this port in production if built).",
+        "frontend": "Please build the frontend (npm run build) to serve it from this port.",
         "endpoints": {
             "home": "/api/home",
             "jobs": "/api/jobs",
@@ -2223,3 +2228,17 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     update_job(jid, status="queued") # Trigger SSE broadcast immediately
 
     return JSONResponse({"status": "success", "job_id": jid})
+
+# Catch-all for React Router frontend routes
+@app.get("/{full_path:path}")
+def catch_all(full_path: str):
+    # This route is defined at the end so it only catches what wasn't matched above.
+    # We avoid serving index.html for API calls or files (paths with dots).
+    if full_path.startswith("api/") or "." in full_path.split("/")[-1]:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
