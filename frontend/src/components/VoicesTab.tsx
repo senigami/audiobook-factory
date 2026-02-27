@@ -53,7 +53,15 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                 method: 'POST',
                 body: formData
             });
-            if (resp.ok) onRefresh();
+            const result = await resp.json();
+            if (resp.ok) {
+                if (result.errors && result.errors.length > 0) {
+                    alert(`Added ${result.files_added} samples.\nConverted ${result.files_converted} to WAV.\n\nIssues:\n- ${result.errors.join('\n- ')}`);
+                }
+                onRefresh();
+            } else {
+                alert(`Upload failed: ${result.message}`);
+            }
         } catch (err) {
             console.error('Failed to add samples', err);
         }
@@ -239,7 +247,7 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                                         type="file" 
                                         id={`add-samples-${profile.name}`}
                                         multiple 
-                                        accept=".wav"
+                                        accept=".wav,.mp3,.m4a,.ogg,.flac,.aac"
                                         style={{ display: 'none' }}
                                         onChange={async (e) => {
                                             if (!e.target.files?.length) return;
@@ -532,8 +540,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 body: formData,
             });
             if (resp.ok) {
+                const result = await resp.json();
                 setNewName('');
                 setFiles([]);
+                if (result.errors && result.errors.length > 0) {
+                    alert(`Profile built with ${result.total_files} samples.\n\nNote: Some files were skipped or failed conversion:\n- ${result.errors.join('\n- ')}`);
+                }
                 onRefresh();
             } else {
                 const errorData = await resp.json();

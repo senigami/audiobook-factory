@@ -43,8 +43,13 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
             console.error('Failed to get audio duration', e);
         }
 
-        if (file.size > 2 * 1024 * 1024) warnings.push('Large file size');
+        if (file.size > 10 * 1024 * 1024) warnings.push('Large file size');
         
+        const isWav = file.name.toLowerCase().endsWith('.wav');
+        if (!isWav) {
+            warnings.push('Will be converted to WAV');
+        }
+
         return {
             file,
             id: Math.random().toString(36).substring(7),
@@ -57,8 +62,18 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
     const handleFiles = useCallback(async (files: FileList | null) => {
         if (!files) return;
         
-        const wavFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.wav'));
-        const newFiles = await Promise.all(wavFiles.map(validateFile));
+        const validExtensions = ['.wav', '.mp3', '.m4a', '.ogg', '.flac', '.aac'];
+        const allFiles = Array.from(files);
+        const audioFiles = allFiles.filter(f => 
+            validExtensions.some(ext => f.name.toLowerCase().endsWith(ext))
+        );
+        
+        if (audioFiles.length < allFiles.length) {
+            const rejected = allFiles.length - audioFiles.length;
+            alert(`${rejected} ${rejected === 1 ? 'file was' : 'files were'} ignored. Supported formats: .wav, .mp3, .m4a, .flac`);
+        }
+
+        const newFiles = await Promise.all(audioFiles.map(validateFile));
         
         setSelectedFiles(prev => {
             const updated = [...prev, ...newFiles];
@@ -83,7 +98,7 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
 
     return (
         <div className="input-group">
-            <label>Voice Samples (.wav)</label>
+            <label>Voice Samples</label>
             
             <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -108,7 +123,7 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
                     id="voice-upload-input"
                     type="file"
                     multiple
-                    accept=".wav"
+                    accept=".wav,.mp3,.m4a,.ogg,.flac,.aac"
                     onChange={(e) => handleFiles(e.target.files)}
                     style={{ display: 'none' }}
                 />
@@ -116,8 +131,8 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
                     <Upload size={24} color="var(--accent)" />
                 </div>
                 <div>
-                    <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Drop .wav samples here, or <span style={{ color: 'var(--accent)' }}>Browse</span></p>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Only .wav format is supported</p>
+                    <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Drop audio samples here, or <span style={{ color: 'var(--accent)' }}>Browse</span></p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Supports .wav, .mp3, .m4a, .flac (auto-converts to WAV)</p>
                 </div>
             </div>
 

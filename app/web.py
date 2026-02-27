@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample
+from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample, convert_to_wav
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
@@ -1263,22 +1263,56 @@ async def build_speaker_profile(
                 profile_dir.unlink()
         profile_dir.mkdir()
 
+        import tempfile
         saved_count = 0
+        converted_count = 0
+        errors = []
+
         for f in files:
-            if not f.filename or not f.filename.lower().endswith(".wav"):
+            if not f.filename:
                 continue
 
-            # Use only the basename to prevent sub-directory creation/traversal
+            ext = f.filename.lower().suffix if hasattr(f.filename, 'suffix') else os.path.splitext(f.filename)[1].lower()
             basename = os.path.basename(f.filename)
-            dest = profile_dir / basename
+            stem = os.path.splitext(basename)[0]
+
             content = await f.read()
-            dest.write_bytes(content)
-            saved_count += 1
 
-        if saved_count == 0:
-            return JSONResponse({"status": "error", "message": "No valid .wav files were uploaded"}, status_code=400)
+            if ext == ".wav":
+                dest = profile_dir / basename
+                dest.write_bytes(content)
+                saved_count += 1
+            elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+                # Convert to WAV
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(content)
+                    tmp_path = Path(tmp.name)
 
-        return {"status": "success", "profile": name, "files_saved": saved_count}
+                dest_wav = profile_dir / f"{stem}.wav"
+                rc = convert_to_wav(tmp_path, dest_wav)
+                tmp_path.unlink()
+
+                if rc == 0:
+                    converted_count += 1
+                else:
+                    errors.append(f"Failed to convert {basename}")
+            else:
+                errors.append(f"Unsupported format: {basename} ({ext})")
+
+        total_valid = saved_count + converted_count
+        if total_valid == 0:
+            msg = "No valid audio files were found"
+            if errors: msg += f": {', '.join(errors[:2])}"
+            return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+        return {
+            "status": "success", 
+            "profile": name, 
+            "files_saved": saved_count,
+            "files_converted": converted_count,
+            "total_files": total_valid,
+            "errors": errors
+        }
     except Exception as e:
         import traceback
         error_msg = f"Build failed: {str(e)}"
@@ -1377,22 +1411,46 @@ async def add_speaker_samples(name: str, files: List[UploadFile] = File(...)):
     if not profile_dir.exists():
         return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
 
+    import tempfile
     saved_count = 0
+    converted_count = 0
+    errors = []
+
     for f in files:
-        if not f.filename or not f.filename.lower().endswith(".wav"):
+        if not f.filename:
             continue
 
         # Prevent overwriting sample.wav
         if f.filename.lower() == "sample.wav":
             continue
 
+        ext = os.path.splitext(f.filename)[1].lower()
         basename = os.path.basename(f.filename)
-        dest = profile_dir / basename
+        stem = os.path.splitext(basename)[0]
         content = await f.read()
-        dest.write_bytes(content)
-        saved_count += 1
 
-    if saved_count > 0:
+        if ext == ".wav":
+            dest = profile_dir / basename
+            dest.write_bytes(content)
+            saved_count += 1
+        elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = Path(tmp.name)
+
+            dest_wav = profile_dir / f"{stem}.wav"
+            rc = convert_to_wav(tmp_path, dest_wav)
+            tmp_path.unlink()
+
+            if rc == 0:
+                converted_count += 1
+            else:
+                errors.append(f"Failed to convert {basename}")
+        else:
+            errors.append(f"Unsupported format: {basename}")
+
+    total_added = saved_count + converted_count
+    if total_added > 0:
         # Cleanup cached latents
         try:
             from .jobs import get_speaker_wavs
@@ -1403,7 +1461,12 @@ async def add_speaker_samples(name: str, files: List[UploadFile] = File(...)):
                 if lp and lp.exists(): lp.unlink()
         except: pass
 
-    return {"status": "success", "files_added": saved_count}
+    return {
+        "status": "success", 
+        "files_added": total_added,
+        "files_converted": converted_count,
+        "errors": errors
+    }
 
 @app.post("/api/speaker-profiles/test")
 def test_speaker_profile(name: str = Form(...)):
