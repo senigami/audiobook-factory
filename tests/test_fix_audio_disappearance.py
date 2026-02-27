@@ -52,3 +52,37 @@ def test_queued_audio_reset_after_job_removal():
     # 4. Verify chapter status is reset to 'unprocessed'
     chap_after = get_chapter(cid)
     assert chap_after['audio_status'] == 'unprocessed', "Chapter audio_status should be 'unprocessed' after removing a queued job"
+
+def test_clear_completed_and_cancelled():
+    """
+    Verifies that 'done' and 'cancelled' jobs are cleared by the clear_completed endpoint.
+    """
+    # 1. Setup
+    from app.db import clear_queue
+    clear_queue()
+    pid = create_project("Clear Completed Test")
+    c1 = create_chapter(pid, "Chap 1")
+    c2 = create_chapter(pid, "Chap 2")
+    c3 = create_chapter(pid, "Chap 3")
+
+    q1 = add_to_queue(pid, c1)
+    q2 = add_to_queue(pid, c2)
+    q3 = add_to_queue(pid, c3)
+
+    update_queue_item(q1, "done")
+    update_queue_item(q2, "cancelled")
+    # q3 stays 'queued'
+
+    # 2. Call clear_completed
+    response = client.post("/api/processing_queue/clear_completed")
+    assert response.status_code == 200
+    assert response.json()["cleared"] >= 2
+
+    # 3. Verify queue
+    response = client.get("/api/processing_queue")
+    queue = response.json()
+    ids = [item['id'] for item in queue]
+
+    assert q1 not in ids, "Done job should be cleared"
+    assert q2 not in ids, "Cancelled job should be cleared"
+    assert q3 in ids, "Queued job should NOT be cleared"
