@@ -707,11 +707,11 @@ def remove_from_queue(queue_id: str) -> bool:
             return cursor.rowcount > 0
 
 def clear_completed_queue() -> int:
-    """Deletes all 'done' items from the processing queue without resetting chapter status."""
+    """Deletes all 'done' and 'cancelled' items from the processing queue without resetting chapter status."""
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM processing_queue WHERE status = 'done'")
+            cursor.execute("DELETE FROM processing_queue WHERE status IN ('done', 'cancelled')")
             conn.commit()
             return cursor.rowcount
 
