@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info, Volume2, List } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
+import { ConfirmModal } from './ConfirmModal';
 
 import { api } from '../api';
 import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
@@ -38,6 +39,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
   
   const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
   const handleVoiceChange = (voice: string) => {
@@ -431,6 +440,26 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
+  const executeQueue = async () => {
+    setSubmitting(true);
+    try {
+        const voiceToUse = selectedVoice || undefined;
+        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
+        onNavigateToQueue();
+    } catch (e) {
+        console.error("Failed to enqueue", e);
+        setConfirmConfig({
+            title: 'Queue Failed',
+            message: 'Failed to queue chapter.',
+            onConfirm: () => setConfirmConfig(null),
+            isDestructive: false,
+            confirmText: 'OK'
+        });
+    } finally {
+        setSubmitting(false);
+    }
+  };
+
   const handleNavigate = async (dir: 'next' | 'prev') => {
       // Force save before navigating
       await handleSave();
@@ -541,19 +570,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             <button
                 onClick={async () => {
                     if (chapter?.char_count && chapter.char_count > 50000) {
-                        if (!window.confirm(`This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Queue anyway?`)) return;
+                        setConfirmConfig({
+                            title: 'Large Chapter Warning',
+                            message: `This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Processing very large chapters in a single job may cause issues. Queue anyway?`,
+                            isDestructive: false,
+                            confirmText: 'Queue Anyway',
+                            onConfirm: async () => {
+                                setConfirmConfig(null);
+                                await executeQueue();
+                            }
+                        });
+                        return;
                     }
-                    setSubmitting(true);
-                    try {
-                        const voiceToUse = selectedVoice || undefined;
-                        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
-                        onNavigateToQueue();
-                    } catch (e) {
-                        console.error("Failed to enqueue", e);
-                        alert("Failed to queue chapter.");
-                    } finally {
-                        setSubmitting(false);
-                    }
+                    await executeQueue();
                 }}
                 disabled={submitting || (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing'}
                 className="btn-primary"
@@ -1138,6 +1167,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             </div>
           </div>
         )}
+
+        <ConfirmModal
+          isOpen={!!confirmConfig}
+          title={confirmConfig?.title || ''}
+          message={confirmConfig?.message || ''}
+          onConfirm={() => {
+            confirmConfig?.onConfirm();
+            setConfirmConfig(null);
+          }}
+          onCancel={() => setConfirmConfig(null)}
+          isDestructive={confirmConfig?.isDestructive}
+          confirmText={confirmConfig?.confirmText}
+        />
       </div>
     </div>
   </div>

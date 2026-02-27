@@ -3,6 +3,7 @@ import { Reorder, motion, AnimatePresence } from 'framer-motion';
 import { Trash2, GripVertical, CheckCircle, Clock, Layers, Play, Pause, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { ActionMenu } from './ActionMenu';
+import { ConfirmModal } from './ConfirmModal';
 import type { ProcessingQueueItem, Job } from '../types';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 
@@ -19,6 +20,13 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
   const [localPaused, setLocalPaused] = useState(paused);
   const [hoveredJobId, setHoveredJobId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   useEffect(() => {
     setLocalPaused(paused);
@@ -157,11 +165,17 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                 { 
                   label: 'Clear All Jobs', 
                   icon: Trash2, 
-                  onClick: async () => {
-                    if (window.confirm("Clear all items from the queue?")) {
-                      await api.clearProcessingQueue(); 
-                      fetchQueue(); 
-                    }
+                  onClick: () => {
+                    setConfirmConfig({
+                      title: 'Clear Queue',
+                      message: 'Are you sure you want to clear all items from the queue? This will cancel any running jobs.',
+                      isDestructive: true,
+                      onConfirm: async () => {
+                        await api.clearProcessingQueue(); 
+                        fetchQueue(); 
+                        setConfirmConfig(null);
+                      }
+                    });
                   },
                   isDestructive: true 
                 }
@@ -505,6 +519,19 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
 
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
+      />
     </div>
   );
 };

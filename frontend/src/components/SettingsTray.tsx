@@ -7,13 +7,21 @@ interface SettingsTrayProps {
     onRefresh: () => void;
     hideFinished: boolean;
     onToggleHideFinished: () => void;
+    requestConfirm?: (config: {
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDestructive?: boolean;
+        confirmText?: string;
+    }) => void;
 }
 
 export const SettingsTray: React.FC<SettingsTrayProps> = ({ 
     settings, 
     onRefresh, 
     hideFinished, 
-    onToggleHideFinished 
+    onToggleHideFinished,
+    requestConfirm
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -140,9 +148,22 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                 </button>
                                 <button 
                                     onClick={async () => {
-                                        if (confirm('Wipe all jobs and logs?')) {
+                                        const msg = 'Wipe all jobs and logs? This will clear the entire production history.';
+                                        if (requestConfirm) {
+                                            requestConfirm({
+                                                title: 'Wipe History',
+                                                message: msg,
+                                                isDestructive: true,
+                                                onConfirm: async () => {
+                                                    await fetch('/queue/clear', { method: 'POST' });
+                                                    onRefresh();
+                                                    setIsOpen(false);
+                                                }
+                                            });
+                                        } else if (confirm(msg)) {
                                             await fetch('/queue/clear', { method: 'POST' });
                                             onRefresh();
+                                            setIsOpen(false);
                                         }
                                     }}
                                     className="btn-ghost" 

@@ -16,6 +16,13 @@ interface ChapterGridProps {
   onRefresh?: () => void;
   onOpenPreview?: (filename: string) => void;
   makeMp3?: boolean;
+  requestConfirm?: (config: {
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  }) => void;
 }
 
 export const ChapterGrid: React.FC<ChapterGridProps> = ({
@@ -27,7 +34,8 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
   statusSets,
   onRefresh,
   onOpenPreview,
-  makeMp3
+  makeMp3,
+  requestConfirm
 }) => {
   return (
     <div style={{
@@ -50,6 +58,7 @@ export const ChapterGrid: React.FC<ChapterGridProps> = ({
               isXttsWav: statusSets.xttsWav.includes(filename),
             }}
             makeMp3={makeMp3}
+            requestConfirm={requestConfirm}
           />
         ))}
       </AnimatePresence>

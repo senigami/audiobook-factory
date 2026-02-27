@@ -3,6 +3,7 @@ import type { Character, SpeakerProfile } from '../types';
 import { api } from '../api';
 import { Plus, Trash2, User as UserIcon } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
+import { ConfirmModal } from './ConfirmModal';
 
 interface CharactersTabProps {
   projectId: string;
@@ -17,6 +18,14 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   const [newName, setNewName] = useState('');
   const [newVoice, setNewVoice] = useState('');
   const [newColor, setNewColor] = useState('#8b5cf6');
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   const loadCharacters = async () => {
     setLoading(true);
@@ -80,13 +89,19 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this character? All assigned sentences will revert to the default narrator.")) return;
-    try {
-      await api.deleteCharacter(id);
-      setCharacters(prev => prev.filter(c => c.id !== id));
-    } catch (e) {
-      console.error("Failed to delete character", e);
-    }
+    setConfirmConfig({
+      title: 'Delete Character',
+      message: 'Delete this character? All assigned sentences will revert to the default narrator.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.deleteCharacter(id);
+          setCharacters(prev => prev.filter(c => c.id !== id));
+        } catch (e) {
+          console.error("Failed to delete character", e);
+        }
+      }
+    });
   };
 
   return (
@@ -202,6 +217,19 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
+      />
     </div>
   );
 };

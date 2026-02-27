@@ -10,6 +10,7 @@ import { GlobalQueue } from './components/GlobalQueue';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
 import { SettingsTray } from './components/SettingsTray';
+import { ConfirmModal } from './components/ConfirmModal';
 import type { Job } from './types';
 
 function App() {
@@ -37,6 +38,14 @@ function App() {
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   useEffect(() => {
      fetchQueueCount();
@@ -68,6 +77,7 @@ function App() {
             onRefresh={handleRefresh}
             hideFinished={hideFinished}
             onToggleHideFinished={() => setHideFinished(!hideFinished)}
+            requestConfirm={setConfirmConfig}
           />
         }
       >
@@ -130,6 +140,19 @@ function App() {
         isOpen={!!previewFilename}
         onClose={() => setPreviewFilename(null)}
         filename={previewFilename || ''}
+      />
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
       />
     </div>
   );

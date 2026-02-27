@@ -7,6 +7,7 @@ import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types'
 import { ChapterEditor } from './ChapterEditor';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { CharactersTab } from './CharactersTab';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ProjectViewProps {
   jobs: Record<string, Job>;
@@ -49,6 +50,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
   const [newFile, setNewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   const loadData = async () => {
     try {
@@ -151,18 +160,26 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
-    console.log("handleDeleteChapter called for:", chapterId);
-    if (window.confirm("Are you sure you want to delete this chapter?")) {
-      try {
-        const res = await api.deleteChapter(chapterId);
-        console.log("Delete API response:", res);
-        await loadData();
-        console.log("Data reloaded after delete");
-      } catch (e) {
-        console.error("Delete failed", e);
-        alert("Failed to delete chapter. Check console for details.");
+    setConfirmConfig({
+      title: 'Delete Chapter',
+      message: 'Are you sure you want to delete this chapter? This will permanently remove all text and generated audio.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.deleteChapter(chapterId);
+          await loadData();
+        } catch (e) {
+          console.error("Delete failed", e);
+          setConfirmConfig({
+            title: 'Delete Failed',
+            message: 'Failed to delete chapter. Please check the console for details.',
+            onConfirm: () => setConfirmConfig(null),
+            isDestructive: false,
+            confirmText: 'OK'
+          });
+        }
       }
-    }
+    });
   };
 
   const formatLength = (seconds: number) => {
@@ -202,10 +219,22 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
 
   const handleQueueChapter = async (chap: Chapter) => {
     if (chap.char_count > 50000) {
-        const proceed = window.confirm(`This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`);
-        if (!proceed) return;
+        setConfirmConfig({
+            title: 'Large Chapter Warning',
+            message: `This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`,
+            isDestructive: false,
+            confirmText: 'Queue Anyway',
+            onConfirm: () => {
+                setConfirmConfig(null);
+                executeQueue(chap);
+            }
+        });
+        return;
     }
-    setSubmitting(true);
+    executeQueue(chap);
+  };
+
+  const executeQueue = async (chap: Chapter) => {
     try {
         await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
         loadData();
@@ -217,14 +246,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
   };
 
   const handleResetChapterAudio = async (chapterId: string) => {
-    if (window.confirm("Reset audio for this chapter? Physical files will be deleted and status reset.")) {
-      try {
-        await api.resetChapter(chapterId);
-        loadData();
-      } catch (e) {
-        console.error("Reset failed", e);
+    setConfirmConfig({
+      title: 'Reset Chapter Audio',
+      message: 'Reset audio for this chapter? Physical files will be deleted and status reset.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.resetChapter(chapterId);
+          loadData();
+        } catch (e) {
+          console.error("Reset failed", e);
+        }
       }
-    }
+    });
   };
 
   const handleExportSample = async (chapter: Chapter) => {
@@ -1138,6 +1172,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
             </motion.div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
+      />
     </div>
   );
 };

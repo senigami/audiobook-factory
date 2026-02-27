@@ -17,6 +17,13 @@ interface ChapterCardProps {
     isXttsWav: boolean;
   };
   makeMp3?: boolean;
+  requestConfirm?: (config: {
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  }) => void;
 }
 
 const getStatusConfig = (status: Status) => {
@@ -32,7 +39,7 @@ const getStatusConfig = (status: Status) => {
   return config[status] || config.queued;
 };
 
-export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo, makeMp3 }) => {
+export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo, makeMp3, requestConfirm }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [showMenu, setShowMenu] = useState(false);
@@ -301,7 +308,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 <button
                   onClick={async () => {
                     setShowMenu(false);
-                    if (confirm(`Reset audio for ${filename}? This will delete generated WAV/MP3 files and reset status, but keep the text file.`)) {
+                    const msg = `Reset audio for ${filename}? This will delete generated WAV/MP3 files and reset status, but keep the text file.`;
+                    if (requestConfirm) {
+                      requestConfirm({
+                        title: 'Reset Chapter Audio',
+                        message: msg,
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          try {
+                            await api.resetChapter(filename);
+                            onRefresh?.();
+                          } catch (err) {
+                            console.error('Reset failed', err);
+                          }
+                        }
+                      });
+                    } else if (confirm(msg)) {
                       try {
                         await api.resetChapter(filename);
                         onRefresh?.();
@@ -319,7 +341,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 <button
                   onClick={async () => {
                     setShowMenu(false);
-                    if (confirm(`DELETE CHAPTER ${filename} permanently? This deletes the text file AND all audio files.`)) {
+                    const msg = `DELETE CHAPTER ${filename} permanently? This deletes the text file AND all audio files.`;
+                    if (requestConfirm) {
+                      requestConfirm({
+                        title: 'Delete Chapter',
+                        message: msg,
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          try {
+                            await api.deleteChapter(filename);
+                            onRefresh?.();
+                          } catch (err) {
+                            console.error('Delete failed', err);
+                          }
+                        }
+                      });
+                    } else if (confirm(msg)) {
                       try {
                         await api.deleteChapter(filename);
                         onRefresh?.();
