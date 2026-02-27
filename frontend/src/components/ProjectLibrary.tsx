@@ -378,7 +378,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                     whileTap={{ scale: 0.95 }}
                                     transition={{ 
                                         duration: 0.2,
-                                        ease: 'easeOut'
+                                        ease: [0.22, 1, 0.36, 1]
                                     }}
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -391,7 +391,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         width: '40px',
                                         height: '40px',
                                         borderRadius: '12px',
-                                        background: 'rgba(15, 23, 42, 0.4)', 
+                                        backgroundColor: 'rgba(15, 23, 42, 0.4)', 
                                         backdropFilter: 'blur(30px)',
                                         border: '1px solid rgba(255, 255, 255, 0.2)',
                                         zIndex: 20,
@@ -400,7 +400,8 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         justifyContent: 'center',
                                         cursor: 'pointer',
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                        padding: 0
+                                        padding: 0,
+                                        transition: 'none' // DISBALE CSS TRANSITION: Prevent index.css from fighting Framer Motion
                                     }}
                                 >
                                     <Trash2 size={18} color="white" strokeWidth={2} />
