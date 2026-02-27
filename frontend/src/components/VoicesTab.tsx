@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star, ChevronDown, ChevronUp, Sliders, Volume2, Settings2, Pause } from 'lucide-react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star, ChevronDown, ChevronUp, Sliders, Volume2, Settings2, Pause, Upload } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { VoiceDropzone } from './VoiceDropzone';
 import { RecordingGuide } from './RecordingGuide';
@@ -37,11 +37,27 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
     const audioRef = useRef<HTMLAudioElement>(null);
     const speed = localSpeed ?? profile.speed;
 
+    const [isDragging, setIsDragging] = useState(false);
+
     useEffect(() => {
         if (profile.preview_url) {
             setCacheBuster(Date.now());
         }
     }, [profile.preview_url, isTesting]);
+
+    const uploadFiles = async (files: FileList | File[]) => {
+        const formData = new FormData();
+        Array.from(files).forEach(f => formData.append('files', f));
+        try {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples`, {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) onRefresh();
+        } catch (err) {
+            console.error('Failed to add samples', err);
+        }
+    };
 
     const handlePlayClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -227,76 +243,131 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
                                         style={{ display: 'none' }}
                                         onChange={async (e) => {
                                             if (!e.target.files?.length) return;
-                                            const formData = new FormData();
-                                            Array.from(e.target.files).forEach(f => formData.append('files', f));
-                                            try {
-                                                const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples`, {
-                                                    method: 'POST',
-                                                    body: formData
-                                                });
-                                                if (resp.ok) onRefresh();
-                                            } catch (err) {
-                                                console.error('Failed to add samples', err);
-                                            }
+                                            uploadFiles(e.target.files);
                                         }}
                                     />
                                 </div>
-                                <div style={{ 
-                                    display: 'flex', 
-                                    flexDirection: 'column', 
-                                    gap: '2px',
-                                    background: 'var(--surface)',
-                                    padding: '6px',
-                                    borderRadius: '10px',
-                                    border: '1px solid var(--border)',
-                                    maxHeight: '160px',
-                                    overflowY: 'auto'
-                                }}>
+                                <div 
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        setIsDragging(true);
+                                    }}
+                                    onDragLeave={() => setIsDragging(false)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setIsDragging(false);
+                                        if (e.dataTransfer.files?.length) {
+                                            uploadFiles(e.dataTransfer.files);
+                                        }
+                                    }}
+                                    style={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: '2px',
+                                        background: isDragging ? 'var(--accent-glow)' : 'var(--surface)',
+                                        padding: '6px',
+                                        borderRadius: '10px',
+                                        border: isDragging ? '2px dashed var(--accent)' : '1px solid var(--border)',
+                                        maxHeight: '160px',
+                                        overflowY: 'auto',
+                                        transition: 'all 0.2s ease',
+                                        position: 'relative'
+                                    }}
+                                >
+                                    {isDragging && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            background: 'rgba(var(--accent-rgb), 0.1)',
+                                            backdropFilter: 'blur(2px)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '8px',
+                                            zIndex: 10,
+                                            pointerEvents: 'none'
+                                        }}>
+                                            <Upload size={24} color="var(--accent)" />
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)' }}>Drop to Add Samples</span>
+                                        </div>
+                                    )}
+
                                     {profile.samples && profile.samples.length > 0 ? (
-                                        profile.samples.map((s, idx) => (
-                                            <div key={idx} className="sample-row" style={{ 
+                                        <>
+                                            {profile.samples.map((s, idx) => (
+                                                <div key={idx} className="sample-row" style={{ 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'space-between',
+                                                    fontSize: '0.8rem',
+                                                    padding: '6px 10px',
+                                                    borderRadius: '6px',
+                                                    background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                                    transition: 'background 0.2s'
+                                                }}>
+                                                    <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                                        {s}
+                                                    </span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
+                                                        <button 
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                if (!confirm(`Remove sample "${s}"?`)) return;
+                                                                try {
+                                                                    const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
+                                                                        method: 'DELETE'
+                                                                    });
+                                                                    if (resp.ok) onRefresh();
+                                                                } catch (err) {
+                                                                    console.error('Failed to remove sample', err);
+                                                                }
+                                                            }}
+                                                            className="btn-ghost"
+                                                            style={{ padding: '4px', height: 'auto', color: 'var(--error)', opacity: 0.6 }}
+                                                            title="Remove Sample"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div style={{ 
+                                                marginTop: '4px', 
+                                                padding: '8px', 
+                                                textAlign: 'center', 
+                                                borderTop: '1px solid var(--border-light)',
+                                                fontSize: '0.65rem',
+                                                color: 'var(--text-muted)',
+                                                fontStyle: 'italic',
+                                                opacity: 0.6
+                                            }}>
+                                                Drop more .wav files here to update profile
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ padding: '2.5rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ 
+                                                width: '40px', 
+                                                height: '40px', 
+                                                borderRadius: '50%', 
+                                                background: 'var(--surface-alt)', 
                                                 display: 'flex', 
                                                 alignItems: 'center', 
-                                                justifyContent: 'space-between',
-                                                fontSize: '0.8rem',
-                                                padding: '6px 10px',
-                                                borderRadius: '6px',
-                                                background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                                transition: 'background 0.2s'
+                                                justifyContent: 'center',
+                                                border: '1px dashed var(--border)'
                                             }}>
-                                                <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                                    {s}
-                                                </span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
-                                                    <button 
-                                                        onClick={async (e) => {
-                                                            e.stopPropagation();
-                                                            if (!confirm(`Remove sample "${s}"?`)) return;
-                                                            try {
-                                                                const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
-                                                                    method: 'DELETE'
-                                                                });
-                                                                if (resp.ok) onRefresh();
-                                                            } catch (err) {
-                                                                console.error('Failed to remove sample', err);
-                                                            }
-                                                        }}
-                                                        className="btn-ghost"
-                                                        style={{ padding: '4px', height: 'auto', color: 'var(--error)', opacity: 0.6 }}
-                                                        title="Remove Sample"
-                                                    >
-                                                        <X size={12} />
-                                                    </button>
-                                                </div>
+                                                <Upload size={18} style={{ opacity: 0.3 }} />
                                             </div>
-                                        ))
-                                    ) : (
-                                        <div style={{ padding: '2rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                                            <Music size={24} style={{ opacity: 0.1 }} />
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                Empty profile. Add samples to build voice.
-                                            </span>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                    No samples found
+                                                </span>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                    Drop samples here or use Add Samples
+                                                </span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
