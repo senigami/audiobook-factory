@@ -17,10 +17,9 @@ interface ProjectViewProps {
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId } = useParams() as { projectId: string };
   const navigate = useNavigate();
   
-  if (!projectId) return <div style={{ padding: '2rem' }}>Error: No project ID provided.</div>;
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
