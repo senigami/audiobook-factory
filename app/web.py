@@ -7,7 +7,7 @@ import sys
 from typing import Optional, List
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample, convert_to_wav
 from dataclasses import asdict
@@ -785,7 +785,6 @@ async def api_analyze_chapter(chapter_id: str):
     })
 # --------------------
 
-from fastapi.responses import FileResponse
 
 @app.get("/")
 def api_welcome():

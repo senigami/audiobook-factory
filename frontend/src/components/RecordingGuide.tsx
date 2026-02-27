@@ -117,7 +117,10 @@ export const RecordingGuide: React.FC = () => {
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     {expandedCategory === cat.name ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                    {cat.name}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <span style={{ fontSize: '0.85rem' }}>{cat.name}</span>
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 400 }}>{cat.prompts.length} scripts</span>
+                                    </div>
                                 </div>
                                 {cat.prompts.some(p => p.isRecommended) && (
                                     <span style={{ 
@@ -148,8 +151,8 @@ export const RecordingGuide: React.FC = () => {
                                                     display: 'flex',
                                                     gap: '12px'
                                                 }}>
-                                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', flex: 1, margin: 0, lineHeight: '1.4' }}>
-                                                        "{p.text}"
+                                                    <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', flex: 1, margin: 0, lineHeight: '1.5' }}>
+                                                        {p.text}
                                                     </p>
                                                     <button
                                                         onClick={() => copyToClipboard(p.text, p.id)}

@@ -186,12 +186,45 @@ button {
   border-color: var(--error);
 }
 
-.btn-menu-standard:hover {
-  background: var(--surface-alt);
-}
-
 .btn-menu-destructive:hover {
   background: var(--error-glow);
+}
+
+.action-menu-item {
+  position: relative;
+  outline: none;
+}
+
+.action-menu-item.standard:hover {
+  background: var(--surface-alt);
+  color: var(--accent);
+}
+
+.action-menu-item.destructive:hover {
+  background: var(--error-glow);
+  color: var(--error);
+}
+
+.kebab-trigger:focus-visible,
+.action-menu-item:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  z-index: 10;
+}
+
+.sample-row:hover {
+  background: var(--surface-alt) !important;
+}
+
+.sample-remove-btn {
+  color: var(--text-muted);
+  opacity: 0.4;
+  transition: all 0.2s ease;
+}
+
+.sample-remove-btn:hover {
+  color: var(--error) !important;
+  opacity: 1 !important;
+  background: var(--error-glow) !important;
 }
 
 .hover-bg-destructive:hover {

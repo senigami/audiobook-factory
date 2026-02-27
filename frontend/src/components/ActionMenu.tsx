@@ -45,25 +45,26 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                     setIsOpen(!isOpen);
                 }}
                 aria-label="More actions"
-                whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', color: 'var(--accent)' }}
+                whileTap={{ scale: 0.92 }}
                 style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '6px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'rgba(15, 23, 42, 0.25)',
+                    background: 'rgba(15, 23, 42, 0.2)',
                     backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    color: 'white',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer',
                     padding: 0,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    transition: 'all 0.2s ease'
                 }}
+                className="kebab-trigger"
             >
-                <MoreVertical size={16} />
+                <MoreVertical size={18} />
             </motion.button>
 
             <AnimatePresence>
@@ -79,18 +80,19 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                             right: 0,
                             marginTop: '8px',
                             minWidth: '180px',
-                            background: 'var(--surface)',
-                            borderRadius: '10px',
-                            boxShadow: 'var(--shadow-xl)',
+                            background: 'var(--surface-light)',
+                            borderRadius: '12px',
+                            boxShadow: 'var(--shadow-2xl)',
                             border: '1px solid var(--border)',
                             overflow: 'hidden',
                             zIndex: 1000,
-                            padding: '4px'
+                            padding: '6px',
+                            backdropFilter: 'blur(16px)'
                         }}
                     >
                         {menuItems.map((item, idx) => (
                             <React.Fragment key={idx}>
-                                {item.isDivider && <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />}
+                                {item.isDivider && <div style={{ height: '1px', background: 'var(--border)', margin: '6px 4px' }} />}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -99,22 +101,22 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                                     }}
                                     style={{
                                         width: '100%',
-                                        padding: '10px 12px',
+                                        padding: '10px 14px',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '10px',
+                                        gap: '12px',
                                         background: 'none',
                                         border: 'none',
-                                        borderRadius: '6px',
+                                        borderRadius: '8px',
                                         cursor: 'pointer',
                                         textAlign: 'left',
                                         justifyContent: 'flex-start',
                                         color: item.isDestructive ? 'var(--error)' : 'var(--text-primary)',
                                         fontSize: '0.85rem',
                                         fontWeight: 500,
-                                        transition: 'background 0.2s'
+                                        transition: 'all 0.2s ease'
                                     }}
-                                    className={item.isDestructive ? "btn-menu-destructive" : "btn-menu-standard"}
+                                    className={`action-menu-item ${item.isDestructive ? "destructive" : "standard"}`}
                                 >
                                     {item.icon && <item.icon size={14} />}
                                     {item.label}

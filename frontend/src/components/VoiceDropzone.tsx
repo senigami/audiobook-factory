@@ -134,6 +134,47 @@ export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) =
                     <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Drop audio samples here, or <span style={{ color: 'var(--accent)' }}>Browse</span></p>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Supports .wav, .mp3, .m4a, .flac (auto-converts to WAV)</p>
                 </div>
+
+                <AnimatePresence>
+                    {isDragging && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                position: 'absolute',
+                                inset: -2,
+                                background: 'rgba(43, 110, 255, 0.05)',
+                                backdropFilter: 'blur(2px)',
+                                borderRadius: 'var(--radius-card)',
+                                border: '2px solid var(--accent)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 10,
+                                pointerEvents: 'none'
+                            }}
+                        >
+                            <motion.div
+                                animate={{ scale: [1, 1.1, 1] }}
+                                transition={{ repeat: Infinity, duration: 1.5 }}
+                                style={{
+                                    background: 'var(--surface)',
+                                    padding: '1.5rem 2.5rem',
+                                    borderRadius: '99px',
+                                    boxShadow: 'var(--shadow-xl)',
+                                    border: '1px solid var(--border)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px'
+                                }}
+                            >
+                                <Upload size={24} color="var(--accent)" />
+                                <span style={{ fontWeight: 700, color: 'var(--accent)' }}>Drop to Upload</span>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             <AnimatePresence>
