@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Plus, Trash2, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Book, Plus, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ActionMenu } from './ActionMenu';
+import { ConfirmModal } from './ConfirmModal';
 import type { Project } from '../types';
 import { api } from '../api';
 
@@ -23,6 +25,17 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [submitting, setSubmitting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Delete Confirmation State
+    const [deleteModal, setDeleteModal] = useState<{
+        isOpen: boolean;
+        projectId: string | null;
+        projectName: string | null;
+    }>({
+        isOpen: false,
+        projectId: null,
+        projectName: null
+    });
 
     const loadProjects = async () => {
         try {
@@ -93,15 +106,23 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
         }
     };
 
-    const handleDeleteProject = async (e: React.MouseEvent, id: string, name: string) => {
-        e.stopPropagation();
-        if (window.confirm(`Are you sure you want to delete the project '${name}' and all its chapters?`)) {
-            try {
-                await api.deleteProject(id);
-                loadProjects();
-            } catch (err) {
-                console.error("Delete failed", err);
-            }
+    const handleDeleteClick = (id: string, name: string) => {
+        setDeleteModal({
+            isOpen: true,
+            projectId: id,
+            projectName: name
+        });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteModal.projectId) return;
+        try {
+            await api.deleteProject(deleteModal.projectId);
+            loadProjects();
+        } catch (err) {
+            console.error("Delete failed", err);
+        } finally {
+            setDeleteModal({ isOpen: false, projectId: null, projectName: null });
         }
     };
 
@@ -294,11 +315,11 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                             alt="" 
                                             style={{ 
                                                 position: 'absolute',
-                                                width: '150%', 
-                                                height: '150%', 
+                                                width: '120%', 
+                                                height: '120%', 
                                                 objectFit: 'cover',
-                                                filter: 'blur(80px) saturate(3) brightness(2)',
-                                                opacity: .75,
+                                                filter: 'blur(20px) saturate(2) brightness(1.5)',
+                                                opacity: 0.25,
                                                 zIndex: 0
                                             }} 
                                         />
@@ -307,32 +328,33 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         <div style={{
                                             position: 'absolute',
                                             inset: 0,
-                                            background: 'radial-gradient(circle, transparent 60%, rgba(255,255,255,0.4) 100%)',
+                                            background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.15) 100%)',
                                             zIndex: 1
                                         }} />
 
                                         {/* Foreground Layer (Contain) */}
-                                        <img 
-                                            src={project.cover_image_path} 
-                                            alt={project.name} 
-                                            style={{ 
-                                                width: '100%', 
-                                                height: '100%', 
-                                                objectFit: 'contain',
-                                                zIndex: 2,
-                                                filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.2))',
-                                                padding: '1rem'
-                                            }} 
-                                        />
-                                        
-                                        {/* Optional fine inner border for foreground separation */}
                                         <div style={{
                                             position: 'absolute',
-                                            inset: '1rem',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            pointerEvents: 'none',
-                                            zIndex: 3
-                                        }} />
+                                            inset: 0,
+                                            padding: '12px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            zIndex: 2
+                                        }}>
+                                            <img 
+                                                src={project.cover_image_path} 
+                                                alt={project.name} 
+                                                style={{ 
+                                                    maxWidth: '100%', 
+                                                    maxHeight: '100%', 
+                                                    objectFit: 'contain',
+                                                    filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.25))',
+                                                    borderRadius: '4px',
+                                                    border: '2px solid rgba(255,255,255,0.25)'
+                                                }} 
+                                            />
+                                        </div>
                                     </>
                                 ) : (
                                     <div style={{ 
@@ -359,53 +381,18 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                     </div>
                                 )}
                                 
-                                <motion.button 
-                                    initial={{ opacity: 0, y: -20, scale: 0.9, pointerEvents: 'none' }}
-                                    animate={{ 
-                                        opacity: hoveredProjectId === project.id ? 1 : 0, 
-                                        y: hoveredProjectId === project.id ? 0 : -20, 
-                                        scale: hoveredProjectId === project.id ? 1 : 0.9,
-                                        pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
-                                    }}
-                                    whileHover={{ 
-                                        scale: 1.1, 
-                                        backgroundColor: 'rgba(239, 68, 68, 1)', 
-                                        borderColor: 'rgba(255, 255, 255, 0.6)',
-                                        boxShadow: '0 8px 32px rgba(239, 68, 68, 0.4)',
-                                        opacity: 1,
-                                        transition: { duration: 0.1, ease: 'easeOut' }
-                                    }}
-                                    whileTap={{ scale: 0.95 }}
-                                    transition={{ 
-                                        duration: 0.4,
-                                        ease: [0.22, 1, 0.36, 1]
-                                    }}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteProject(e, project.id, project.name);
-                                    }}
-                                    style={{ 
-                                        position: 'absolute',
-                                        top: '12px',
-                                        right: '12px',
-                                        width: '40px',
-                                        height: '40px',
-                                        borderRadius: '12px',
-                                        backgroundColor: 'rgba(15, 23, 42, 0.4)', 
-                                        backdropFilter: 'blur(30px)',
-                                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                                        zIndex: 20,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                        padding: 0,
-                                        transition: 'none' // DISBALE CSS TRANSITION: Prevent index.css from fighting Framer Motion
-                                    }}
-                                >
-                                    <Trash2 size={18} color="white" strokeWidth={2} />
-                                </motion.button>
+                                <div style={{ 
+                                    position: 'absolute', 
+                                    top: '12px', 
+                                    right: '12px', 
+                                    zIndex: 20,
+                                    opacity: hoveredProjectId === project.id ? 1 : 0,
+                                    transform: `translateY(${hoveredProjectId === project.id ? '0' : '-10px'})`,
+                                    transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+                                    pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
+                                }}>
+                                    <ActionMenu onDelete={() => handleDeleteClick(project.id, project.name)} />
+                                </div>
                             </div>
                             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface)', zIndex: 11 }}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={project.name}>
@@ -571,6 +558,16 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     </motion.div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={deleteModal.isOpen}
+                title="Delete project?"
+                message={`Are you sure you want to delete "${deleteModal.projectName}"? This will permanently remove all chapters and audio files. This action cannot be undone.`}
+                confirmText="Delete Project"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteModal({ isOpen: false, projectId: null, projectName: null })}
+                isDestructive={true}
+            />
         </div>
     );
 };
