@@ -112,7 +112,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
 
   const handleClearCompleted = async () => {
     try {
-        await api.clearCompletedJobs(); // Assuming this exists or I'll implement it
+        await api.clearCompletedJobs();
         fetchQueue();
     } catch (e) {
         console.error(e);

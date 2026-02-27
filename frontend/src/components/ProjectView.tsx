@@ -797,20 +797,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                     }
                     
                     if (chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode) {
+                        const audioPath = chap.audio_file_path;
+                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                        
                         return (
                             <audio 
                                 controls 
-                                src={`/projects/${projectId}/audio/${chap.audio_file_path}`} 
-                                onError={(e) => {
-                                    const target = e.target as HTMLAudioElement;
-                                    if (target.src.includes(`/projects/${projectId}/audio/`)) {
-                                        target.src = `/out/xtts/${chap.audio_file_path}`;
-                                    }
-                                }}
+                                key={chap.id}
                                 style={{ height: '30px', width: '100%', maxWidth: '600px' }}
                                 onClick={e => e.stopPropagation()}
                                 onPointerDown={e => e.stopPropagation()} 
-                            />
+                            >
+                                <source src={`/projects/${projectId}/audio/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/projects/${projectId}/audio/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/projects/${projectId}/audio/${mp3Path}`} />}
+                                <source src={`/out/xtts/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                            </audio>
                         );
                     }
                     

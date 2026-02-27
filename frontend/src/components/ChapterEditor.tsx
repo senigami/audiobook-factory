@@ -222,32 +222,55 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             return;
         }
 
-        const url = projectId 
-            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
-            : `/out/xtts/${seg.audio_file_path}`;
-        const audio = new Audio(url);
+        const audioPath = seg.audio_file_path;
+        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
         
-        audio.onended = () => {
-            if (!isPlayingRef.current) return;
-            let nextIdx = idx + 1;
-            while (nextIdx < playbackQueueRef.current.length) {
-                const nextId = playbackQueueRef.current[nextIdx];
-                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
-                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
-                    nextIdx++;
-                } else {
-                    break;
+        const urls = [
+            projectId ? `/projects/${projectId}/audio/${audioPath}` : `/out/xtts/${audioPath}`,
+            projectId ? `/projects/${projectId}/audio/${wavPath}` : `/out/xtts/${wavPath}`,
+            projectId ? `/projects/${projectId}/audio/${mp3Path}` : `/out/xtts/${mp3Path}`,
+            `/out/xtts/${audioPath}`,
+            `/out/xtts/${wavPath}`,
+            `/out/xtts/${mp3Path}`
+        ].filter((v, i, a) => a.indexOf(v) === i); // unique
+        
+        let urlIdx = 0;
+        const playWithFallback = (u: string) => {
+            const audio = new Audio(u);
+            audio.onended = () => {
+                if (!isPlayingRef.current) return;
+                let nextIdx = idx + 1;
+                while (nextIdx < playbackQueueRef.current.length) {
+                    const nextId = playbackQueueRef.current[nextIdx];
+                    const nextSeg = segmentsRef.current.find(s => s.id === nextId);
+                    if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
+                        nextIdx++;
+                    } else {
+                        break;
+                    }
                 }
-            }
-            playFromIndex(nextIdx);
+                playFromIndex(nextIdx);
+            };
+            
+            audio.onerror = () => {
+                if (!isPlayingRef.current) return;
+                urlIdx++;
+                if (urlIdx < urls.length) {
+                    playWithFallback(urls[urlIdx]);
+                } else {
+                    playFromIndex(idx + 1);
+                }
+            };
+            
+            audio.play().catch(e => {
+                console.error("Playback failed", e);
+                audio.onerror?.(new Event('error') as any);
+            });
+            audioPlayerRef.current = audio;
         };
         
-        audio.onerror = () => { if (isPlayingRef.current) playFromIndex(idx + 1); };
-        audio.play().catch(e => {
-            console.error("Playback failed", e);
-            if (isPlayingRef.current) playFromIndex(idx + 1);
-        });
-        audioPlayerRef.current = audio;
+        playWithFallback(urls[0]);
     };
 
     await playFromIndex(currentIndex);
@@ -528,19 +551,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             
             {chapter.audio_status === 'done' && chapter.audio_file_path && (
                 <div style={{ paddingLeft: '1rem', borderLeft: '1px solid var(--border)' }}>
-                    <audio 
-                        controls 
-                        src={chapter.project_id 
-                            ? `/projects/${chapter.project_id}/audio/${chapter.audio_file_path}`
-                            : `/out/xtts/${chapter.audio_file_path}`} 
-                        onError={(e) => {
-                            const target = e.target as HTMLAudioElement;
-                            if (target.src.includes('/projects/')) {
-                                target.src = `/out/xtts/${chapter.audio_file_path}`;
-                            }
-                        }}
-                        style={{ height: '32px', maxWidth: '300px' }}
-                    />
+                    {(() => {
+                        const audioPath = chapter.audio_file_path;
+                        if (!audioPath) return null;
+                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                        
+                        return (
+                            <audio 
+                                controls 
+                                key={chapter.id}
+                                style={{ height: '32px', maxWidth: '300px' }}
+                            >
+                                <source src={`/projects/${chapter.project_id}/audio/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/projects/${chapter.project_id}/audio/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/projects/${chapter.project_id}/audio/${mp3Path}`} />}
+                                <source src={`/out/xtts/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                            </audio>
+                        );
+                    })()}
                 </div>
             )}
         </div>

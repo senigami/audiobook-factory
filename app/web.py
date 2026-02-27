@@ -387,7 +387,9 @@ def api_delete_project(project_id: str):
 # --- Chapters API ---
 @app.get("/api/projects/{project_id}/chapters")
 def api_list_project_chapters(project_id: str):
-    return JSONResponse(db_list_chapters(project_id))
+    from .db import list_chapters, reconcile_project_audio
+    reconcile_project_audio(project_id)
+    return JSONResponse(list_chapters(project_id))
 
 @app.post("/api/projects/{project_id}/chapters")
 async def api_create_chapter(
@@ -2083,19 +2085,42 @@ def api_remove_from_queue(queue_id: str):
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Item not found"}, status_code=404)
 
-@app.delete("/api/processing_queue")
-def api_clear_queue():
-    count = db_clear_queue()
+@app.post("/api/processing_queue/clear_completed")
+def api_clear_completed_queue():
+    from .db import clear_completed_queue
+    count = clear_completed_queue()
     broadcast_queue_update()
     return JSONResponse({"status": "success", "cleared": count})
-# -----------------------------
 
 @app.post("/queue/clear")
 def clear_history():
     """Wipe job history, empty the in-memory queue, and stop processes."""
+    from .db import get_queue
+    # 1. Identify which chapters should be reset (not 'done')
+    q_items = get_queue()
+    c_ids_to_reset = [item['chapter_id'] for item in q_items if item['status'] != 'done']
+
     terminate_all_subprocesses()
     clear_job_queue()
-    clear_all_jobs()
+    clear_all_jobs() # state.json wipe
+
+    # 2. Manual reset in DB for chapters that were queued/running
+    if c_ids_to_reset:
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join(["?"] * len(c_ids_to_reset))
+            cursor.execute(f"UPDATE chapters SET audio_status = 'unprocessed' WHERE id IN ({placeholders})", c_ids_to_reset)
+            cursor.execute("DELETE FROM processing_queue")
+            conn.commit()
+    else:
+        # Just wipe queue table if nothing to reset
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue")
+            conn.commit()
+
     return JSONResponse({"status": "ok", "message": "History cleared and processes stopped"})
 
 
