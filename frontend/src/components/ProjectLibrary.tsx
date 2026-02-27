@@ -389,18 +389,24 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                     </div>
                                 )}
                                 
-                                <div style={{ 
-                                    position: 'absolute', 
-                                    top: '12px', 
-                                    right: '12px', 
-                                    zIndex: 20,
-                                    opacity: hoveredProjectId === project.id ? 1 : 0,
-                                    transform: `translateY(${hoveredProjectId === project.id ? '0' : '-10px'})`,
-                                    transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
-                                    pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
-                                }}>
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                                    animate={{ 
+                                        opacity: hoveredProjectId === project.id ? 1 : 0,
+                                        y: hoveredProjectId === project.id ? 0 : -20,
+                                        scale: hoveredProjectId === project.id ? 1 : 0.9
+                                    }}
+                                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                                    style={{ 
+                                        position: 'absolute', 
+                                        top: '12px', 
+                                        right: '12px', 
+                                        zIndex: 20,
+                                        pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
+                                    }}
+                                >
                                     <ActionMenu onDelete={() => handleDeleteClick(project.id, project.name)} />
-                                </div>
+                                </motion.div>
                             </div>
                             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface)', zIndex: 11 }}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={project.name}>
