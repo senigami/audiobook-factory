@@ -121,6 +121,23 @@ button {
   filter: grayscale(0.5);
 }
 
+.btn-success {
+  background: var(--success);
+  color: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669; /* darker success */
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-success:active:not(:disabled) {
+  background: #047857;
+  transform: translateY(0);
+}
+
 .btn-glass {
   background: #ffffff;
   color: var(--text-primary);
@@ -167,6 +184,23 @@ button {
   background: var(--error-glow);
   color: #ef4444;
   border-color: var(--error);
+}
+
+.btn-menu-standard:hover {
+  background: var(--surface-alt);
+}
+
+.btn-menu-destructive:hover {
+  background: var(--error-glow);
+}
+
+.hover-bg-destructive:hover {
+  background: var(--error-glow) !important;
+  color: var(--error) !important;
+}
+
+.hover-bg-subtle:hover {
+  background: var(--surface-alt) !important;
 }
 
 .glass-panel {

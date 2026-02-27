@@ -225,4 +225,8 @@ export const api = {
     const res = await fetch('/api/processing_queue', { method: 'DELETE' });
     return res.json();
   },
+  clearCompletedJobs: async (): Promise<any> => {
+    const res = await fetch('/api/processing_queue/clear_completed', { method: 'POST' });
+    return res.json();
+  },
 };
