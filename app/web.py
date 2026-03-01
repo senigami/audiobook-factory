@@ -399,7 +399,7 @@ async def api_create_chapter(
     sort_order: int = Form(0),
     file: Optional[UploadFile] = File(None)
 ):
-    actual_text = text_content or ""
+    actual_text = (text_content or "").replace('\r\n', '\n')
     if file:
         content = await file.read()
         try:
@@ -434,6 +434,7 @@ async def api_update_chapter_details(
         updates["title"] = title
 
     if text_content is not None: 
+        text_content = text_content.replace('\r\n', '\n')
         updates["text_content"] = text_content
         char_count, word_count, pred_seconds = compute_chapter_metrics(text_content)
         updates["char_count"] = char_count

@@ -505,7 +505,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (loading) return <div style={{ padding: '2rem' }}>Loading editor...</div>;
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
-  const hasUnsavedChanges = title !== chapter.title || text !== (chapter.text_content || '');
+  const hasUnsavedChanges = (title || "").trim() !== (chapter.title || "").trim() || 
+                           (text || "").replace(/\r\n/g, '\n') !== (chapter.text_content || "").replace(/\r\n/g, '\n');
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 72px)', margin: '-2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
@@ -651,8 +652,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success-muted)" />)}
+                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--success-text)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success)" />)}
                     {saving ? 'Saving...' : (hasUnsavedChanges ? 'Unsaved' : 'Saved')}
                 </span>
             </div>
