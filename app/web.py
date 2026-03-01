@@ -1163,6 +1163,8 @@ def list_speaker_profiles():
         spk_settings = get_speaker_settings(d.name)
         speed = spk_settings["speed"]
         test_text = spk_settings["test_text"]
+        speaker_id = spk_settings.get("speaker_id")
+        variant_name = spk_settings.get("variant_name")
 
         test_wav = VOICES_DIR / d.name / "sample.wav"
 
@@ -1173,9 +1175,52 @@ def list_speaker_profiles():
             "samples": wav_files,
             "speed": speed,
             "test_text": test_text,
+            "speaker_id": speaker_id,
+            "variant_name": variant_name,
             "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
         })
     return profiles
+
+# --- Speakers API ---
+@app.get("/api/speakers")
+def api_list_speakers():
+    from .db import list_speakers
+    return list_speakers()
+
+@app.post("/api/speakers")
+def api_create_or_update_speaker(
+    id: Optional[str] = Form(None),
+    name: str = Form(...),
+    default_profile_name: Optional[str] = Form(None)
+):
+    from .db import create_speaker, update_speaker
+    if id:
+        success = update_speaker(id, name=name, default_profile_name=default_profile_name)
+        return {"status": "success" if success else "error", "id": id}
+    else:
+        speaker_id = create_speaker(name, default_profile_name)
+        return {"status": "success", "id": speaker_id}
+
+@app.delete("/api/speakers/{speaker_id}")
+def api_delete_speaker(speaker_id: str):
+    from .db import delete_speaker
+    success = delete_speaker(speaker_id)
+    return {"status": "success" if success else "error"}
+
+@app.post("/api/speaker-profiles/{name}/assign")
+def api_assign_profile_to_speaker(
+    name: str,
+    speaker_id: Optional[str] = Form(None),
+    variant_name: Optional[str] = Form(None)
+):
+    from .jobs import update_speaker_settings
+    updates = {
+        "speaker_id": speaker_id if speaker_id else None,
+        "variant_name": variant_name if variant_name else None
+    }
+    success = update_speaker_settings(name, **updates)
+    return {"status": "success" if success else "error"}
+# --------------------
 
 @app.post("/api/speaker-profiles/{name}/test-text")
 def update_speaker_test_text(name: str, text: str = Form(...)):
