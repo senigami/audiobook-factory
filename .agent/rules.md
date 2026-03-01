@@ -39,3 +39,21 @@ These rules apply to all development activities in this repository.
   2. **Backend Tests Pass**: `pytest` returns green for all relevant suites.
   3. **Frontend Tests Pass**: `npm test` returns green.
   4. **Wiki is Updated**: Relevant documentation reflects the current state of the app, and `wiki/Changelog.md` contains a **dated** entry for the changes.
+
+## 7. Take Ownership
+
+- **Do not simply agree** with the user. Treat the codebase and product as if you own the outcome.
+- **Propose improvements** when implementing requests: suggest better patterns, clearer naming, or simpler solutions even when the user’s ask could be fulfilled as stated.
+- **Call out trade-offs** when a request has downsides (e.g., performance, maintainability, accessibility) and offer alternatives when there is a clearly better way.
+
+## 8. Best Practices and Quality
+
+- **Enforce best practices** appropriate to the stack (see other rules: React, TypeScript, tRPC, Next.js, Tailwind, etc.). Prefer project conventions over ad-hoc solutions.
+- **Optimal UX and UI**: When building or changing UI, consider accessibility (semantics, focus, screen readers), responsiveness, loading and error states, and consistency with existing patterns in the app. Recommend improvements if something would hurt usability.
+
+## 9. Pushback and Recommendations
+
+- **Offer pushback** when the requested approach is suboptimal: explain why and propose a better option. Be concise and constructive.
+- **Recommend the better way** when you know one: e.g., “We could do X as you said, but Y is simpler and matches our existing pattern—I recommend Y.”
+- **Ask one clarifying question** only when the request is ambiguous and the answer would change the implementation; otherwise make a reasonable choice and state it.
+- Stay respectful and collaborative: frame suggestions as recommendations, not vetoes, so the user can still choose the original approach if they prefer.

@@ -530,9 +530,18 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                 />
             )}
 
-            {!showControlsInline && (
-                <div style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+                style={{ 
+                    padding: '1.25rem', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    borderBottom: (isExpanded && (profile.wav_count > 0 || pendingSamples.length > 0)) ? '1px solid var(--border-light)' : 'none',
+                    transition: 'border-bottom 0.2s'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
                         <button 
                             onClick={handlePlayClick}
                             className="btn-primary"
@@ -542,10 +551,10 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 height: '40px', 
                                 padding: 0,
                                 borderRadius: '12px',
-                                flexShrink: 0,
                                 background: isPlaying ? 'var(--accent-active)' : 'var(--accent)',
                                 position: 'relative',
-                                overflow: 'hidden'
+                                overflow: 'hidden',
+                                boxShadow: 'var(--shadow-sm)'
                             }}
                         >
                             {isTesting ? (
@@ -570,50 +579,106 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 />
                             )}
                         </button>
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>
-                                    {assignedSpeaker ? (
-                                        isGrouped ? (profile.variant_name || 'Default') : `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}`
-                                    ) : profile.name}
-                                </h4>
-                                {profile.is_default && (
-                                    <span style={{ 
-                                        fontSize: '0.65rem', 
-                                        padding: '2px 6px', 
-                                        background: 'var(--accent)', 
-                                        color: 'white',
-                                        borderRadius: '4px',
-                                        fontWeight: 700,
-                                        textTransform: 'uppercase'
-                                    }}>Default</span>
-                                )}
-                                {isRebuildRequired && (
-                                    <span style={{ 
-                                        fontSize: '0.65rem', 
-                                        padding: '2px 6px', 
-                                        background: 'var(--warning-text)', 
-                                        color: 'white',
-                                        borderRadius: '4px',
-                                        fontWeight: 700,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                    }}>
-                                        <AlertTriangle size={10} />
-                                        REBUILD REQUIRED
-                                    </span>
-                                )}
-                            </div>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count + pendingSamples.length} samples</span>
+                        <div 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsExpanded(!isExpanded);
+                            }}
+                            style={{
+                                position: 'absolute',
+                                bottom: -4,
+                                right: -4,
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: 'var(--surface)',
+                                border: '2px solid var(--accent)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--accent)',
+                                cursor: 'pointer',
+                                boxShadow: 'var(--shadow-sm)',
+                                zIndex: 2,
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                                e.currentTarget.style.borderColor = 'var(--accent-active)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                            }}
+                        >
+                            <ChevronUp 
+                                size={12} 
+                                style={{ 
+                                    transform: isExpanded ? 'none' : 'rotate(180deg)',
+                                    transition: 'transform 0.3s ease'
+                                }} 
+                            />
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ActionMenu items={menuItems} />
+                    <div 
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        style={{ 
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            flex: 1,
+                            padding: '4px 8px',
+                            margin: '0 -8px',
+                            borderRadius: '8px',
+                            transition: 'background 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(var(--accent-rgb), 0.05)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        className="profile-header-clickable"
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
+                                {assignedSpeaker ? (
+                                    isGrouped ? (profile.variant_name || 'Default') : `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}`
+                                ) : profile.name}
+                            </h4>
+                            {profile.is_default && (
+                                <span style={{ 
+                                    fontSize: '0.65rem', 
+                                    padding: '2px 6px', 
+                                    background: 'var(--accent)', 
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase'
+                                }}>Default</span>
+                            )}
+                            {isRebuildRequired && (
+                                <span style={{ 
+                                    fontSize: '0.65rem', 
+                                    padding: '2px 6px', 
+                                    background: 'var(--warning-text)', 
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                }}>
+                                    <AlertTriangle size={10} />
+                                    REBUILD REQUIRED
+                                </span>
+                            )}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count + pendingSamples.length} samples</span>
                     </div>
                 </div>
-            )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ActionMenu items={menuItems} />
+                </div>
+            </div>
 
             {isTesting && (
                 <div style={{ padding: showControlsInline ? '0 0 1.25rem' : '0 1.25rem 1.25rem' }}>
@@ -679,6 +744,7 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
 }) => {
     const defaultProfile = profiles.find(p => p.is_default) || profiles[0];
     const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
+    const [isExpanded, setIsExpanded] = useState(true);
     const activeProfile = profiles.find(p => p.name === activeProfileId) || defaultProfile;
 
     const speakerMenuItems = [
@@ -708,8 +774,19 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
 
     return (
         <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isExpanded ? '1px solid var(--border-light)' : 'none' }}>
+                <div 
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    style={{ 
+                        padding: '1.25rem', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '16px', 
+                        cursor: 'pointer',
+                        flex: 1,
+                        userSelect: 'none'
+                    }}
+                >
                     <div style={{ 
                         width: '48px', 
                         height: '48px', 
@@ -719,9 +796,32 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
                         alignItems: 'center', 
                         justifyContent: 'center',
                         color: 'white',
-                        boxShadow: 'var(--shadow-md)'
+                        boxShadow: 'var(--shadow-md)',
+                        position: 'relative'
                     }}>
                         <User size={24} />
+                        <div style={{
+                            position: 'absolute',
+                            bottom: -4,
+                            right: -4,
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            background: 'var(--surface)',
+                            border: '2px solid var(--accent)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--accent)'
+                        }}>
+                            <ChevronUp 
+                                size={12} 
+                                style={{ 
+                                    transform: isExpanded ? 'none' : 'rotate(180deg)',
+                                    transition: 'transform 0.3s ease'
+                                }} 
+                            />
+                        </div>
                     </div>
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -742,72 +842,79 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
                         </span>
                     </div>
                 </div>
-                <ActionMenu items={speakerMenuItems} />
-            </div>
-
-            <div style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {profiles.map(p => (
-                        <button
-                            key={p.name}
-                            onClick={() => setActiveProfileId(p.name)}
-                            style={{
-                                padding: '6px 14px',
-                                borderRadius: '100px',
-                                fontSize: '0.85rem',
-                                fontWeight: 600,
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                border: '1px solid',
-                                borderColor: activeProfileId === p.name ? 'var(--accent)' : 'var(--border)',
-                                background: activeProfileId === p.name ? 'var(--accent-glow)' : 'transparent',
-                                color: activeProfileId === p.name ? 'var(--accent)' : 'var(--text-secondary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                            }}
-                        >
-                            {activeProfileId === p.name && (
-                                <motion.div
-                                    layoutId={`mic-${speaker.id}`}
-                                    initial={{ scale: 0.8 }}
-                                    animate={{ scale: 1 }}
-                                >
-                                    <Volume2 size={12} />
-                                </motion.div>
-                            )}
-                            {p.variant_name || 'Default'}
-                        </button>
-                    ))}
+                <div style={{ paddingRight: '1.25rem' }}>
+                    <ActionMenu items={speakerMenuItems} />
                 </div>
             </div>
 
-            <div key={activeProfileId} className="animate-in" style={{ background: 'var(--surface-light)' }}>
-                <div style={{ padding: '1.25rem 1.25rem 0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {activeProfile.variant_name || 'Default Variant'}
-                        </h4>
-                    </div>
-                </div>
-                <ProfileDetails
-                    profile={activeProfile}
-                    isTesting={isTestingProfileId === activeProfile.name}
-                    testStatus={testProgress[activeProfile.name]}
-                    onTest={onTest}
-                    onDelete={onDelete}
-                    onSetDefault={onSetDefault}
-                    onRefresh={onRefresh}
-                    onEditTestText={onEditTestText}
-                    onBuildNow={onBuildNow}
-                    requestConfirm={requestConfirm}
-                    onAssignToSpeaker={onAssignToSpeaker}
-                    onRemoveFromSpeaker={onRemoveFromSpeaker}
-                    onCreateSpeakerFromProfile={onCreateSpeakerFromProfile}
-                    speakers={speakers}
-                    isGrouped={true}
-                    showControlsInline={true}
-                />
-            </div>
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {profiles.map(p => (
+                                    <button
+                                        key={p.name}
+                                        onClick={() => setActiveProfileId(p.name)}
+                                        style={{
+                                            padding: '6px 14px',
+                                            borderRadius: '100px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 600,
+                                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            border: '1px solid',
+                                            borderColor: activeProfileId === p.name ? 'var(--accent)' : 'var(--border)',
+                                            background: activeProfileId === p.name ? 'var(--accent-glow)' : 'transparent',
+                                            color: activeProfileId === p.name ? 'var(--accent)' : 'var(--text-secondary)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        {activeProfileId === p.name && (
+                                            <motion.div
+                                                layoutId={`mic-${speaker.id}`}
+                                                initial={{ scale: 0.8 }}
+                                                animate={{ scale: 1 }}
+                                            >
+                                                <Volume2 size={12} />
+                                            </motion.div>
+                                        )}
+                                        {p.variant_name || 'Default'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div key={activeProfileId} className="animate-in" style={{ background: 'var(--surface-light)' }}>
+                            <ProfileDetails
+                                profile={activeProfile}
+                                isTesting={isTestingProfileId === activeProfile.name}
+                                testStatus={testProgress[activeProfile.name]}
+                                onTest={onTest}
+                                onDelete={onDelete}
+                                onSetDefault={onSetDefault}
+                                onRefresh={onRefresh}
+                                onEditTestText={onEditTestText}
+                                onBuildNow={onBuildNow}
+                                requestConfirm={requestConfirm}
+                                onAssignToSpeaker={onAssignToSpeaker}
+                                onRemoveFromSpeaker={onRemoveFromSpeaker}
+                                onCreateSpeakerFromProfile={onCreateSpeakerFromProfile}
+                                speakers={speakers}
+                                isGrouped={true}
+                                showControlsInline={true}
+                            />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
@@ -1144,32 +1251,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                     <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>AI Voice Lab</h2>
-                    <div className="glass-panel" style={{ padding: '4px', display: 'flex', gap: '4px' }}>
-                        <button 
-                            onClick={() => setViewMode('profiles')}
-                            className={viewMode === 'profiles' ? 'btn-primary' : 'btn-ghost'}
-                            style={{ 
-                                padding: '6px 16px', 
-                                fontSize: '0.8rem', 
-                                borderRadius: '8px',
-                                height: 'auto'
-                            }}
-                        >
-                            Profiles
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('speakers')}
-                            className={viewMode === 'speakers' ? 'btn-primary' : 'btn-ghost'}
-                            style={{ 
-                                padding: '6px 16px', 
-                                fontSize: '0.8rem', 
-                                borderRadius: '8px',
-                                height: 'auto'
-                            }}
-                        >
-                            Group by Speaker
-                        </button>
-                    </div>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <button onClick={() => setShowGuide(true)} className="btn-ghost" style={{ gap: '8px' }}>
@@ -1286,22 +1367,51 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             marginBottom: '1rem',
                             gap: '2rem'
                         }}>
-                            <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '12px',
-                                color: 'var(--text-muted)',
-                                fontSize: '0.85rem',
-                                fontWeight: 500
-                            }}>
-                                <Music size={16} />
-                                <span>{speakerProfiles.length} Voice Profile{speakerProfiles.length !== 1 ? 's' : ''}</span>
-                                <span style={{ opacity: 0.3 }}>•</span>
-                                <User size={16} />
-                                <span>{speakers.length} Speaker{speakers.length !== 1 ? 's' : ''}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div className="glass-panel" style={{ padding: '4px', display: 'flex', gap: '4px' }}>
+                                    <button 
+                                        onClick={() => setViewMode('profiles')}
+                                        className={viewMode === 'profiles' ? 'btn-primary' : 'btn-ghost'}
+                                        style={{ 
+                                            padding: '6px 16px', 
+                                            fontSize: '0.8rem', 
+                                            borderRadius: '8px',
+                                            height: 'auto'
+                                        }}
+                                    >
+                                        Profiles
+                                    </button>
+                                    <button 
+                                        onClick={() => setViewMode('speakers')}
+                                        className={viewMode === 'speakers' ? 'btn-primary' : 'btn-ghost'}
+                                        style={{ 
+                                            padding: '6px 16px', 
+                                            fontSize: '0.8rem', 
+                                            borderRadius: '8px',
+                                            height: 'auto'
+                                        }}
+                                    >
+                                        Grouped
+                                    </button>
+                                </div>
+
+                                <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '12px',
+                                    color: 'var(--text-muted)',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 500
+                                }}>
+                                    <Music size={16} />
+                                    <span>{speakerProfiles.length} Profiles</span>
+                                    <span style={{ opacity: 0.3 }}>•</span>
+                                    <User size={16} />
+                                    <span>{speakers.length} Speakers</span>
+                                </div>
                             </div>
 
-                            <div style={{ position: 'relative', flex: '0 1 350px' }}>
+                            <div style={{ position: 'relative', flex: '0 1 500px', minWidth: '400px' }}>
                                 <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                                 <input
                                     type="text"
@@ -1313,7 +1423,8 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                         paddingLeft: '36px', 
                                         background: 'var(--surface)', 
                                         height: '40px',
-                                        fontSize: '0.9rem'
+                                        fontSize: '0.9rem',
+                                        width: '100%'
                                     }}
                                 />
                             </div>
