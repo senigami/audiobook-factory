@@ -1196,7 +1196,21 @@ def api_create_or_update_speaker(
 ):
     from .db import create_speaker, update_speaker
     if id:
+        from .db import get_speaker
+        old_speaker = get_speaker(id)
+        old_name = old_speaker["name"] if old_speaker else None
+
         success = update_speaker(id, name=name, default_profile_name=default_profile_name)
+
+        # Cascade rename to all profiles if speaker name changed
+        if success and old_name and old_name != name:
+            profiles = list_speaker_profiles()
+            for p in profiles:
+                if p["speaker_id"] == id:
+                    v_name = p.get("variant_name") or "Default"
+                    new_profile_name = f"{name} - {v_name}"
+                    rename_speaker_profile_internal(p["name"], new_profile_name)
+
         return {"status": "success" if success else "error", "id": id}
     else:
         speaker_id = create_speaker(name, default_profile_name)
@@ -1215,12 +1229,24 @@ def api_assign_profile_to_speaker(
     variant_name: Optional[str] = Form(None)
 ):
     from .jobs import update_speaker_settings
+    from .db import get_speaker
+
+    current_name = name
+    if speaker_id:
+        spk = get_speaker(speaker_id)
+        if spk:
+            v_label = variant_name if variant_name else "Default"
+            new_profile_name = f"{spk['name']} - {v_label}"
+            success, result = rename_speaker_profile_internal(name, new_profile_name)
+            if success:
+                current_name = result
+
     updates = {
         "speaker_id": speaker_id if speaker_id else None,
         "variant_name": variant_name if variant_name else None
     }
-    success = update_speaker_settings(name, **updates)
-    return {"status": "success" if success else "error"}
+    success = update_speaker_settings(current_name, **updates)
+    return {"status": "success" if success else "error", "new_name": current_name}
 # --------------------
 
 @app.post("/api/speaker-profiles/{name}/test-text")
@@ -1372,43 +1398,56 @@ async def build_speaker_profile(
         traceback.print_exc()
         return JSONResponse({"status": "error", "message": error_msg, "traceback": traceback.format_exc()}, status_code=500)
 
-@app.post("/api/speaker-profiles/{name}/rename")
-def rename_speaker_profile(name: str, new_name: str = Form(...)):
+def rename_speaker_profile_internal(name: str, new_name: str):
+    """Internal helper to rename a voice profile and update all references."""
     from .jobs import get_speaker_wavs
     from .engines import get_speaker_latent_path
+    from .db import update_voice_profile_references
     import shutil
+
+    if not name or not new_name or name == new_name:
+        return True, name
 
     old_dir = VOICES_DIR / name
     new_dir = VOICES_DIR / new_name
 
     if not old_dir.exists():
-        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
-    if new_dir.exists():
-        return JSONResponse({"status": "error", "message": f"Profile '{new_name}' already exists"}, status_code=400)
+        return False, "Profile not found"
+    if new_dir.exists() and name.lower() != new_name.lower():
+        return False, f"Profile '{new_name}' already exists"
 
-    # 1. Cleanup old latent cache for the old path
+    # 1. Cleanup old latent cache
     try:
         sw = get_speaker_wavs(name)
         if sw:
             lp = get_speaker_latent_path(sw)
             if lp and lp.exists():
-                print(f"Cleanup latent cache for renamed narrator: {name}")
                 lp.unlink()
-    except Exception as e:
-        print(f"Warning: Failed to cleanup latent cache for {name}: {e}")
+    except: pass
 
     # 2. Rename directory
     try:
-        shutil.move(str(old_dir), str(new_dir))
+        if old_dir.exists():
+            shutil.move(str(old_dir), str(new_dir))
     except Exception as e:
-        return JSONResponse({"status": "error", "message": f"Move failed: {str(e)}"}, status_code=500)
+        return False, str(e)
 
-    # 3. Update global settings if this was the default
+    # 3. Update global settings
     settings = get_settings()
     if settings.get("default_speaker_profile") == name:
         update_settings(default_speaker_profile=new_name)
 
-    return {"status": "success", "new_name": new_name}
+    # 4. Update DB references
+    update_voice_profile_references(name, new_name)
+
+    return True, new_name
+
+@app.post("/api/speaker-profiles/{name}/rename")
+def rename_speaker_profile(name: str, new_name: str = Form(...)):
+    success, result = rename_speaker_profile_internal(name, new_name)
+    if not success:
+        return JSONResponse({"status": "error", "message": result}, status_code=400)
+    return {"status": "success", "new_name": result}
 
 @app.delete("/api/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):

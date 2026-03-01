@@ -191,13 +191,14 @@ interface SpeakerCardProps {
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
     onAssignToSpeaker: (profile: SpeakerProfile) => void;
     onRemoveFromSpeaker: (name: string) => void;
+    onCreateSpeakerFromProfile: (profile: SpeakerProfile) => void;
     speakers: Speaker[];
 }
 
 const SpeakerCard: React.FC<SpeakerCardProps> = ({ 
     profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, 
     onEditTestText, onBuildNow, requestConfirm, testStatus,
-    onAssignToSpeaker, onRemoveFromSpeaker, speakers
+    onAssignToSpeaker, onRemoveFromSpeaker, onCreateSpeakerFromProfile, speakers
 }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -278,11 +279,13 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({
     const menuItems = [
         { label: 'Edit Script', icon: FileEdit, onClick: () => onEditTestText(profile) },
         { label: 'Manage Samples', icon: Settings2, onClick: () => setIsExpanded(true) },
+        { isDivider: true, label: '', onClick: () => {} },
         ...(assignedSpeaker ? [
-            { label: 'Move to Speaker', icon: User, onClick: () => onAssignToSpeaker(profile) },
-            { label: 'Remove from Speaker', icon: Trash2, onClick: () => onRemoveFromSpeaker(profile.name) }
+            { label: 'Move to Speaker...', icon: User, onClick: () => onAssignToSpeaker(profile) },
+            { label: 'Unassign from Speaker', icon: Trash2, onClick: () => onRemoveFromSpeaker(profile.name), isDestructive: true }
         ] : [
-            { label: 'Assign to Speaker', icon: User, onClick: () => onAssignToSpeaker(profile) }
+            { label: 'Assign to Speaker...', icon: User, onClick: () => onAssignToSpeaker(profile) },
+            { label: 'Create Speaker from Profile', icon: Plus, onClick: () => onCreateSpeakerFromProfile(profile) }
         ]),
         { label: 'Set as Default', icon: Check, onClick: () => onSetDefault(profile.name) },
         { isDivider: true, label: '', onClick: () => {} },
@@ -345,19 +348,21 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({
                     </button>
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>{profile.name}</h4>
-                            {assignedSpeaker && (
-                                <span style={{ 
-                                    fontSize: '0.7rem', 
-                                    color: 'var(--accent)', 
-                                    background: 'var(--accent-glow)', 
-                                    padding: '2px 8px', 
-                                    borderRadius: '12px',
-                                    fontWeight: 600
-                                }}>
-                                    {assignedSpeaker.name} {profile.variant_name ? `· ${profile.variant_name}` : ''}
-                                </span>
-                            )}
+                        <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>
+                            {assignedSpeaker ? (profile.variant_name || 'Default') : profile.name}
+                        </h4>
+                        {assignedSpeaker && (
+                            <span style={{ 
+                                fontSize: '0.7rem', 
+                                color: 'var(--accent)', 
+                                background: 'var(--accent-glow)', 
+                                padding: '2px 8px', 
+                                borderRadius: '12px',
+                                fontWeight: 600
+                            }}>
+                                Speaker: {assignedSpeaker.name}
+                            </span>
+                        )}
                             {profile.is_default && (
                                 <span style={{ 
                                     fontSize: '0.65rem', 
@@ -715,6 +720,9 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [isSavingText, setIsSavingText] = useState(false);
     const [showGuide, setShowGuide] = useState(false);
     const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+    const [editedVariantName, setEditedVariantName] = useState('');
+    const [buildSpeakerId, setBuildSpeakerId] = useState<'none' | 'new' | string>('none');
+    const [buildVariantName, setBuildVariantName] = useState('');
     const [confirmConfig, setConfirmConfig] = useState<{ 
         title: string; 
         message: string; 
@@ -785,6 +793,21 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
+    const handleCreateSpeakerFromProfile = async (profile: SpeakerProfile) => {
+        try {
+            const formData = new URLSearchParams();
+            formData.append('name', profile.name);
+            const resp = await fetch('/api/speakers', { method: 'POST', body: formData });
+            if (resp.ok) {
+                const newSpk = await resp.json();
+                fetchSpeakers();
+                await handleAssignProfile(profile.name, newSpk.id, '');
+            }
+        } catch (e) {
+            console.error('Failed to create speaker from profile', e);
+        }
+    };
+
     const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
         setIsBuilding(true);
         const formData = new FormData();
@@ -842,6 +865,18 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 method: 'POST',
                 body: formData
             });
+
+            // 3. Handle Variant Update if assigned
+            if (editingProfile.speaker_id) {
+                const assignData = new URLSearchParams();
+                assignData.append('speaker_id', editingProfile.speaker_id);
+                assignData.append('variant_name', editedVariantName.trim());
+                await fetch(`/api/speaker-profiles/${encodeURIComponent(currentName)}/assign`, {
+                    method: 'POST',
+                    body: assignData
+                });
+            }
+
             onRefresh();
             setEditingProfile(null);
         } catch (e) {
@@ -888,8 +923,30 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             });
             if (resp.ok) {
                 const result = await resp.json();
+                
+                // --- Post-build Assignment ---
+                let targetSpeakerId = buildSpeakerId;
+                if (buildSpeakerId === 'new') {
+                    // Create new speaker with profile name
+                    const spkResp = await fetch('/api/speakers', {
+                        method: 'POST',
+                        body: new URLSearchParams({ name: newName })
+                    });
+                    if (spkResp.ok) {
+                        const newSpk = await spkResp.json();
+                        targetSpeakerId = newSpk.id;
+                        fetchSpeakers();
+                    }
+                }
+
+                if (targetSpeakerId !== 'none' && targetSpeakerId !== 'new') {
+                    await handleAssignProfile(newName, targetSpeakerId, buildVariantName);
+                }
+
                 setNewName('');
                 setFiles([]);
+                setBuildSpeakerId('none');
+                setBuildVariantName('');
                 if (result.errors && result.errors.length > 0) {
                     alert(`Profile built with ${result.total_files} samples.\n\nNote: Some files were skipped or failed conversion:\n- ${result.errors.join('\n- ')}`);
                 }
@@ -961,7 +1018,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         speaker,
         profiles: speakerProfiles.filter(p => p.speaker_id === speaker.id)
     }));
-    const unassignedProfiles = speakerProfiles.filter(p => !p.speaker_id);
+    const unassignedProfiles = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -1040,8 +1097,40 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>VOICE SAMPLES (WAV/MP3)</label>
-                                <VoiceDropzone onFilesChange={setFiles} />
+                                <VoiceDropzone files={files} onFilesChange={setFiles} />
                             </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>SPEAKER ASSIGNMENT</label>
+                                <select 
+                                    className="form-input"
+                                    value={buildSpeakerId}
+                                    onChange={(e) => setBuildSpeakerId(e.target.value)}
+                                    style={{ background: 'var(--surface-light)', cursor: 'pointer' }}
+                                >
+                                    <option value="none">None (Unassigned)</option>
+                                    <option value="new">Create New Speaker...</option>
+                                    {speakers.length > 0 && <optgroup label="Existing Speakers">
+                                        {speakers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </optgroup>}
+                                </select>
+                            </div>
+
+                            {(buildSpeakerId !== 'none') && (
+                                <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>VARIANT LABEL</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Angry, Whispering..."
+                                        value={buildVariantName}
+                                        onChange={(e) => setBuildVariantName(e.target.value)}
+                                        className="form-input"
+                                        style={{ background: 'var(--surface-light)' }}
+                                    />
+                                </div>
+                            )}
 
                             <div style={{ 
                                 position: 'sticky', 
@@ -1102,6 +1191,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             setEditingProfile(p);
                                             setTestText(p.test_text || '');
                                             setEditedName(p.name);
+                                            setEditedVariantName(p.variant_name || '');
                                         }}
                                         onBuildNow={handleBuildNow}
                                         requestConfirm={handleRequestConfirm}
@@ -1111,6 +1201,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             setIsAssignDrawerOpen(true);
                                         }}
                                         onRemoveFromSpeaker={handleRemoveFromSpeaker}
+                                        onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
                                         speakers={speakers}
                                     />
                                 ))}
@@ -1138,6 +1229,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                         setEditingProfile(p);
                                                         setTestText(p.test_text || '');
                                                         setEditedName(p.name);
+                                                        setEditedVariantName(p.variant_name || '');
                                                     }}
                                                     onBuildNow={handleBuildNow}
                                                     requestConfirm={handleRequestConfirm}
@@ -1147,6 +1239,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                         setIsAssignDrawerOpen(true);
                                                     }}
                                                     onRemoveFromSpeaker={handleRemoveFromSpeaker}
+                                                    onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
                                                     speakers={speakers}
                                                 />
                                             ))}
@@ -1217,6 +1310,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                             setEditingProfile(p);
                                                             setTestText(p.test_text || '');
                                                             setEditedName(p.name);
+                                                            setEditedVariantName(p.variant_name || '');
                                                         }}
                                                         onBuildNow={handleBuildNow}
                                                         requestConfirm={handleRequestConfirm}
@@ -1226,6 +1320,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                             setIsAssignDrawerOpen(true);
                                                         }}
                                                         onRemoveFromSpeaker={handleRemoveFromSpeaker}
+                                                        onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
                                                         speakers={speakers}
                                                     />
                                                 ))}
@@ -1262,33 +1357,58 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 title={`Configure Narrator: ${editingProfile?.name}`}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    <div className="input-group">
-                        <label>Narrator Name</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {!editingProfile?.speaker_id && (
+                        <div className="input-group">
+                            <label>Narrator Name</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                    type="text"
+                                    value={editedName}
+                                    onChange={(e) => setEditedName(e.target.value)}
+                                    placeholder="Enter narrator name..."
+                                    disabled={isSavingText}
+                                    style={{
+                                        fontSize: '1rem',
+                                        fontWeight: 600,
+                                        background: 'var(--surface-light)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '8px',
+                                        padding: '10px 14px',
+                                        flex: 1,
+                                        color: 'var(--text-primary)'
+                                    }}
+                                />
+                            </div>
+                            {editedName.trim() !== editingProfile?.name && editedName.trim() !== '' && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>
+                                    Profile will be renamed on save
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {editingProfile?.speaker_id && (
+                        <div className="input-group">
+                            <label>Variant Label</label>
                             <input
                                 type="text"
-                                value={editedName}
-                                onChange={(e) => setEditedName(e.target.value)}
-                                placeholder="Enter narrator name..."
+                                value={editedVariantName}
+                                onChange={(e) => setEditedVariantName(e.target.value)}
+                                placeholder="e.g. Angry, Whispering, Neutral..."
                                 disabled={isSavingText}
+                                className="form-input"
                                 style={{
-                                    fontSize: '1rem',
-                                    fontWeight: 600,
                                     background: 'var(--surface-light)',
                                     border: '1px solid var(--border)',
                                     borderRadius: '8px',
-                                    padding: '10px 14px',
-                                    flex: 1,
-                                    color: 'var(--text-primary)'
+                                    padding: '10px 14px'
                                 }}
                             />
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                This will rename the profile to "{speakers.find(s => s.id === editingProfile.speaker_id)?.name} - {editedVariantName || 'Default'}"
+                            </p>
                         </div>
-                        {editedName.trim() !== editingProfile?.name && editedName.trim() !== '' && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>
-                                Profile will be renamed on save
-                            </span>
-                        )}
-                    </div>
+                    )}
 
                     <div className="input-group">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1373,9 +1493,10 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 isOpen={isAssignDrawerOpen} 
                 onClose={() => {
                     setIsAssignDrawerOpen(false);
-                    setSelectedProfileForAssign(null);
-                }} 
-                title="Assign to Speaker"
+                    setSpeakerSearch('');
+                    setVariantName('');
+                }}
+                title={selectedProfileForAssign?.speaker_id ? `Move ${selectedProfileForAssign?.name} to Different Speaker` : `Assign ${selectedProfileForAssign?.name} to Speaker`}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

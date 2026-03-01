@@ -278,6 +278,17 @@ def delete_speaker(speaker_id: str) -> bool:
             conn.commit()
             return cursor.rowcount > 0
 
+def update_voice_profile_references(old_name: str, new_name: str):
+    """Updates all references to a voice profile name in the database."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Update characters
+            cursor.execute("UPDATE characters SET speaker_profile_name = ? WHERE speaker_profile_name = ?", (new_name, old_name))
+            # Update speakers default profile
+            cursor.execute("UPDATE speakers SET default_profile_name = ? WHERE default_profile_name = ?", (new_name, old_name))
+            conn.commit()
+
 
 # --- Chapter Functions ---
 def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:

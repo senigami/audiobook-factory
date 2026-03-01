@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, X, FileAudio, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,12 +11,20 @@ interface SelectedFile {
 }
 
 interface VoiceDropzoneProps {
+    files?: File[];
     onFilesChange: (files: File[]) => void;
 }
 
-export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ onFilesChange }) => {
+export const VoiceDropzone: React.FC<VoiceDropzoneProps> = ({ files = [], onFilesChange }) => {
     const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
     const [isDragging, setIsDragging] = useState(false);
+
+    // Sync with parent state (especially for clearing)
+    useEffect(() => {
+        if (files.length === 0 && selectedFiles.length > 0) {
+            setSelectedFiles([]);
+        }
+    }, [files, selectedFiles.length]);
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
