@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Volume2, Settings2, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { VoiceDropzone } from './VoiceDropzone';
 import { RecordingGuide } from './RecordingGuide';
@@ -161,6 +161,135 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, title, children }) => 
     );
 };
 
+interface SpeedPopoverProps {
+    value: number;
+    onChange: (val: number) => void;
+    triggerRef: React.RefObject<any>;
+    onClose: () => void;
+}
+
+const SpeedPopover: React.FC<SpeedPopoverProps> = ({ value, onChange, triggerRef, onClose }) => {
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const [isAbove, setIsAbove] = useState(false);
+    const popoverRef = useRef<HTMLDivElement>(null);
+
+    const updatePosition = useCallback(() => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const popoverWidth = 240;
+        const popoverHeight = 160;
+
+        let top = rect.bottom + window.scrollY + 8;
+        let left = rect.left + window.scrollX - (popoverWidth / 2) + (rect.width / 2);
+        let above = false;
+
+        if (rect.bottom + popoverHeight > window.innerHeight) {
+            top = rect.top + window.scrollY - popoverHeight - 8;
+            above = true;
+        }
+
+        if (left < 10) left = 10;
+        if (left + popoverWidth > window.innerWidth - 10) left = window.innerWidth - popoverWidth - 10;
+
+        setCoords({ top, left });
+        setIsAbove(above);
+    }, [triggerRef]);
+
+    useLayoutEffect(() => {
+        updatePosition();
+        window.addEventListener('scroll', updatePosition, true);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.removeEventListener('scroll', updatePosition, true);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [updatePosition]);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (triggerRef.current?.contains(e.target as Node)) return;
+            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+                onClose();
+            }
+        };
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [onClose, triggerRef]);
+
+    const presets = [0.85, 1.0, 1.1, 1.25];
+
+    return createPortal(
+        <AnimatePresence>
+            <motion.div
+                ref={popoverRef}
+                initial={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                style={{
+                    position: 'absolute',
+                    top: coords.top,
+                    left: coords.left,
+                    width: '240px',
+                    background: 'var(--surface-light)',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.4)',
+                    border: '1px solid var(--border)',
+                    padding: '1.25rem',
+                    zIndex: 99999,
+                    backdropFilter: 'blur(20px)',
+                }}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Speed Adjustment</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'monospace' }}>{value.toFixed(2)}x</span>
+                    </div>
+
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.01"
+                        value={value}
+                        onChange={(e) => onChange(parseFloat(e.target.value))}
+                        style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                        {presets.map(p => (
+                            <button
+                                key={p}
+                                onClick={() => onChange(p)}
+                                className="btn-ghost"
+                                style={{
+                                    flex: 1,
+                                    fontSize: '0.7rem',
+                                    padding: '4px 0',
+                                    borderRadius: '6px',
+                                    background: Math.abs(value - p) < 0.01 ? 'var(--accent-glow)' : 'var(--surface)',
+                                    color: Math.abs(value - p) < 0.01 ? 'var(--accent)' : 'var(--text-secondary)',
+                                    border: '1px solid',
+                                    borderColor: Math.abs(value - p) < 0.01 ? 'var(--accent)' : 'var(--border-light)'
+                                }}
+                            >
+                                {p.toFixed(2)}x
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </motion.div>
+        </AnimatePresence>,
+        document.body
+    );
+};
+
 interface SpeakerProfile {
     name: string;
     wav_count: number;
@@ -233,6 +362,7 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
         setPendingSamples(prev => [...prev, ...fileList]);
         setIsRebuildRequired(true);
         if (!showControlsInline) setIsExpanded(true);
+        setIsSamplesExpanded(true); // Always expand samples section to show new files
     };
 
     const handleRebuild = async () => {
@@ -280,9 +410,13 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
         }
     };
 
+    const [showSpeedPopover, setShowSpeedPopover] = useState(false);
+    const [isSamplesExpanded, setIsSamplesExpanded] = useState(false);
+    const speedPillRef = useRef<HTMLButtonElement>(null);
+
     const menuItems = [
         { label: 'Edit Script', icon: FileEdit, onClick: () => onEditTestText(profile) },
-        { label: 'Manage Samples', icon: Settings2, onClick: () => setIsExpanded(!isExpanded) },
+        { label: 'Rebuild Voice', icon: RefreshCw, onClick: handleRebuild },
         { isDivider: true, label: '', onClick: () => {} },
         ...(assignedSpeaker ? [
             { label: 'Move to Speaker...', icon: User, onClick: () => onAssignToSpeaker(profile) },
@@ -293,142 +427,259 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
         ]),
         { label: 'Set as Default', icon: Check, onClick: () => onSetDefault(profile.name) },
         { isDivider: true, label: '', onClick: () => {} },
-        { label: 'Rebuild Voice', icon: RefreshCw, onClick: handleRebuild },
         { label: 'Delete Profile', icon: Trash2, onClick: () => onDelete(profile.name), isDestructive: true }
     ];
 
     const renderControls = () => (
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-                        <Sliders size={14} />
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            Playback Speed
-                        </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <input
-                            type="range"
-                            min="0.5"
-                            max="2.0"
-                            step="0.05"
-                            value={speed}
-                            disabled={isSaving}
-                            onChange={(e) => setLocalSpeed(parseFloat(e.target.value))}
-                            onMouseUp={() => handleSpeedChange(speed)}
-                            onTouchEnd={() => handleSpeedChange(speed)}
-                            style={{ flex: 1, cursor: isSaving ? 'not-allowed' : 'pointer', accentColor: 'var(--accent)' }}
-                        />
-                        <span style={{ 
-                            minWidth: '3rem', 
-                            textAlign: 'right', 
-                            fontFamily: 'monospace', 
-                            fontSize: '0.9rem', 
+            {/* One-Line Control Bar */}
+            <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px',
+                background: 'rgba(var(--accent-rgb), 0.03)',
+                padding: '10px 12px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-light)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                        {profile.variant_name || 'Default Variant'}
+                    </h4>
+                    
+                    <div style={{ width: '1px', height: '20px', background: 'var(--border)', opacity: 0.5 }} />
+
+                    {/* Speed Pill */}
+                    <button
+                        ref={speedPillRef}
+                        onClick={() => setShowSpeedPopover(!showSpeedPopover)}
+                        className="btn-ghost"
+                        style={{
+                            padding: '4px 10px',
+                            height: '32px',
+                            borderRadius: '100px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            fontSize: '0.8rem',
                             fontWeight: 700,
-                            color: isSaving ? 'var(--text-muted)' : 'var(--accent)'
-                        }}>
-                            {speed.toFixed(2)}x
-                        </span>
-                    </div>
+                            gap: '6px',
+                            color: 'var(--accent)',
+                            minWidth: '70px',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        <Sliders size={12} />
+                        {speed.toFixed(2)}x
+                    </button>
+
+                    {showSpeedPopover && (
+                        <SpeedPopover
+                            value={speed}
+                            onChange={(v: number) => {
+                                setLocalSpeed(v);
+                                handleSpeedChange(v);
+                            }}
+                            triggerRef={speedPillRef}
+                            onClose={() => setShowSpeedPopover(false)}
+                        />
+                    )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button 
                         onClick={() => onEditTestText(profile)}
                         className="btn-ghost"
-                        style={{ fontSize: '0.75rem', padding: '8px 12px', gap: '6px', background: 'var(--surface)', border: '1px solid var(--border)' }}
+                        title="Edit Preview Script"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: '0.85rem' }}
                     >
-                        <FileEdit size={14} />
-                        Edit Script
+                        <FileEdit size={16} />
+                        Script
                     </button>
-                    {!showControlsInline && (
-                         <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
-                    )}
+                    
                     <button 
                         onClick={handleRebuild}
+                        disabled={isSaving}
                         className={isRebuildRequired ? "btn-primary" : "btn-ghost"}
-                        style={{ fontSize: '0.75rem', padding: '8px 12px', gap: '6px', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
+                        title="Rebuild Voice Model"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', fontSize: '0.85rem', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
                     >
-                        <RefreshCw size={14} className={isSaving ? "animate-spin" : ""} />
+                        <RefreshCw size={16} className={isSaving ? "animate-spin" : ""} />
                         Rebuild
                     </button>
+
+                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
+                    
+                    <ActionMenu items={menuItems} />
                 </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-                        <Music size={14} />
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            Voice Samples ({profile.samples?.length || 0})
-                        </span>
+            {/* Collapsible Samples Section */}
+            <div 
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files?.length) {
+                        uploadFiles(e.dataTransfer.files);
+                    }
+                }}
+                style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    border: isDragging ? '1px solid var(--accent)' : '1px solid var(--border-light)', 
+                    borderRadius: '12px', 
+                    background: isDragging ? 'rgba(var(--accent-rgb), 0.05)' : 'var(--surface-light)', 
+                    overflow: 'hidden',
+                    position: 'relative',
+                    transition: 'all 0.2s'
+                }}
+            >
+                {isDragging && (
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(var(--accent-rgb), 0.08)',
+                        backdropFilter: 'blur(2px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        zIndex: 10,
+                        pointerEvents: 'none',
+                        border: '2px dashed var(--accent)',
+                        borderRadius: '12px'
+                    }}>
+                        <Upload size={24} color="var(--accent)" />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)' }}>Drop Samples to Add</span>
                     </div>
-                    <button 
-                        onClick={() => document.getElementById(`add-samples-${profile.name}`)?.click()}
-                        className="btn-ghost"
-                        style={{ fontSize: '0.75rem', padding: '4px 8px', height: 'auto', gap: '4px', color: 'var(--accent)' }}
-                    >
-                        <Plus size={12} />
-                        Add Samples
-                    </button>
-                    <input 
-                        type="file" 
-                        id={`add-samples-${profile.name}`}
-                        multiple 
-                        accept=".wav,.mp3,.m4a,.ogg,.flac,.aac"
-                        style={{ display: 'none' }}
-                        onChange={async (e) => {
-                            if (!e.target.files?.length) return;
-                            uploadFiles(e.target.files);
-                        }}
-                    />
-                </div>
+                )}
+
                 <div 
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsDragging(true);
+                    style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'none',
+                        border: 'none',
+                        transition: 'background 0.2s',
+                        userSelect: 'none',
+                        gap: '12px'
                     }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                        e.preventDefault();
-                        setIsDragging(false);
-                        if (e.dataTransfer.files?.length) {
-                            uploadFiles(e.dataTransfer.files);
-                        }
-                    }}
-                    style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '2px',
-                        background: isDragging ? 'var(--accent-glow)' : 'var(--surface)',
-                        padding: '6px',
-                        borderRadius: '10px',
-                        border: isDragging ? '2px dashed var(--accent)' : '1px solid var(--border)',
-                        maxHeight: '160px',
-                        overflowY: 'auto',
-                        transition: 'all 0.2s ease',
-                        position: 'relative'
-                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                 >
-                    {isDragging && (
-                        <div style={{
-                            position: 'absolute',
-                            inset: 0,
-                            background: 'rgba(var(--accent-rgb), 0.1)',
-                            backdropFilter: 'blur(2px)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            zIndex: 10,
-                            pointerEvents: 'none'
-                        }}>
-                            <Upload size={24} color="var(--accent)" />
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)' }}>Drop to Add Samples</span>
+                    <div 
+                        onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '10px', 
+                            color: 'var(--text-secondary)', 
+                            flex: 1,
+                            cursor: 'pointer',
+                            height: '100%',
+                            padding: '4px 0'
+                        }}
+                    >
+                        <Music size={14} className="text-accent" />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Samples ({profile.samples?.length || 0})</span>
+                        {isRebuildRequired && <AlertTriangle size={12} className="text-warning" />}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input 
+                            type="file" 
+                            multiple 
+                            accept=".wav" 
+                            onChange={(e) => {
+                                if (e.target.files) uploadFiles(e.target.files);
+                            }} 
+                            style={{ display: 'none' }} 
+                            id={`file-input-${profile.name.replace(/\s+/g, '-')}`}
+                        />
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                document.getElementById(`file-input-${profile.name.replace(/\s+/g, '-')}`)?.click();
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="btn-ghost" 
+                            title="Add Samples Manually" 
+                            style={{ 
+                                padding: '4px', 
+                                height: '28px', 
+                                width: '28px', 
+                                borderRadius: '8px', 
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid var(--border)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                                color: 'var(--accent)'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(var(--accent-rgb), 0.15)';
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                                e.currentTarget.style.borderColor = 'var(--border)';
+                            }}
+                        >
+                            <Plus size={16} />
+                        </button>
+                        
+                        <div 
+                            onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
+                            style={{ 
+                                padding: '6px', 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'transform 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                        >
+                            <ChevronUp 
+                                size={16} 
+                                style={{ 
+                                    transform: isSamplesExpanded ? 'none' : 'rotate(180deg)', 
+                                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    color: 'var(--text-muted)'
+                                }} 
+                            />
                         </div>
-                    )}
+                    </div>
+                </div>
+
+                <AnimatePresence>
+                    {isSamplesExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            >
+                            <div style={{ 
+                                padding: '0 16px 16px',
+                                position: 'relative',
+                                minHeight: '40px'
+                            }}>
 
                     {profile.samples && profile.samples.length > 0 ? (
                         <>
@@ -513,7 +764,10 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             </button>
                         </div>
                     ))}
-                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
@@ -638,11 +892,11 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                         className="profile-header-clickable"
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
-                                {assignedSpeaker ? (
-                                    isGrouped ? (profile.variant_name || 'Default') : `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}`
-                                ) : profile.name}
-                            </h4>
+                            {!isGrouped && (
+                                <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
+                                    {assignedSpeaker ? `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}` : profile.name}
+                                </h4>
+                            )}
                             {profile.is_default && (
                                 <span style={{ 
                                     fontSize: '0.65rem', 
@@ -675,9 +929,11 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <ActionMenu items={menuItems} />
-                </div>
+                {!showControlsInline && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ActionMenu items={menuItems} />
+                    </div>
+                )}
             </div>
 
             {isTesting && (
@@ -858,37 +1114,35 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
                     >
                         <div style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                {profiles.map(p => (
-                                    <button
-                                        key={p.name}
-                                        onClick={() => setActiveProfileId(p.name)}
-                                        style={{
-                                            padding: '6px 14px',
-                                            borderRadius: '100px',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 600,
-                                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            border: '1px solid',
-                                            borderColor: activeProfileId === p.name ? 'var(--accent)' : 'var(--border)',
-                                            background: activeProfileId === p.name ? 'var(--accent-glow)' : 'transparent',
-                                            color: activeProfileId === p.name ? 'var(--accent)' : 'var(--text-secondary)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        {activeProfileId === p.name && (
-                                            <motion.div
-                                                layoutId={`mic-${speaker.id}`}
-                                                initial={{ scale: 0.8 }}
-                                                animate={{ scale: 1 }}
-                                            >
-                                                <Volume2 size={12} />
-                                            </motion.div>
-                                        )}
-                                        {p.variant_name || 'Default'}
-                                    </button>
-                                ))}
+                                {profiles.map(p => {
+                                    const isActive = activeProfileId === p.name;
+                                    return (
+                                        <button
+                                            key={p.name}
+                                            onClick={() => setActiveProfileId(p.name)}
+                                            style={{
+                                                padding: '8px 16px',
+                                                borderRadius: '12px',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 700,
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                border: '1px solid',
+                                                borderColor: isActive ? 'var(--accent)' : 'var(--border)',
+                                                background: isActive ? 'var(--accent)' : 'transparent',
+                                                color: isActive ? 'white' : 'var(--text-secondary)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                boxShadow: isActive ? 'var(--shadow-md)' : 'none',
+                                                transform: isActive ? 'translateY(-1px)' : 'none'
+                                            }}
+                                            className={isActive ? "active-variant-chip" : "ghost-variant-chip"}
+                                        >
+                                            <Music size={12} style={{ opacity: isActive ? 1 : 0.6 }} />
+                                            {p.variant_name || 'Default'}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -1178,6 +1432,8 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             setIsBuilding(false);
         }
     };
+
+
 
     const handleDelete = async (name: string) => {
         handleRequestConfirm({
