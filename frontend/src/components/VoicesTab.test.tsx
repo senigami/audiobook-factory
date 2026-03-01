@@ -14,55 +14,70 @@ describe('VoicesTab', () => {
         testProgress: {}
     }
 
-    it('renders all narrator profiles', () => {
-        render(<VoicesTab {...mockProps} />)
+    beforeEach(() => {
+        vi.clearAllMocks()
+        // Provide a default empty speakers array for all tests
+        global.fetch = vi.fn((url: string) => {
+            if (url === '/api/speakers') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success' }) });
+        }) as any
+    })
+
+    it('renders all narrator profiles', async () => {
+        await act(async () => {
+            render(<VoicesTab {...mockProps} />)
+        })
         expect(screen.getByText('Narrator1')).toBeInTheDocument()
         expect(screen.getByText('Narrator2')).toBeInTheDocument()
     })
 
-    it('shows the default narrator pill', () => {
-        render(<VoicesTab {...mockProps} />)
+    it('shows the default narrator pill', async () => {
+        await act(async () => {
+            render(<VoicesTab {...mockProps} />)
+        })
         // Narrator2 is default. Should have "Default" pill
         expect(screen.getByText('Default')).toBeInTheDocument()
     })
 
     it('calls fetch when setting a new default via ActionMenu', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
-        global.fetch = fetchMock
+        const fetchMock = vi.mocked(global.fetch)
 
         render(<VoicesTab {...mockProps} />)
 
         // Open ActionMenu for Narrator1
-        const actionMenus = screen.getAllByRole('button', { name: /more actions/i })
+        const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
         fireEvent.click(actionMenus[0])
 
         // Find "Set as Default" in the menu
-        const setBtn = screen.getByText('Set as Default')
-        fireEvent.click(setBtn)
+        const setBtn = await screen.findByText('Set as Default')
+        await act(async () => {
+            fireEvent.click(setBtn)
+        })
 
         expect(fetchMock).toHaveBeenCalledWith('/api/settings/default-speaker', expect.anything())
     })
 
     it('opens edit modal and allows renaming via ActionMenu', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
-        global.fetch = fetchMock
+        const fetchMock = vi.mocked(global.fetch)
 
         render(<VoicesTab {...mockProps} />)
 
         // Open ActionMenu for Narrator1
-        const actionMenus = screen.getAllByRole('button', { name: /more actions/i })
+        const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
         fireEvent.click(actionMenus[0])
 
-        // Click Rename
-        const renameBtn = screen.getByText('Rename')
+        // Click Edit Script - wait for menu to appear
+        const renameBtn = await screen.findByText('Edit Script')
         fireEvent.click(renameBtn)
 
         // Find name input and change it
-        const nameInput = screen.getByDisplayValue('Narrator1')
+        const nameInput = await screen.findByDisplayValue('Narrator1')
         fireEvent.change(nameInput, { target: { value: 'Super Narrator' } })
 
-        // Click Save Changes
-        const saveBtn = screen.getByText('Save Changes')
+        // Click Save Configuration
+        const saveBtn = await screen.findByText('Save Configuration')
         await act(async () => {
             fireEvent.click(saveBtn)
         })

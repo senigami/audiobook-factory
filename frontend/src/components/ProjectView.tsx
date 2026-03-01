@@ -70,7 +70,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
       setChapters(chapsData);
       
       // Look for assembled audiobooks matching this project's name
-      if (projData) {
+      if (projData && audiobooksData) {
           const projectM4bs = audiobooksData.filter((a: Audiobook) => a.filename.includes(projData.name));
           setAvailableAudiobooks(projectM4bs);
       }

@@ -70,7 +70,7 @@ describe('App', () => {
     fireEvent.click(voicesTab)
 
     await waitFor(() => {
-        expect(screen.getByText(/Available Narrators/i)).toBeTruthy()
+        expect(screen.getByText(/AI Voice Lab/i)).toBeTruthy()
     })
   })
 })

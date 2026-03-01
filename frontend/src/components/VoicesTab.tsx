@@ -735,7 +735,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             const resp = await fetch('/api/speakers');
             if (resp.ok) {
                 const data = await resp.json();
-                setSpeakers(data);
+                if (Array.isArray(data)) {
+                    setSpeakers(data);
+                } else {
+                    console.error('Expected array of speakers, got:', data);
+                    setSpeakers([]);
+                }
             }
         } catch (e) {
             console.error('Failed to fetch speakers', e);
@@ -952,7 +957,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-    const groupedProfiles = speakers.map(speaker => ({
+    const groupedProfiles = (speakers || []).map(speaker => ({
         speaker,
         profiles: speakerProfiles.filter(p => p.speaker_id === speaker.id)
     }));
