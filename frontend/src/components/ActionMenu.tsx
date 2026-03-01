@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -18,28 +19,78 @@ interface ActionMenuProps {
 
 export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+    const [isAbove, setIsAbove] = useState(false);
 
     // Legacy support if items isn't provided
     const menuItems: ActionMenuItem[] = items || (onDelete ? [
         { label: 'Delete Project', onClick: onDelete, isDestructive: true }
     ] : []);
 
+    const updatePosition = () => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const menuWidth = 180; // Min-width
+        const menuHeight = menuItems.length * 40 + 12; // Estimate height
+
+        let top = rect.bottom + window.scrollY;
+        let left = rect.right + window.scrollX - menuWidth;
+        let above = false;
+
+        // Flip if near bottom
+        if (rect.bottom + menuHeight > window.innerHeight) {
+            top = rect.top + window.scrollY - menuHeight - 8;
+            above = true;
+        }
+
+        // Clamp horizontal
+        if (left < 10) left = 10;
+        if (left + menuWidth > window.innerWidth - 10) left = window.innerWidth - menuWidth - 10;
+
+        setMenuRect({ top, left, width: menuWidth });
+        setIsAbove(above);
+    };
+
+    useLayoutEffect(() => {
+        if (isOpen) {
+            updatePosition();
+            window.addEventListener('scroll', updatePosition, true);
+            window.addEventListener('resize', updatePosition);
+        }
+        return () => {
+            window.removeEventListener('scroll', updatePosition, true);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [isOpen]);
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+            if (triggerRef.current?.contains(event.target as Node)) return;
+            const menuElement = document.getElementById('action-menu-portal');
+            if (menuElement && !menuElement.contains(event.target as Node)) {
                 setIsOpen(false);
             }
         };
+
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsOpen(false);
+        };
+
         if (isOpen) {
             document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEscape);
         }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
     }, [isOpen]);
 
     return (
-        <div ref={menuRef} style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <motion.button
+                ref={triggerRef}
                 onClick={(e) => {
                     e.stopPropagation();
                     setIsOpen(!isOpen);
@@ -67,32 +118,33 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                 <MoreVertical size={18} />
             </motion.button>
 
-            <AnimatePresence>
-                {isOpen && (
+            {isOpen && createPortal(
+                <AnimatePresence mode="wait">
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 5 }}
+                        id="action-menu-portal"
+                        initial={{ opacity: 0, scale: 0.95, y: isAbove ? 5 : -5 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 5 }}
-                        transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                        exit={{ opacity: 0, scale: 0.95, y: isAbove ? 5 : -5 }}
+                        transition={{ duration: 0.1, ease: 'easeOut' }}
                         style={{
                             position: 'absolute',
-                            top: '100%',
-                            right: 0,
-                            marginTop: '8px',
-                            minWidth: '180px',
+                            top: menuRect?.top ?? 0,
+                            left: menuRect?.left ?? 0,
+                            minWidth: menuRect?.width ?? 180,
                             background: 'var(--surface-light)',
                             borderRadius: '12px',
-                            boxShadow: 'var(--shadow-2xl)',
+                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
                             border: '1px solid var(--border)',
                             overflow: 'hidden',
-                            zIndex: 1000,
+                            zIndex: 99999,
                             padding: '6px',
-                            backdropFilter: 'blur(16px)'
+                            backdropFilter: 'blur(16px)',
+                            pointerEvents: 'auto'
                         }}
                     >
                         {menuItems.map((item, idx) => (
                             <React.Fragment key={idx}>
-                                {item.isDivider && <div style={{ height: '1px', background: 'var(--border)', margin: '6px 4px' }} />}
+                                {item.isDivider && <div style={{ height: '1px', background: 'var(--border)', margin: '6px 4px', opacity: 0.5 }} />}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -114,9 +166,14 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                                         color: item.isDestructive ? 'var(--error)' : 'var(--text-primary)',
                                         fontSize: '0.85rem',
                                         fontWeight: 500,
-                                        transition: 'all 0.2s ease'
+                                        transition: 'all 0.1s ease'
                                     }}
-                                    className={`action-menu-item ${item.isDestructive ? "destructive" : "standard"}`}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'none';
+                                    }}
                                 >
                                     {item.icon && <item.icon size={14} />}
                                     {item.label}
@@ -124,8 +181,9 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                             </React.Fragment>
                         ))}
                     </motion.div>
-                )}
-            </AnimatePresence>
+                </AnimatePresence>,
+                document.body
+            )}
         </div>
     );
 };
