@@ -2126,6 +2126,12 @@ def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
+@app.delete("/api/processing_queue")
+def api_clear_queue():
+    count = db_clear_queue()
+    broadcast_queue_update()
+    return JSONResponse({"status": "success", "cleared": count})
+
 @app.delete("/api/processing_queue/{queue_id}")
 def api_remove_from_queue(queue_id: str):
     success = remove_from_queue(queue_id)
