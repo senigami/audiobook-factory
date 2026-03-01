@@ -193,12 +193,14 @@ interface SpeakerCardProps {
     onRemoveFromSpeaker: (name: string) => void;
     onCreateSpeakerFromProfile: (profile: SpeakerProfile) => void;
     speakers: Speaker[];
+    isGrouped?: boolean;
 }
 
 const SpeakerCard: React.FC<SpeakerCardProps> = ({ 
     profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, 
     onEditTestText, onBuildNow, requestConfirm, testStatus,
-    onAssignToSpeaker, onRemoveFromSpeaker, onCreateSpeakerFromProfile, speakers
+    onAssignToSpeaker, onRemoveFromSpeaker, onCreateSpeakerFromProfile, speakers,
+    isGrouped = false
 }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -349,9 +351,11 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>
-                            {assignedSpeaker ? (profile.variant_name || 'Default') : profile.name}
+                            {assignedSpeaker ? (
+                                isGrouped ? (profile.variant_name || 'Default') : `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}`
+                            ) : profile.name}
                         </h4>
-                        {assignedSpeaker && (
+                        {assignedSpeaker && isGrouped && (
                             <span style={{ 
                                 fontSize: '0.7rem', 
                                 color: 'var(--accent)', 
@@ -1187,6 +1191,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                         onDelete={handleDelete}
                                         onSetDefault={handleSetDefault}
                                         onRefresh={onRefresh}
+                                        isGrouped={false}
                                         onEditTestText={(p) => {
                                             setEditingProfile(p);
                                             setTestText(p.test_text || '');
@@ -1225,6 +1230,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                     onDelete={handleDelete}
                                                     onSetDefault={handleSetDefault}
                                                     onRefresh={onRefresh}
+                                                    isGrouped={false}
                                                     onEditTestText={(p) => {
                                                         setEditingProfile(p);
                                                         setTestText(p.test_text || '');
@@ -1306,6 +1312,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                                         onDelete={handleDelete}
                                                         onSetDefault={handleSetDefault}
                                                         onRefresh={onRefresh}
+                                                        isGrouped={true}
                                                         onEditTestText={(p) => {
                                                             setEditingProfile(p);
                                                             setTestText(p.test_text || '');
