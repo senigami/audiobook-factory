@@ -98,6 +98,17 @@ def init_db():
                     FOREIGN KEY (character_id) REFERENCES characters (id)
                 )
             """)
+
+            # Speakers table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS speakers (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    default_profile_name TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                )
+            """)
             # Migration
             try:
                 cursor.execute("ALTER TABLE chapter_segments ADD COLUMN sanitized_text TEXT")
@@ -212,6 +223,71 @@ def delete_character(character_id: str) -> bool:
             cursor.execute("DELETE FROM characters WHERE id = ?", (character_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+# --- Speaker Functions ---
+def create_speaker(name: str, default_profile_name: Optional[str] = None) -> str:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            speaker_id = str(uuid.uuid4())
+            now = time.time()
+            cursor.execute("""
+                INSERT INTO speakers (id, name, default_profile_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (speaker_id, name, default_profile_name, now, now))
+            conn.commit()
+            return speaker_id
+
+def get_speaker(speaker_id: str) -> Optional[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM speakers WHERE id = ?", (speaker_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+def list_speakers() -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM speakers ORDER BY name ASC")
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_speaker(speaker_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            fields.append("updated_at = ?")
+            values.append(time.time())
+            values.append(speaker_id)
+            cursor.execute(f"UPDATE speakers SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def delete_speaker(speaker_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM speakers WHERE id = ?", (speaker_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+def update_voice_profile_references(old_name: str, new_name: str):
+    """Updates all references to a voice profile name in the database."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # Update characters
+            cursor.execute("UPDATE characters SET speaker_profile_name = ? WHERE speaker_profile_name = ?", (new_name, old_name))
+            # Update speakers default profile
+            cursor.execute("UPDATE speakers SET default_profile_name = ? WHERE default_profile_name = ?", (new_name, old_name))
+            conn.commit()
 
 
 # --- Chapter Functions ---
@@ -595,22 +671,125 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
             conn.commit()
             return cursor.rowcount > 0
 
+def reconcile_project_audio(project_id: str):
+    """
+    Scans the project's audio directory and updates the database if audio files exist 
+    but the chapter status is not 'done'.
+    """
+    from .config import get_project_audio_dir
+    audio_dir = get_project_audio_dir(project_id)
+    if not audio_dir.exists():
+        return
+
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, audio_status, audio_length_seconds FROM chapters WHERE project_id = ?", (project_id,))
+            chapters = cursor.fetchall()
+
+            for chap in chapters:
+                cid, status, length = chap
+                # We check for {cid}.mp3, {cid}.wav, {cid}_0.mp3, {cid}_0.wav (depending on splitting/naming conventions)
+                # Looking at earlier logs, it seems they are often named things like 'chapter_name.mp3' or 'seg_ID.wav'
+                # however, standard chapters in projects usually use the filename from the job or a formatted name.
+                # Actually, jobs use j.chapter_file which is the filename.
+
+                # In this system, 'done' status in chapters usually means the file exists.
+                if status != 'done':
+                    # Heuristic: Check for common patterns
+                    # If we don't have the exact filename stored in the chapter yet, 
+                    # we might need to be clever or rely on the fact that most are {cid}.mp3 or similar.
+                    # Let's look at how jobs generate them. they use Path(j.chapter_file).stem
+
+                    # Since we don't have the "filename" easily available in the chapter table 
+                    # (it might be in 'title' but sanitized), let's look for files that start with cid or match common patterns.
+                    pass 
+
+            # Revised approach: Scan the directory and map files to chapters
+            if not audio_dir.exists():
+                return
+
+            files = os.listdir(audio_dir)
+            chapter_files = {} # cid -> list of files
+
+            for f in files:
+                if not f.endswith(('.mp3', '.wav', '.m4a')):
+                    continue
+                stem = Path(f).stem
+                cid = stem.split('_')[0]
+                if cid not in chapter_files:
+                    chapter_files[cid] = []
+                chapter_files[cid].append(f)
+
+            for cid, f_list in chapter_files.items():
+                # Prefer .mp3 if multiple exist for a chapter
+                best_file = f_list[0]
+                for f in f_list:
+                    if f.endswith('.mp3'):
+                        best_file = f
+                        break
+
+                cursor.execute("SELECT audio_status, audio_file_path FROM chapters WHERE id = ?", (cid,))
+                row = cursor.fetchone()
+                if not row:
+                    continue
+
+                status, current_path = row
+                # Update if not done, or if path is missing/wrong
+                if status != 'done' or current_path != best_file:
+                    audio_path = audio_dir / best_file
+
+                    # Get duration
+                    duration = 0.0
+                    import subprocess
+                    try:
+                        result = subprocess.run(
+                            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path)],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            timeout=2
+                        )
+                        duration = float(result.stdout.strip())
+                    except: pass
+
+                    cursor.execute("""
+                        UPDATE chapters 
+                        SET audio_status = 'done', audio_file_path = ?, audio_length_seconds = ? 
+                        WHERE id = ?
+                    """, (best_file, duration, cid))
+
+            conn.commit()
+
 def remove_from_queue(queue_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # 1. Reset chapter status before deletion
+            # 1. Reset chapter status before deletion IF it's not already 'done'
+            # (Removing a finished job should not wipe the audio record)
             cursor.execute("""
                 UPDATE chapters 
                 SET audio_status = 'unprocessed'
-                WHERE id IN (SELECT chapter_id FROM processing_queue WHERE id = ?)
+                WHERE id IN (
+                    SELECT chapter_id FROM processing_queue 
+                    WHERE id = ? AND status != 'done'
+                )
             """, (queue_id,))
 
             # 2. Delete the queue item
             cursor.execute("DELETE FROM processing_queue WHERE id = ?", (queue_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+def clear_completed_queue() -> int:
+    """Deletes all 'done' and 'cancelled' items from the processing queue without resetting chapter status."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue WHERE status IN ('done', 'cancelled')")
+            conn.commit()
+            return cursor.rowcount
 
 def reconcile_queue_status(active_ids: List[str]):
     """Sets any 'running' or 'queued' jobs to 'cancelled' if their ID is not in the active_ids list."""

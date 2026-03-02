@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Panel } from './components/Panel';
 import { PreviewModal } from './components/PreviewModal';
 import { VoicesTab } from './components/VoicesTab';
-import { SynthesisTab } from './components/SynthesisTab';
-import { LibraryTab } from './components/LibraryTab';
 import { ProjectLibrary } from './components/ProjectLibrary';
 import { ProjectView } from './components/ProjectView';
 import { GlobalQueue } from './components/GlobalQueue';
 import { useJobs } from './hooks/useJobs';
 import { useInitialData } from './hooks/useInitialData';
+import { SettingsTray } from './components/SettingsTray';
+import { ConfirmModal } from './components/ConfirmModal';
 import type { Job } from './types';
 
 function App() {
@@ -33,20 +34,18 @@ function App() {
     () => refetchHome(),
     (chapterId: string) => { setSegmentUpdate(prev => ({ chapterId, tick: prev.tick + 1 })); }
   );
-  const [activeTab, setActiveTab] = useState<'library' | 'voices' | 'assembly' | 'synthesis' | 'queue'>('library');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [hideFinished, setHideFinished] = useState(false);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // ...
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   useEffect(() => {
      fetchQueueCount();
@@ -58,63 +57,29 @@ function App() {
     await Promise.all([refetchHome(), refreshJobs()]);
   };
 
-  const getRemainingAndProgress = (job: Job) => {
-    if (job.status !== 'running' || !job.started_at || !job.eta_seconds) {
-      return { remaining: null, progress: job.progress || 0 };
-    }
-    const elapsed = (now / 1000) - job.started_at;
-    const timeProgress = Math.min(0.99, elapsed / job.eta_seconds);
-    const currentProgress = Math.max(job.progress || 0, timeProgress);
-
-    const blend = Math.min(1.0, currentProgress / 0.25);
-    const estimatedRemaining = Math.max(0, job.eta_seconds - elapsed);
-    const actualRemaining = (currentProgress > 0.01) ? (elapsed / currentProgress) - elapsed : estimatedRemaining;
-    const refinedRemaining = (estimatedRemaining * (1 - blend)) + (actualRemaining * blend);
-
-    return {
-      remaining: Math.max(0, Math.floor(refinedRemaining)),
-      progress: currentProgress
-    };
-  };
-
-  const formatSeconds = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  const runningJobs = Object.values(jobs).filter(j => j.status === 'running' || j.status === 'queued');
+  const runningJobs = Object.values(jobs).filter(j => j.status === 'running' || j.status === 'queued') as Job[];
   const activeJob = runningJobs.find(j => j.engine === 'audiobook') || runningJobs[0];
-  const viewingJob = selectedFile ? jobs[selectedFile] : activeJob;
+  const viewingJob = activeJob;
 
-  const chaptersToShow = (initialData?.chapters || []).filter(c => {
-    if (!hideFinished) return true;
-    const isFinished = (initialData?.xtts_mp3 || []).includes(c) ||
-      (initialData?.xtts_wav_only || []).includes(c);
-    return !isFinished;
-  });
 
   if (initialLoading) return null;
 
-  const audiobookJob = Object.values(jobs).find(j => j.engine === 'audiobook' && (j.status === 'running' || j.status === 'queued'));
 
   return (
     <div className="app-container">
       <Layout
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          if (tab === 'library-root') {
-            setActiveProjectId(null);
-            setActiveTab('library');
-          } else {
-            setActiveTab(tab as any);
-          }
-        }}
         showLogs={showLogs}
         onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}
+        headerRight={
+          <SettingsTray 
+            settings={initialData?.settings}
+            onRefresh={handleRefresh}
+            hideFinished={hideFinished}
+            onToggleHideFinished={() => setHideFinished(!hideFinished)}
+            requestConfirm={setConfirmConfig}
+          />
+        }
       >
         <div style={{
           flex: 1,
@@ -125,68 +90,33 @@ function App() {
           position: 'relative'
         }}>
           <main style={{ flex: 1 }}>
-            {activeTab === 'voices' && (
-              <VoicesTab
-                speakerProfiles={initialData?.speaker_profiles || []}
-                onRefresh={handleRefresh}
-                testProgress={testProgress}
-              />
-            )}
-            {activeTab === 'library' && (
-              activeProjectId ? (
+            <Routes>
+              <Route path="/" element={<ProjectLibrary />} />
+              <Route path="/project/:projectId" element={
                 <ProjectView 
-                  projectId={activeProjectId} 
                   jobs={jobs}
                   speakerProfiles={initialData?.speaker_profiles || []}
-                  onBack={() => setActiveProjectId(null)} 
-                  onNavigateToQueue={() => setActiveTab('queue')}
-                  onOpenPreview={(filename) => setPreviewFilename(filename)}
+                  onOpenPreview={(filename: string) => setPreviewFilename(filename)}
                   refreshTrigger={queueRefreshTrigger}
                   segmentUpdate={segmentUpdate}
                 />
-              ) : (
-                <ProjectLibrary
-                  onSelectProject={setActiveProjectId}
-                />
-              )
-            )}
-            
-            {activeTab === 'queue' && (
+              } />
+              <Route path="/queue" element={
                 <GlobalQueue 
-                    paused={initialData?.paused || false} 
-                    jobs={jobs}
-                    refreshTrigger={queueRefreshTrigger}
+                  paused={initialData?.paused || false} 
+                  jobs={jobs}
+                  refreshTrigger={queueRefreshTrigger}
                 />
-            )}
-
-            {activeTab === 'synthesis' && (
-              <SynthesisTab
-                chapters={chaptersToShow}
-                jobs={jobs}
-                selectedFile={selectedFile}
-                onSelect={setSelectedFile}
-                statusSets={{
-                  xttsMp3: initialData?.xtts_mp3 || [],
-                  xttsWav: initialData?.xtts_wav_only || [],
-                }}
-                onRefresh={handleRefresh}
-                speakerProfiles={initialData?.speaker_profiles || []}
-                paused={initialData?.paused || false}
-                settings={initialData?.settings}
-                hideFinished={hideFinished}
-                onToggleHideFinished={() => setHideFinished(!hideFinished)}
-                onOpenPreview={setPreviewFilename}
-              />
-            )}
-            {activeTab === 'assembly' && (
-              <LibraryTab
-                audiobooks={initialData?.audiobooks || []}
-                audiobookJob={audiobookJob}
-                onRefresh={handleRefresh}
-                progressHelper={getRemainingAndProgress}
-                formatSeconds={formatSeconds}
-              />
-            )}
+              } />
+              <Route path="/voices" element={
+                <VoicesTab
+                  speakerProfiles={initialData?.speaker_profiles || []}
+                  onRefresh={handleRefresh}
+                  testProgress={testProgress}
+                />
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </main>
 
           {showLogs && (
@@ -194,7 +124,7 @@ function App() {
               title={viewingJob ? `Logs: ${viewingJob.chapter_file}` : 'System Console'}
               subtitle={viewingJob?.status === 'running' ? `ETA: ${viewingJob.eta_seconds || '...'}s` : ''}
               logs={viewingJob?.log}
-              filename={selectedFile || (activeJob ? activeJob.chapter_file : null)}
+              filename={activeJob ? activeJob.chapter_file : null}
               progress={viewingJob?.progress}
               status={viewingJob?.status}
               startedAt={viewingJob?.started_at}
@@ -210,6 +140,19 @@ function App() {
         isOpen={!!previewFilename}
         onClose={() => setPreviewFilename(null)}
         filename={previewFilename || ''}
+      />
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
       />
     </div>
   );

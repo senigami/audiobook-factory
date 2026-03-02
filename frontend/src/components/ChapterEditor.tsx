@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info, Volume2, List } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
+import { ConfirmModal } from './ConfirmModal';
 
 import { api } from '../api';
 import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
@@ -38,6 +39,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
   
   const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
   const handleVoiceChange = (voice: string) => {
@@ -213,32 +222,55 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             return;
         }
 
-        const url = projectId 
-            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
-            : `/out/xtts/${seg.audio_file_path}`;
-        const audio = new Audio(url);
+        const audioPath = seg.audio_file_path;
+        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
         
-        audio.onended = () => {
-            if (!isPlayingRef.current) return;
-            let nextIdx = idx + 1;
-            while (nextIdx < playbackQueueRef.current.length) {
-                const nextId = playbackQueueRef.current[nextIdx];
-                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
-                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
-                    nextIdx++;
-                } else {
-                    break;
+        const urls = [
+            projectId ? `/projects/${projectId}/audio/${audioPath}` : `/out/xtts/${audioPath}`,
+            projectId ? `/projects/${projectId}/audio/${wavPath}` : `/out/xtts/${wavPath}`,
+            projectId ? `/projects/${projectId}/audio/${mp3Path}` : `/out/xtts/${mp3Path}`,
+            `/out/xtts/${audioPath}`,
+            `/out/xtts/${wavPath}`,
+            `/out/xtts/${mp3Path}`
+        ].filter((v, i, a) => a.indexOf(v) === i); // unique
+        
+        let urlIdx = 0;
+        const playWithFallback = (u: string) => {
+            const audio = new Audio(u);
+            audio.onended = () => {
+                if (!isPlayingRef.current) return;
+                let nextIdx = idx + 1;
+                while (nextIdx < playbackQueueRef.current.length) {
+                    const nextId = playbackQueueRef.current[nextIdx];
+                    const nextSeg = segmentsRef.current.find(s => s.id === nextId);
+                    if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
+                        nextIdx++;
+                    } else {
+                        break;
+                    }
                 }
-            }
-            playFromIndex(nextIdx);
+                playFromIndex(nextIdx);
+            };
+            
+            audio.onerror = () => {
+                if (!isPlayingRef.current) return;
+                urlIdx++;
+                if (urlIdx < urls.length) {
+                    playWithFallback(urls[urlIdx]);
+                } else {
+                    playFromIndex(idx + 1);
+                }
+            };
+            
+            audio.play().catch(e => {
+                console.error("Playback failed", e);
+                audio.onerror?.(new Event('error') as any);
+            });
+            audioPlayerRef.current = audio;
         };
         
-        audio.onerror = () => { if (isPlayingRef.current) playFromIndex(idx + 1); };
-        audio.play().catch(e => {
-            console.error("Playback failed", e);
-            if (isPlayingRef.current) playFromIndex(idx + 1);
-        });
-        audioPlayerRef.current = audio;
+        playWithFallback(urls[0]);
     };
 
     await playFromIndex(currentIndex);
@@ -431,6 +463,26 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     }
   };
 
+  const executeQueue = async () => {
+    setSubmitting(true);
+    try {
+        const voiceToUse = selectedVoice || undefined;
+        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
+        onNavigateToQueue();
+    } catch (e) {
+        console.error("Failed to enqueue", e);
+        setConfirmConfig({
+            title: 'Queue Failed',
+            message: 'Failed to queue chapter.',
+            onConfirm: () => setConfirmConfig(null),
+            isDestructive: false,
+            confirmText: 'OK'
+        });
+    } finally {
+        setSubmitting(false);
+    }
+  };
+
   const handleNavigate = async (dir: 'next' | 'prev') => {
       // Force save before navigating
       await handleSave();
@@ -453,7 +505,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (loading) return <div style={{ padding: '2rem' }}>Loading editor...</div>;
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
-  const hasUnsavedChanges = title !== chapter.title || text !== (chapter.text_content || '');
+  const hasUnsavedChanges = (title || "").trim() !== (chapter.title || "").trim() || 
+                           (text || "").replace(/\r\n/g, '\n') !== (chapter.text_content || "").replace(/\r\n/g, '\n');
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 72px)', margin: '-2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
@@ -499,19 +552,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             
             {chapter.audio_status === 'done' && chapter.audio_file_path && (
                 <div style={{ paddingLeft: '1rem', borderLeft: '1px solid var(--border)' }}>
-                    <audio 
-                        controls 
-                        src={chapter.project_id 
-                            ? `/projects/${chapter.project_id}/audio/${chapter.audio_file_path}`
-                            : `/out/xtts/${chapter.audio_file_path}`} 
-                        onError={(e) => {
-                            const target = e.target as HTMLAudioElement;
-                            if (target.src.includes('/projects/')) {
-                                target.src = `/out/xtts/${chapter.audio_file_path}`;
-                            }
-                        }}
-                        style={{ height: '32px', maxWidth: '300px' }}
-                    />
+                    {(() => {
+                        const audioPath = chapter.audio_file_path;
+                        if (!audioPath) return null;
+                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                        
+                        return (
+                            <audio 
+                                controls 
+                                key={chapter.id}
+                                style={{ height: '32px', maxWidth: '300px' }}
+                            >
+                                <source src={`/projects/${chapter.project_id}/audio/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/projects/${chapter.project_id}/audio/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/projects/${chapter.project_id}/audio/${mp3Path}`} />}
+                                <source src={`/out/xtts/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                            </audio>
+                        );
+                    })()}
                 </div>
             )}
         </div>
@@ -541,19 +602,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             <button
                 onClick={async () => {
                     if (chapter?.char_count && chapter.char_count > 50000) {
-                        if (!window.confirm(`This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Queue anyway?`)) return;
+                        setConfirmConfig({
+                            title: 'Large Chapter Warning',
+                            message: `This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Processing very large chapters in a single job may cause issues. Queue anyway?`,
+                            isDestructive: false,
+                            confirmText: 'Queue Anyway',
+                            onConfirm: async () => {
+                                setConfirmConfig(null);
+                                await executeQueue();
+                            }
+                        });
+                        return;
                     }
-                    setSubmitting(true);
-                    try {
-                        const voiceToUse = selectedVoice || undefined;
-                        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
-                        onNavigateToQueue();
-                    } catch (e) {
-                        console.error("Failed to enqueue", e);
-                        alert("Failed to queue chapter.");
-                    } finally {
-                        setSubmitting(false);
-                    }
+                    await executeQueue();
                 }}
                 disabled={submitting || (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing'}
                 className="btn-primary"
@@ -591,8 +652,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success-muted)" />)}
+                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--success-text)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success)" />)}
                     {saving ? 'Saving...' : (hasUnsavedChanges ? 'Unsaved' : 'Saved')}
                 </span>
             </div>
@@ -1138,6 +1199,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             </div>
           </div>
         )}
+
+        <ConfirmModal
+          isOpen={!!confirmConfig}
+          title={confirmConfig?.title || ''}
+          message={confirmConfig?.message || ''}
+          onConfirm={() => {
+            confirmConfig?.onConfirm();
+            setConfirmConfig(null);
+          }}
+          onCancel={() => setConfirmConfig(null)}
+          isDestructive={confirmConfig?.isDestructive}
+          confirmText={confirmConfig?.confirmText}
+        />
       </div>
     </div>
   </div>

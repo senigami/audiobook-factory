@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { ProjectView } from './ProjectView'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api } from '../api'
 
@@ -41,7 +42,15 @@ describe('ProjectView', () => {
             }
         ])
 
-        render(<ProjectView projectId="1" jobs={{}} speakerProfiles={[]} onBack={vi.fn()} onNavigateToQueue={vi.fn()} onOpenPreview={vi.fn()} />)
+        render(
+            <MemoryRouter initialEntries={['/project/1']}>
+                <Routes>
+                    <Route path="/project/:projectId" element={
+                        <ProjectView jobs={{}} speakerProfiles={[]} onOpenPreview={vi.fn()} />
+                    } />
+                </Routes>
+            </MemoryRouter>
+        )
 
         await waitFor(() => {
             expect(screen.getByText('Test Project')).toBeTruthy()

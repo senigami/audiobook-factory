@@ -1,38 +1,384 @@
-import React, { useState, useEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, Star } from 'lucide-react';
-import { PredictiveProgressBar } from './PredictiveProgressBar';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { User, Plus, Music, Trash2, Play, Loader2, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
+import { RecordingGuide } from './RecordingGuide';
+import { ConfirmModal } from './ConfirmModal';
+import { ActionMenu } from './ActionMenu';
+import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
+
+// --- Components ---
+
+interface DrawerProps {
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    children: React.ReactNode;
+}
+
+const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, title, children }) => {
+    const [width, setWidth] = useState(450);
+    const [isResizing, setIsResizing] = useState(false);
+
+    const startResizing = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizing(true);
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    const resize = useCallback((e: MouseEvent) => {
+        if (isResizing) {
+            const newWidth = window.innerWidth - e.clientX;
+            if (newWidth >= 380 && newWidth <= window.innerWidth * 0.9) {
+                setWidth(newWidth);
+            }
+        }
+    }, [isResizing]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', resize);
+            window.addEventListener('mouseup', stopResizing);
+        } else {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        }
+        return () => {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        };
+    }, [isResizing, resize, stopResizing]);
+
+    return createPortal(
+        <AnimatePresence>
+            {isOpen && (
+                <>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(15, 23, 42, 0.4)',
+                            backdropFilter: 'blur(4px)',
+                            zIndex: 2000
+                        }}
+                    />
+                    <motion.div
+                        initial={{ x: '100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '100%' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            width: `${width}px`,
+                            maxWidth: '95vw',
+                            background: 'var(--surface)',
+                            boxShadow: '-10px 0 30px rgba(0,0,0,0.1)',
+                            zIndex: 2001,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            borderLeft: '1px solid var(--border)',
+                            userSelect: isResizing ? 'none' : 'auto'
+                        }}
+                    >
+                        {/* Resize Handle */}
+                        <div
+                            onMouseDown={startResizing}
+                            className="resize-handle"
+                            style={{
+                                position: 'absolute',
+                                left: -6,
+                                top: 0,
+                                bottom: 0,
+                                width: '12px',
+                                cursor: 'ew-resize',
+                                zIndex: 2002,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '3px',
+                                padding: '8px 2px',
+                                background: isResizing ? 'var(--accent)' : 'var(--surface-alt)',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border)',
+                                boxShadow: isResizing ? '0 0 10px var(--accent-glow)' : '0 2px 4px rgba(0,0,0,0.1)',
+                                transition: 'all 0.2s ease',
+                                opacity: isResizing ? 1 : 0.8
+                            }}>
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} style={{
+                                        width: '2px',
+                                        height: '2px',
+                                        borderRadius: '50%',
+                                        background: isResizing ? 'white' : 'var(--text-muted)'
+                                    }} />
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{
+                            padding: '1.5rem',
+                            borderBottom: '1px solid var(--border)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: 'var(--surface-light)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div className="icon-circle" style={{ width: '32px', height: '32px' }}>
+                                    <FileEdit size={16} />
+                                </div>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{title}</h3>
+                            </div>
+                            <button onClick={onClose} className="btn-ghost" style={{ padding: '8px' }}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+                            {children}
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>,
+        document.body
+    );
+};
+
+interface SpeedPopoverProps {
+    value: number;
+    onChange: (val: number) => void;
+    triggerRef: React.RefObject<any>;
+    onClose: () => void;
+}
+
+const SpeedPopover: React.FC<SpeedPopoverProps> = ({ value, onChange, triggerRef, onClose }) => {
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const [isAbove, setIsAbove] = useState(false);
+    const popoverRef = useRef<HTMLDivElement>(null);
+
+    const updatePosition = useCallback(() => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const popoverWidth = 240;
+        const popoverHeight = 160;
+
+        let top = rect.bottom + window.scrollY + 8;
+        let left = rect.left + window.scrollX - (popoverWidth / 2) + (rect.width / 2);
+        let above = false;
+
+        if (rect.bottom + popoverHeight > window.innerHeight) {
+            top = rect.top + window.scrollY - popoverHeight - 8;
+            above = true;
+        }
+
+        if (left < 10) left = 10;
+        if (left + popoverWidth > window.innerWidth - 10) left = window.innerWidth - popoverWidth - 10;
+
+        setCoords({ top, left });
+        setIsAbove(above);
+    }, [triggerRef]);
+
+    useLayoutEffect(() => {
+        updatePosition();
+        window.addEventListener('scroll', updatePosition, true);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.removeEventListener('scroll', updatePosition, true);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [updatePosition]);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (triggerRef.current?.contains(e.target as Node)) return;
+            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+                onClose();
+            }
+        };
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [onClose, triggerRef]);
+
+    const presets = [0.85, 1.0, 1.1, 1.25];
+
+    return createPortal(
+        <AnimatePresence>
+            <motion.div
+                ref={popoverRef}
+                initial={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: isAbove ? 10 : -10 }}
+                style={{
+                    position: 'absolute',
+                    top: coords.top,
+                    left: coords.left,
+                    width: '240px',
+                    background: 'var(--surface-light)',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.4)',
+                    border: '1px solid var(--border)',
+                    padding: '1.25rem',
+                    zIndex: 99999,
+                    backdropFilter: 'blur(20px)',
+                }}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Speed Adjustment</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'monospace' }}>{value.toFixed(2)}x</span>
+                    </div>
+
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.01"
+                        value={value}
+                        onChange={(e) => onChange(parseFloat(e.target.value))}
+                        style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                        {presets.map(p => (
+                            <button
+                                key={p}
+                                onClick={() => onChange(p)}
+                                className="btn-ghost"
+                                style={{
+                                    flex: 1,
+                                    fontSize: '0.7rem',
+                                    padding: '4px 0',
+                                    borderRadius: '6px',
+                                    background: Math.abs(value - p) < 0.01 ? 'var(--accent-glow)' : 'var(--surface)',
+                                    color: Math.abs(value - p) < 0.01 ? 'var(--accent)' : 'var(--text-secondary)',
+                                    border: '1px solid',
+                                    borderColor: Math.abs(value - p) < 0.01 ? 'var(--accent)' : 'var(--border-light)'
+                                }}
+                            >
+                                {p.toFixed(2)}x
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </motion.div>
+        </AnimatePresence>,
+        document.body
+    );
+};
 
 interface SpeakerProfile {
     name: string;
     wav_count: number;
+    samples?: string[];
     speed: number;
     is_default: boolean;
     test_text?: string;
     preview_url: string | null;
+    speaker_id?: string;
+    variant_name?: string;
 }
 
-interface SpeakerCardProps {
+interface Speaker {
+    id: string;
+    name: string;
+    default_profile_name: string | null;
+}
+
+interface ProfileDetailsProps {
     profile: SpeakerProfile;
     isTesting: boolean;
+    testStatus?: any;
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
-    onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    testStatus?: { progress: number; started_at?: number };
+    onBuildNow: (name: string, files: File[]) => void;
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
+    speakers: Speaker[];
+    isGrouped?: boolean;
+    showControlsInline?: boolean;
+    totalVariantCount?: number;
 }
 
-const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, onEditTestText, testStatus }) => {
+const ProfileDetails: React.FC<ProfileDetailsProps> = ({ 
+    profile, isTesting, onTest, onDelete, onRefresh, 
+    onEditTestText, onBuildNow, requestConfirm, testStatus,
+    speakers, isGrouped = false, showControlsInline = false,
+    totalVariantCount = 1
+}) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isRebuildRequired, setIsRebuildRequired] = useState(false);
+    const audioRef = useRef<HTMLAudioElement>(null);
     const speed = localSpeed ?? profile.speed;
+
+    const [isDragging, setIsDragging] = useState(false);
+    const [pendingSamples, setPendingSamples] = useState<File[]>([]);
+
+    const assignedSpeaker = speakers.find(s => s.id === profile.speaker_id);
 
     useEffect(() => {
         if (profile.preview_url) {
             setCacheBuster(Date.now());
         }
     }, [profile.preview_url, isTesting]);
+
+
+    const uploadFiles = async (files: FileList | File[]) => {
+        const fileList = Array.from(files);
+        setPendingSamples(prev => [...prev, ...fileList]);
+        setIsRebuildRequired(true);
+    };
+
+    const handleRebuild = async () => {
+        if (pendingSamples.length > 0) {
+            onBuildNow(profile.name, pendingSamples);
+            setPendingSamples([]);
+            setIsRebuildRequired(false);
+        } else {
+            onBuildNow(profile.name, []);
+            setIsRebuildRequired(false);
+        }
+    };
+
+    const handlePlayClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!profile.preview_url) {
+            onTest(profile.name);
+            return;
+        }
+
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play();
+            }
+        }
+    };
 
     const handleSpeedChange = async (val: number) => {
         setIsSaving(true);
@@ -52,118 +398,729 @@ const SpeakerCard: React.FC<SpeakerCardProps> = ({ profile, isTesting, onTest, o
         }
     };
 
-    return (
-        <div className="glass-panel animate-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="icon-circle">
-                        <Music size={16} />
-                    </div>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h4 style={{ fontWeight: 600, fontSize: '1.1rem' }}>{profile.name}</h4>
-                            <button
-                                onClick={() => onEditTestText(profile)}
-                                className="btn-ghost"
-                                style={{ padding: '4px', color: 'var(--text-muted)' }}
-                                title="Edit Sample Text"
-                            >
-                                <FileEdit size={12} />
-                            </button>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count} samples</span>
-                    </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+    const [showSpeedPopover, setShowSpeedPopover] = useState(false);
+    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0);
+    const speedPillRef = useRef<HTMLButtonElement>(null);
+
+    // Auto-expand if no samples, auto-collapse if samples exist
+    useEffect(() => {
+        setIsSamplesExpanded(profile.wav_count === 0);
+    }, [profile.wav_count, profile.name]);
+
+
+    const renderControls = () => (
+        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* One-Line Control Bar */}
+            <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px',
+                background: 'rgba(var(--accent-rgb), 0.03)',
+                padding: '10px 12px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-light)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                {(totalVariantCount > 1 || profile.variant_name) && (
+                    <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                        {profile.variant_name || 'Default Variant'}
+                    </h4>
+                )}
+                    
+                    <div style={{ width: '1px', height: '20px', background: 'var(--border)', opacity: 0.5 }} />
+
+                    {/* Speed Pill */}
                     <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onSetDefault(profile.name);
-                        }}
+                        ref={speedPillRef}
+                        onClick={() => setShowSpeedPopover(!showSpeedPopover)}
                         className="btn-ghost"
                         style={{
-                            padding: '8px',
-                            color: profile.is_default ? 'var(--warning)' : 'var(--text-muted)',
-                            transition: 'all 0.3s ease',
-                            cursor: 'pointer',
-                            zIndex: 10
+                            padding: '4px 10px',
+                            height: '32px',
+                            borderRadius: '100px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            gap: '6px',
+                            color: 'var(--accent)',
+                            minWidth: '70px',
+                            justifyContent: 'center'
                         }}
-                        title={profile.is_default ? "Default Narrator" : "Set as Default"}
                     >
-                        <Star size={16} fill={profile.is_default ? 'var(--warning)' : 'none'} />
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onDelete(profile.name);
-                        }}
-                        className="btn-ghost"
-                        style={{ color: 'var(--error)', padding: '8px' }}
-                        title="Delete Profile"
-                    >
-                        <Trash2 size={14} />
-                    </button>
-                </div>
-            </div>
-
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Speed</span>
-                        {isSaving && <Loader2 size={10} className="animate-spin" color="var(--accent)" />}
-                    </div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+                        <Sliders size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
                         {speed.toFixed(2)}x
-                    </span>
+                    </button>
+
+                    {showSpeedPopover && (
+                        <SpeedPopover
+                            value={speed}
+                            onChange={(v: number) => {
+                                setLocalSpeed(v);
+                                handleSpeedChange(v);
+                            }}
+                            triggerRef={speedPillRef}
+                            onClose={() => setShowSpeedPopover(false)}
+                        />
+                    )}
                 </div>
-                <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.05"
-                    value={speed}
-                    onChange={(e) => setLocalSpeed(parseFloat(e.target.value))}
-                    onMouseUp={() => handleSpeedChange(speed)}
-                    onTouchEnd={() => handleSpeedChange(speed)}
-                    style={{ width: '100%', accentColor: 'var(--accent)' }}
-                />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                        onClick={() => onEditTestText(profile)}
+                        className="btn-ghost"
+                        title="Edit Preview Script"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: '0.85rem' }}
+                    >
+                        <FileEdit size={16} />
+                        Script
+                    </button>
+                    
+                    <button 
+                        onClick={handleRebuild}
+                        disabled={isSaving}
+                        className={isRebuildRequired ? "btn-primary" : "btn-ghost"}
+                        title="Rebuild Voice Model"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', fontSize: '0.85rem', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
+                    >
+                        <RefreshCw size={16} className={isSaving ? "animate-spin" : ""} />
+                        Rebuild
+                    </button>
+
+                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
+                    
+                    <button 
+                        className="btn-ghost"
+                        style={{ width: '32px', height: '32px', padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
+                        title="Delete Variant"
+                    >
+                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    </button>
+                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minHeight: '40px' }}>
-                {isTesting ? (
-                    <PredictiveProgressBar
-                        progress={testStatus?.progress || 0}
-                        startedAt={testStatus?.started_at}
-                        etaSeconds={25}
-                        label="Generating Sample..."
-                    />
-                ) : profile.preview_url ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <audio src={`${profile.preview_url}?t=${cacheBuster}`} controls style={{ flex: 1, height: '32px' }} />
-                        <button
-                            onClick={() => onTest(profile.name)}
-                            className="btn-glass"
-                            disabled={isTesting}
-                            style={{ height: '32px', whiteSpace: 'nowrap' }}
-                            title="Regenerate Preview"
+            {/* Collapsible Samples Section */}
+            <div 
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files?.length) {
+                        uploadFiles(e.dataTransfer.files);
+                    }
+                }}
+                style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    border: isDragging ? '1px solid var(--accent)' : '1px solid var(--border-light)', 
+                    borderRadius: '12px', 
+                    background: isDragging ? 'rgba(var(--accent-rgb), 0.05)' : 'var(--surface-light)', 
+                    overflow: 'hidden',
+                    position: 'relative',
+                    transition: 'all 0.2s'
+                }}
+            >
+                {isDragging && (
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(var(--accent-rgb), 0.08)',
+                        backdropFilter: 'blur(2px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        zIndex: 10,
+                        pointerEvents: 'none',
+                        border: '2px dashed var(--accent)',
+                        borderRadius: '12px'
+                    }}>
+                        <Upload size={24} color="var(--accent)" />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)' }}>Drop Samples to Add</span>
+                    </div>
+                )}
+
+                <div 
+                    style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: 'none',
+                        border: 'none',
+                        transition: 'background 0.2s',
+                        userSelect: 'none',
+                        gap: '12px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                    <div 
+                        onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '10px', 
+                            color: 'var(--text-secondary)', 
+                            flex: 1,
+                            cursor: 'pointer',
+                            height: '100%',
+                            padding: '4px 0'
+                        }}
+                    >
+                        <Music size={14} className="text-accent" />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Samples ({profile.samples?.length || 0})</span>
+                        {isRebuildRequired && <AlertTriangle size={12} className="text-warning" />}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input 
+                            type="file" 
+                            multiple 
+                            accept=".wav" 
+                            onChange={(e) => {
+                                if (e.target.files) uploadFiles(e.target.files);
+                            }} 
+                            style={{ display: 'none' }} 
+                            id={`file-input-${profile.name.replace(/\s+/g, '-')}`}
+                        />
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                document.getElementById(`file-input-${profile.name.replace(/\s+/g, '-')}`)?.click();
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="btn-ghost" 
+                            title="Add Samples Manually" 
+                            style={{ 
+                                padding: '4px', 
+                                height: '28px', 
+                                width: '28px', 
+                                borderRadius: '8px', 
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid var(--border)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                                color: 'var(--accent)'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(var(--accent-rgb), 0.15)';
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                                e.currentTarget.style.borderColor = 'var(--border)';
+                            }}
                         >
-                            <RefreshCw size={14} />
+                            <Plus size={16} />
+                        </button>
+                        
+                        <div 
+                            onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
+                            style={{ 
+                                padding: '6px', 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'transform 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                        >
+                            <ChevronUp 
+                                size={16} 
+                                style={{ 
+                                    transform: isSamplesExpanded ? 'none' : 'rotate(180deg)', 
+                                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    color: 'var(--text-muted)'
+                                }} 
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <AnimatePresence>
+                    {isSamplesExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            >
+                            <div style={{ 
+                                padding: '0 16px 16px',
+                                position: 'relative',
+                                minHeight: '40px'
+                            }}>
+
+                    {profile.samples && profile.samples.length > 0 ? (
+                        <>
+                            {profile.samples.map((s, idx) => (
+                                <div key={idx} className="sample-row" style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    fontSize: '0.8rem',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                    transition: 'background 0.2s'
+                                }}>
+                                    <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                        {s}
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            requestConfirm({
+                                                title: 'Remove Sample',
+                                                message: `Are you sure you want to remove "${s}"? A voice rebuild will be required to apply this change.`,
+                                                isDestructive: true,
+                                                onConfirm: async () => {
+                                                    try {
+                                                        const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
+                                                            method: 'DELETE'
+                                                        });
+                                                        if (resp.ok) {
+                                                            onRefresh();
+                                                            setIsRebuildRequired(true);
+                                                        }
+                                                    } catch (err) {
+                                                        console.error('Failed to remove sample', err);
+                                                    }
+                                                }
+                                            });
+                                        }}
+                                        className="sample-remove-btn"
+                                        style={{ padding: '4px', height: 'auto' }}
+                                        title="Remove Sample"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    ) : (
+                        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            No samples yet. Drag and drop samples here to start building the voice.
+                        </div>
+                    )}
+                    
+                    {pendingSamples.map((file, pIdx) => (
+                        <div key={`pending-${pIdx}`} className="sample-row" style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            fontSize: '0.8rem',
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            background: 'rgba(var(--accent-rgb), 0.05)',
+                            border: '1px dashed var(--accent-glow)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, overflow: 'hidden' }}>
+                                <span style={{ color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 700 }}>NEW</span>
+                                <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {file.name}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setPendingSamples(prev => prev.filter((_, i) => i !== pIdx))}
+                                className="sample-remove-btn"
+                                style={{ padding: '4px', height: 'auto' }}
+                                title="Remove pending sample"
+                            >
+                                <X size={12} />
+                            </button>
+                        </div>
+                    ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className={showControlsInline ? "" : "glass-panel animate-in"} style={showControlsInline ? {} : { padding: '0', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            {profile.preview_url && (
+                <audio 
+                    ref={audioRef}
+                    src={`${profile.preview_url}?t=${cacheBuster}`}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                />
+            )}
+
+            <div 
+                style={{ 
+                    padding: '1.25rem', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    borderBottom: (profile.wav_count > 0 || pendingSamples.length > 0) ? '1px solid var(--border-light)' : 'none',
+                    transition: 'border-bottom 0.2s'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    <div style={{ flexShrink: 0 }}>
+                        <button 
+                            onClick={handlePlayClick}
+                            className="btn-primary"
+                            title={profile.preview_url ? (isPlaying ? "Pause Sample" : "Play Sample") : "Generate Sample"}
+                            style={{ 
+                                width: '40px', 
+                                height: '40px', 
+                                padding: 0,
+                                borderRadius: '12px',
+                                background: isPlaying ? 'var(--accent-active)' : 'var(--accent)',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                        >
+                            {isTesting ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : isPlaying ? (
+                                <Pause size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                            ) : (
+                                <Play size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                            )}
+                            {isPlaying && (
+                                <motion.div
+                                    layoutId="playing-pulse"
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        border: '2px solid white',
+                                        borderRadius: '12px',
+                                        opacity: 0.5
+                                    }}
+                                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                />
+                            )}
                         </button>
                     </div>
-                ) : (
-                    <button
-                        onClick={() => onTest(profile.name)}
-                        className="btn-primary"
-                        disabled={isTesting}
-                        style={{ width: '100%' }}
+                    <div 
+                        style={{ 
+                            display: 'flex',
+                            flexDirection: 'column',
+                            flex: 1,
+                            padding: '4px 8px'
+                        }}
                     >
-                        <Play size={16} />
-                        Generate Preview
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            {!isGrouped && (
+                                <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
+                                    {assignedSpeaker ? `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}` : profile.name}
+                                </h4>
+                            )}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count + pendingSamples.length} samples</span>
+                    </div>
+                </div>
+
+                {!showControlsInline && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button 
+                        className="btn-ghost"
+                        style={{ width: '32px', height: '32px', padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
+                        title="Delete Variant"
+                    >
+                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                     </button>
+                    </div>
                 )}
             </div>
+
+            {isTesting && (
+                <div style={{ padding: showControlsInline ? '0 0 1.25rem' : '0 1.25rem 1.25rem' }}>
+                    <div style={{ height: '4px', background: 'var(--border-light)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${testStatus?.progress || 0}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
+                    </div>
+                </div>
+            )}
+
+            {renderControls()}
+        </div>
+    );
+};
+
+interface VoiceCardProps {
+    speaker: Speaker;
+    profiles: SpeakerProfile[];
+    isTestingProfileId: string | null;
+    testProgress: Record<string, any>;
+    onTest: (name: string) => void;
+    onDelete: (name: string) => void;
+    onRefresh: () => void;
+    onEditTestText: (profile: SpeakerProfile) => void;
+    onBuildNow: (name: string, files: File[]) => void;
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
+    speakers: Speaker[];
+    isExpanded: boolean;
+    onToggleExpand: () => void;
+}
+
+const VoiceCard: React.FC<VoiceCardProps> = ({
+    speaker, profiles, isTestingProfileId, testProgress, 
+    onTest, onDelete, onRefresh,
+    onEditTestText, onBuildNow, requestConfirm, speakers,
+    isExpanded, onToggleExpand
+}) => {
+    const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
+    const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
+
+    const activeProfile = profiles.find(p => p.name === activeProfileId) || defaultProfile;
+
+    const handleAddVariant = async () => {
+        const name = prompt("Enter variant name:", `Variant ${profiles.length + 1}`);
+        if (!name) return;
+        
+        try {
+            const formData = new URLSearchParams();
+            formData.append('speaker_id', speaker.id);
+            formData.append('variant_name', name);
+            const resp = await fetch('/api/speaker-profiles', {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                onRefresh();
+            } else {
+                const err = await resp.json();
+                alert(`Failed to add variant: ${err.message}`);
+            }
+        } catch (e) {
+            console.error('Failed to add variant', e);
+        }
+    };
+
+    const getStatusInfo = (p: SpeakerProfile | undefined) => {
+        if (!p || p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
+        return { label: 'BUILT', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+    };
+
+    const status = getStatusInfo(activeProfile as SpeakerProfile);
+
+    return (
+        <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: isExpanded ? '1px solid var(--accent)' : '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '80px', padding: '0 1.5rem' }}>
+                <div 
+                onClick={onToggleExpand}
+                style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '16px', 
+                    cursor: 'pointer',
+                    flex: 1,
+                    userSelect: 'none',
+                    height: '100%'
+                }}
+            >
+                    <div style={{ 
+                        position: 'relative',
+                        width: '40px', 
+                        height: '40px', 
+                        borderRadius: '12px', 
+                        background: 'var(--accent)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: 'white',
+                        boxShadow: 'var(--shadow-sm)'
+                    }}>
+                        <User size={20} />
+                        {profiles.some(p => p.wav_count === 0) && (
+                            <div style={{
+                                position: 'absolute',
+                                top: -4,
+                                left: -4,
+                                width: '18px',
+                                height: '18px',
+                                background: 'var(--warning-text)',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '2px solid var(--border-light)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                color: 'white'
+                            }}>
+                                <RefreshCw size={10} style={{ width: '10px', height: '10px' }} />
+                            </div>
+                        )}
+                        <div 
+                            style={{
+                                position: 'absolute',
+                                bottom: -4,
+                                right: -4,
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: 'var(--surface)',
+                                border: `2px solid ${isExpanded ? 'var(--accent)' : 'var(--border)'}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: isExpanded ? 'var(--accent)' : 'var(--text-muted)',
+                                boxShadow: 'var(--shadow-sm)',
+                                zIndex: 2,
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                transform: isExpanded ? 'rotate(0deg)' : 'rotate(180deg)'
+                            }}
+                        >
+                            <ChevronUp size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                        </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>{speaker.name}</h3>
+                            <span style={{ 
+                                fontSize: '0.65rem', 
+                                padding: '2px 8px', 
+                                background: status.bg, 
+                                color: status.color,
+                                borderRadius: '100px',
+                                fontWeight: 800,
+                                letterSpacing: '0.02em'
+                            }}>{status.label}</span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                            {activeProfile?.wav_count || 0} samples
+                            {profiles.length > 1 && ` • ${profiles.length} variants`}
+                        </span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ActionMenu 
+                        items={[
+                            { 
+                                label: 'Delete Voice', 
+                                icon: Trash2,
+                                onClick: () => requestConfirm({
+                                    title: 'Delete Voice?',
+                                    message: `Are you sure you want to delete "${speaker.name}" and all its variants/samples? This cannot be undone.`,
+                                    isDestructive: true,
+                                    onConfirm: () => {
+                                        fetch(`/api/speakers/${speaker.id}`, { method: 'DELETE' })
+                                            .then(resp => {
+                                                if (resp.ok) onRefresh();
+                                            });
+                                    }
+                                }),
+                                isDestructive: true 
+                            }
+                        ]}
+                    />
+                </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(var(--accent-rgb), 0.02)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
+                                {profiles.map(p => {
+                                    const isActive = activeProfileId === p.name;
+                                    return (
+                                        <button
+                                            key={p.name}
+                                            onClick={() => {
+                                                setActiveProfileId(p.name);
+                                                if (!isExpanded) onToggleExpand(); // Expand if not already expanded
+                                            }}
+                                            style={{
+                                                padding: '6px 14px',
+                                                borderRadius: '100px',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 800,
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                border: '1px solid',
+                                                borderColor: isActive ? 'var(--accent)' : 'transparent',
+                                                background: isActive ? 'var(--accent)' : 'transparent',
+                                                color: isActive ? 'white' : 'var(--text-muted)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            {p.variant_name || 'Default'}
+                                        </button>
+                                    );
+                                })}
+                                <button 
+                                    onClick={handleAddVariant}
+                                    className="btn-ghost"
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '100px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 800,
+                                        color: 'var(--accent)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: 'rgba(var(--accent-rgb), 0.05)',
+                                        border: '1px dashed var(--accent)',
+                                        marginLeft: '4px',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    <Plus size={14} />
+                                    Variant
+                                </button>
+                        </div>
+
+                        <div key={activeProfileId} className="animate-in" style={{ background: 'var(--surface-light)' }}>
+                                <ProfileDetails
+                                    profile={activeProfile as SpeakerProfile}
+                                    isTesting={isTestingProfileId === activeProfile?.name}
+                                    testStatus={testProgress[activeProfile?.name || '']}
+                                    onTest={onTest}
+                                    onDelete={onDelete}
+                                    onRefresh={onRefresh}
+                                    onEditTestText={onEditTestText}
+                                    onBuildNow={onBuildNow}
+                                    requestConfirm={requestConfirm}
+                                    speakers={speakers}
+                                    isGrouped={true}
+                                    showControlsInline={true}
+                                    totalVariantCount={profiles.length}
+                                />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
@@ -175,46 +1132,81 @@ interface VoicesTabProps {
 }
 
 export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles, testProgress }) => {
-    const [newName, setNewName] = useState('');
-    const [files, setFiles] = useState<FileList | null>(null);
-    const [isBuilding, setIsBuilding] = useState(false);
+    // --- State ---
     const [testingProfile, setTestingProfile] = useState<string | null>(null);
     const [editingProfile, setEditingProfile] = useState<SpeakerProfile | null>(null);
     const [testText, setTestText] = useState('');
-    const [editedName, setEditedName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
+    const [showGuide, setShowGuide] = useState(false);
+    const [confirmConfig, setConfirmConfig] = useState<{ 
+        title: string; 
+        message: string; 
+        onConfirm: () => void; 
+        isDestructive?: boolean 
+    } | null>(null);
+
+    // --- Voice Management State ---
+    const [speakers, setSpeakers] = useState<Speaker[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [newVoiceName, setNewVoiceName] = useState('');
+    const [isCreatingVoice, setIsCreatingVoice] = useState(false);
+    const [expandedVoiceId, setExpandedVoiceId] = useState<string | null>(null);
+
+    const fetchSpeakers = useCallback(async () => {
+        try {
+            const resp = await fetch('/api/speakers');
+            if (resp.ok) {
+                const data = await resp.json();
+                if (Array.isArray(data)) {
+                    setSpeakers(data);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch speakers', e);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchSpeakers();
+    }, [fetchSpeakers, speakerProfiles]); // Also refresh when props change
+
+    const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
+        const formData = new FormData();
+        formData.append('name', name);
+        newFiles.forEach(f => formData.append('files', f));
+        
+        try {
+            const resp = await fetch('/api/speaker-profiles/build', {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                onRefresh();
+                fetchSpeakers();
+            } else {
+                const err = await resp.json();
+                alert(`Rebuild failed: ${err.message}`);
+            }
+        } catch (e) {
+            console.error('Rebuild failed', e);
+        }
+    }, [onRefresh, fetchSpeakers]);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
         setIsSavingText(true);
         try {
-            // 1. Handle Rename if needed
-            let currentName = editingProfile.name;
-            if (editedName.trim() && editedName.trim() !== editingProfile.name) {
-                const renameData = new URLSearchParams();
-                renameData.append('new_name', editedName.trim());
-                const renameResp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/rename`, {
-                    method: 'POST',
-                    body: renameData
-                });
-                if (!renameResp.ok) {
-                    const error = await renameResp.json();
-                    alert(`Rename failed: ${error.message}`);
-                    setIsSavingText(false);
-                    return;
-                }
-                currentName = editedName.trim();
-            }
-
-            // 2. Handle Text Update
             const formData = new URLSearchParams();
             formData.append('text', testText);
-            await fetch(`/api/speaker-profiles/${encodeURIComponent(currentName)}/test-text`, {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/test-text`, {
                 method: 'POST',
                 body: formData
             });
-            onRefresh();
-            setEditingProfile(null);
+            if (resp.ok) {
+                setEditingProfile(null);
+                onRefresh();
+            }
         } catch (e) {
             console.error('Failed to save profile', e);
         } finally {
@@ -241,49 +1233,22 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-    const handleBuild = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newName || !files || files.length === 0) return;
-
-        setIsBuilding(true);
-        const formData = new FormData();
-        formData.append('name', newName);
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
-        }
-
-        try {
-            const resp = await fetch('/api/speaker-profiles/build', {
-                method: 'POST',
-                body: formData,
-            });
-            if (resp.ok) {
-                setNewName('');
-                setFiles(null);
-                const input = document.getElementById('profile-files') as HTMLInputElement;
-                if (input) input.value = '';
-                onRefresh();
-            } else {
-                const errorData = await resp.json();
-                alert(`Build failed: ${errorData.message}`);
-            }
-        } catch (err) {
-            console.error('Failed to build profile', err);
-        } finally {
-            setIsBuilding(false);
-        }
-    };
-
     const handleDelete = async (name: string) => {
-        if (!confirm(`Delete speaker profile "${name}"?`)) return;
-        try {
-            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(name)}`, {
-                method: 'DELETE',
-            });
-            if (resp.ok) onRefresh();
-        } catch (err) {
-            console.error('Failed to delete profile', err);
-        }
+        handleRequestConfirm({
+            title: 'Delete Voice Profile',
+            message: `Are you sure you want to delete the voice profile "${name}"? This will permanently remove all associated voice samples and previews.`,
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(name)}`, {
+                        method: 'DELETE',
+                    });
+                    if (resp.ok) onRefresh();
+                } catch (err) {
+                    console.error('Failed to delete profile', err);
+                }
+            }
+        });
     };
 
     const handleTest = async (name: string) => {
@@ -306,202 +1271,341 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-    const handleSetDefault = async (name: string) => {
-        try {
-            const formData = new URLSearchParams();
-            formData.append('name', name);
-            await fetch('/api/settings/default-speaker', {
-                method: 'POST',
-                body: formData
-            });
-            onRefresh();
-        } catch (err) {
-            console.error('Failed to set default speaker', err);
-        }
+
+    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => {
+        setConfirmConfig(config);
     };
 
+    // --- Data Processing ---
+    // Merge speakers and profiles into a unified Voice concept
+    const voices = (speakers || []).map(speaker => {
+        const pList = speakerProfiles.filter(p => p.speaker_id === speaker.id);
+        // If no profiles, synthesize an initial "Default" profile to allow the user to add samples
+        if (pList.length === 0) {
+            pList.push({
+                name: speaker.name,
+                speaker_id: speaker.id,
+                variant_name: 'Default',
+                wav_count: 0,
+                speed: 1.0,
+                is_default: true,
+                preview_url: null,
+                wav_files: []
+            } as SpeakerProfile);
+        }
+        return {
+            id: speaker.id,
+            name: speaker.name,
+            profiles: pList
+        };
+    });
+
+    // Identify profiles that aren't linked to any speaker
+    const unassigned = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
+    
+    // Treat unassigned as standalone voices for now to bridge the transition
+    const unassignedVoices = unassigned.map(p => ({
+        id: `unassigned-${p.name}`,
+        name: p.name,
+        profiles: [p],
+        isUnassigned: true
+    }));
+
+    const allVoices = [...voices, ...unassignedVoices];
+
+    const filteredVoices = allVoices.filter(v => {
+        const query = searchQuery.toLowerCase();
+        return v.name.toLowerCase().includes(query) || 
+               v.profiles.some(p => (p.variant_name || p.name).toLowerCase().includes(query));
+    });
+
     return (
-        <div className="tab-content animate-in">
-            <div className="responsive-grid">
-                <section className="glass-panel" style={{ padding: '2rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
-                        <Plus size={20} color="var(--accent)" />
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create Super Voice</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            {/* Header with Search and New Voice Action */}
+            <div style={{ 
+                padding: '1.25rem 2rem', 
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'var(--surface-light)',
+                zIndex: 10
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Voices</h2>
+                    
+                    <div style={{ position: 'relative' }}>
+                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <input
+                            type="text"
+                            placeholder="Search voices..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                padding: '8px 12px 8px 36px',
+                                borderRadius: '100px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)',
+                                fontSize: '0.85rem',
+                                width: '240px',
+                                transition: 'all 0.2s'
+                            }}
+                            onFocus={(e) => {
+                                e.currentTarget.style.width = '320px';
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                            }}
+                            onBlur={(e) => {
+                                e.currentTarget.style.width = '240px';
+                                e.currentTarget.style.borderColor = 'var(--border)';
+                            }}
+                        />
                     </div>
-                    <form onSubmit={handleBuild} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <div className="input-group">
-                            <label>Narrator Name</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Victorian Gentleman"
-                                value={newName}
-                                onChange={(e) => setNewName(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="input-group">
-                            <label>Voice Samples (.wav)</label>
-                            <input
-                                id="profile-files"
-                                type="file"
-                                multiple
-                                accept=".wav"
-                                onChange={(e) => setFiles(e.target.files)}
-                                required
-                            />
-                        </div>
+                </div>
 
-                        <button type="submit" className="btn-primary" disabled={isBuilding || !newName || !files}>
-                            {isBuilding ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
-                            {isBuilding ? 'Building Profile...' : 'Build Speaker'}
-                        </button>
-
-                        <div style={{
-                            background: 'rgba(255, 255, 255, 0.1)',
-                            borderRadius: '12px',
-                            padding: '1.25rem',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.75rem'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
-                                <Info size={14} />
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Voice optimization</span>
-                            </div>
-                            <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    Ideal sample length is 6 to 10 seconds.
-                                </li>
-                                <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    Use 3 to 5 clean samples for best results.
-                                </li>
-                            </ul>
-                        </div>
-                    </form>
-                </section>
-
-                <section>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem' }}>
-                        <User size={20} color="var(--accent)" />
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Available Narrators</h3>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem' }}>
-                        {speakerProfiles.length === 0 && (
-                            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
-                                No narrators found. Create one to begin.
-                            </p>
-                        )}
-                        {speakerProfiles.map((p) => (
-                            <SpeakerCard
-                                key={p.name}
-                                profile={p}
-                                isTesting={testingProfile === p.name}
-                                testStatus={testProgress[p.name]}
-                                onTest={handleTest}
-                                onDelete={handleDelete}
-                                onSetDefault={handleSetDefault}
-                                onRefresh={onRefresh}
-                                onEditTestText={(profile) => {
-                                    setEditingProfile(profile);
-                                    setTestText(profile.test_text || '');
-                                    setEditedName(profile.name);
-                                }}
-                            />
-                        ))}
-                    </div>
-                </section>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button 
+                        onClick={() => setIsCreateModalOpen(true)} 
+                        className="btn-primary" 
+                        style={{ gap: '8px', padding: '0 20px', height: '40px', borderRadius: '100px' }}
+                    >
+                        <Plus size={18} />
+                        New Voice
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 8px' }} />
+                    
+                    <button onClick={() => setShowGuide(true)} className="btn-ghost" style={{ gap: '8px' }}>
+                        <Info size={16} />
+                        Recording Guide
+                    </button>
+                </div>
             </div>
 
-            {editingProfile && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+                <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {allVoices.length === 0 ? (
+                        <div style={{ 
+                            padding: '60px', 
+                            textAlign: 'center', 
+                            background: 'rgba(var(--accent-rgb), 0.02)', 
+                            borderRadius: '24px', 
+                            border: '2px dashed var(--border)' 
+                        }}>
+                            <div style={{ 
+                                width: '64px', 
+                                height: '64px', 
+                                borderRadius: '20px', 
+                                background: 'var(--surface-alt)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                margin: '0 auto 20px',
+                                color: 'var(--text-muted)'
+                            }}>
+                                <User size={32} />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px' }}>No Voices Yet</h3>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '300px', margin: '0 auto 24px' }}>
+                                Create your first voice to start generating premium AI audio.
+                            </p>
+                            <button 
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="btn-primary" 
+                                style={{ gap: '8px', padding: '0 24px', height: '44px', borderRadius: '12px' }}
+                            >
+                                <Plus size={20} />
+                                Create New Voice
+                            </button>
+                        </div>
+                    ) : filteredVoices.length === 0 ? (
+                        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <Search size={48} style={{ opacity: 0.2, marginBottom: '20px' }} />
+                            <h3 style={{ margin: '0 0 10px', fontSize: '1.25rem' }}>No Matches Found</h3>
+                            <p style={{ margin: 0 }}>Try adjusting your search query.</p>
+                        </div>
+                    ) : (
+                        <>
+                            {filteredVoices.map(voice => (
+                                <VoiceCard
+                                    key={voice.id}
+                                    speaker={{ id: voice.id.startsWith('unassigned-') ? '' : voice.id, name: voice.name, default_profile_name: voice.profiles[0]?.name || null }}
+                                    profiles={voice.profiles}
+                                    onRefresh={onRefresh}
+                                    onTest={handleTest}
+                                    onDelete={handleDelete}
+                                    onEditTestText={(p) => setEditingProfile(p)}
+                                    onBuildNow={handleBuildNow}
+                                    isTestingProfileId={testingProfile}
+                                    testProgress={testProgress}
+                                    requestConfirm={handleRequestConfirm}
+                                    speakers={speakers || []}
+                                    isExpanded={expandedVoiceId === voice.id}
+                                    onToggleExpand={() => setExpandedVoiceId(expandedVoiceId === voice.id ? null : voice.id)}
+                                />
+                            ))}
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* New Voice Modal */}
+            {isCreateModalOpen && (
                 <div style={{
                     position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0,0,0,0.8)',
+                    inset: 0,
+                    zIndex: 1000,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 1000,
-                    backdropFilter: 'blur(8px)'
+                    background: 'rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(4px)'
                 }}>
-                    <div className="glass-panel animate-in" style={{
-                        width: '90%',
-                        maxWidth: '600px',
-                        padding: '2rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1.5rem'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <FileEdit color="var(--accent)" size={20} />
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Edit Narrator: {editingProfile.name}</h3>
-                            </div>
-                            <button onClick={() => setEditingProfile(null)} className="btn-ghost">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="input-group">
-                            <label>Narrator Name</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="text"
-                                    value={editedName}
-                                    onChange={(e) => setEditedName(e.target.value)}
-                                    placeholder="Enter narrator name..."
-                                    style={{
-                                        fontSize: '1.1rem',
-                                        fontWeight: 600,
-                                        background: 'rgba(255,255,255,0.1)',
-                                        borderRadius: '8px',
-                                        padding: '10px 14px',
-                                        flex: 1
-                                    }}
-                                />
-                                {editedName.trim() !== editingProfile.name && editedName.trim() !== '' && (
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                        Name changed
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="input-group">
-                            <label>The narrative text used for voice previews</label>
-                            <textarea
-                                value={testText}
-                                onChange={(e) => setTestText(e.target.value)}
-                                style={{ minHeight: '150px', lineHeight: '1.5', resize: 'vertical' }}
-                                placeholder="Enter preview text..."
+                    <motion.div 
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        style={{
+                            width: '400px',
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            padding: '24px',
+                            boxShadow: 'var(--shadow-lg)',
+                            border: '1px solid var(--border)'
+                        }}
+                    >
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '8px' }}>Create New Voice</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                            Give your voice a name. You can add variants and audio samples once it's created.
+                        </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>VOICE NAME</label>
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="e.g. Victor the Vampire"
+                                value={newVoiceName}
+                                onChange={(e) => setNewVoiceName(e.target.value)}
+                                className="form-input"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newVoiceName.trim()) {
+                                        // Trigger creation
+                                    }
+                                }}
                             />
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button
-                                onClick={handleResetTestText}
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button 
+                                onClick={() => setIsCreateModalOpen(false)}
                                 className="btn-ghost"
-                                disabled={isSavingText}
-                                style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
                             >
-                                <RotateCcw size={14} /> Reset Narrative
+                                Cancel
                             </button>
-                            <button onClick={() => setEditingProfile(null)} className="btn-ghost" disabled={isSavingText}>Cancel</button>
-                            <button
-                                onClick={handleSaveTestText}
+                            <button 
+                                disabled={!newVoiceName.trim() || isCreatingVoice}
+                                onClick={async () => {
+                                    setIsCreatingVoice(true);
+                                    try {
+                                        const resp = await fetch('/api/speakers', {
+                                            method: 'POST',
+                                            body: new URLSearchParams({ name: newVoiceName.trim() })
+                                        });
+                                        if (resp.ok) {
+                                            setIsCreateModalOpen(false);
+                                            setNewVoiceName('');
+                                            fetchSpeakers();
+                                        }
+                                    } finally {
+                                        setIsCreatingVoice(false);
+                                    }
+                                }}
                                 className="btn-primary"
-                                disabled={isSavingText || !editedName.trim()}
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
                             >
-                                {isSavingText ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
-                                {isSavingText ? 'Saving Changes...' : 'Save Changes'}
+                                {isCreatingVoice ? 'Creating...' : 'Create Voice'}
                             </button>
                         </div>
-                    </div>
+                    </motion.div>
                 </div>
             )}
+
+            {/* Recording Guide Drawer */}
+            <Drawer 
+                isOpen={showGuide} 
+                onClose={() => setShowGuide(false)} 
+                title="Recording Guide"
+            >
+                <RecordingGuide />
+            </Drawer>
+
+            {/* Script Editor Drawer */}
+            <Drawer
+                isOpen={!!editingProfile}
+                onClose={() => setEditingProfile(null)}
+                title={`Edit Script: ${editingProfile?.variant_name || editingProfile?.name || ''}`}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>PREVIEW TEXT SCRIPT</label>
+                            <button 
+                                onClick={handleResetTestText} 
+                                className="btn-ghost"
+                                style={{ fontSize: '0.7rem', height: '28px', padding: '0 8px' }}
+                            >
+                                <RotateCcw size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                                Reset to Default
+                            </button>
+                        </div>
+                        <textarea
+                            value={testText}
+                            onChange={(e) => setTestText(e.target.value)}
+                            style={{
+                                width: '100%',
+                                minHeight: '200px',
+                                padding: '1rem',
+                                borderRadius: '12px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)',
+                                color: 'var(--text)',
+                                fontSize: '0.95rem',
+                                lineHeight: '1.6',
+                                resize: 'vertical',
+                                marginBottom: '1.5rem'
+                            }}
+                        />
+                        <button
+                            onClick={handleSaveTestText}
+                            disabled={isSavingText}
+                            className="btn-primary"
+                            style={{ width: '100%', height: '44px', borderRadius: '12px', justifyContent: 'center' }}
+                        >
+                            {isSavingText ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    Saving Changes...
+                                </>
+                            ) : (
+                                "Save Script"
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </Drawer>
+
+            {/* Global Confirm Modal */}
+            <ConfirmModal
+                isOpen={!!confirmConfig}
+                title={confirmConfig?.title || ''}
+                message={confirmConfig?.message || ''}
+                isDestructive={confirmConfig?.isDestructive}
+                onConfirm={() => {
+                    confirmConfig?.onConfirm();
+                    setConfirmConfig(null);
+                }}
+                onCancel={() => setConfirmConfig(null)}
+            />
         </div>
     );
 };

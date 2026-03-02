@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, FileText, CheckCircle, Clock, AlertTriangle, Edit3, Trash2, GripVertical, Zap, Image as ImageIcon, ArrowUpDown, CheckSquare, Square, MoreVertical, RefreshCw, Download, Video, Loader2 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { api } from '../api';
@@ -6,19 +7,20 @@ import type { Project, Chapter, Job, Audiobook, SpeakerProfile } from '../types'
 import { ChapterEditor } from './ChapterEditor';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { CharactersTab } from './CharactersTab';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ProjectViewProps {
-  projectId: string;
   jobs: Record<string, Job>;
   speakerProfiles: SpeakerProfile[];
-  onBack: () => void;
-  onNavigateToQueue: () => void;
   onOpenPreview: (filename: string) => void;
   refreshTrigger?: number;
   segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speakerProfiles, onBack, onNavigateToQueue, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles, onOpenPreview, refreshTrigger = 0, segmentUpdate }) => {
+  const { projectId } = useParams() as { projectId: string };
+  const navigate = useNavigate();
+  
   const [project, setProject] = useState<Project | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   const [newFile, setNewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   const loadData = async () => {
     try {
@@ -60,7 +70,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       setChapters(chapsData);
       
       // Look for assembled audiobooks matching this project's name
-      if (projData) {
+      if (projData && audiobooksData) {
           const projectM4bs = audiobooksData.filter((a: Audiobook) => a.filename.includes(projData.name));
           setAvailableAudiobooks(projectM4bs);
       }
@@ -150,18 +160,26 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   };
 
   const handleDeleteChapter = async (chapterId: string) => {
-    console.log("handleDeleteChapter called for:", chapterId);
-    if (window.confirm("Are you sure you want to delete this chapter?")) {
-      try {
-        const res = await api.deleteChapter(chapterId);
-        console.log("Delete API response:", res);
-        await loadData();
-        console.log("Data reloaded after delete");
-      } catch (e) {
-        console.error("Delete failed", e);
-        alert("Failed to delete chapter. Check console for details.");
+    setConfirmConfig({
+      title: 'Delete Chapter',
+      message: 'Are you sure you want to delete this chapter? This will permanently remove all text and generated audio.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.deleteChapter(chapterId);
+          await loadData();
+        } catch (e) {
+          console.error("Delete failed", e);
+          setConfirmConfig({
+            title: 'Delete Failed',
+            message: 'Failed to delete chapter. Please check the console for details.',
+            onConfirm: () => setConfirmConfig(null),
+            isDestructive: false,
+            confirmText: 'OK'
+          });
+        }
       }
-    }
+    });
   };
 
   const formatLength = (seconds: number) => {
@@ -201,10 +219,22 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
 
   const handleQueueChapter = async (chap: Chapter) => {
     if (chap.char_count > 50000) {
-        const proceed = window.confirm(`This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`);
-        if (!proceed) return;
+        setConfirmConfig({
+            title: 'Large Chapter Warning',
+            message: `This chapter is quite long (${chap.char_count.toLocaleString()} characters). Generating audio for very large chapters in a single job may cause memory issues or take a long time to recover if interrupted.\n\nIt is recommended to split this chapter manually into smaller parts.\n\nDo you wish to queue it anyway?`,
+            isDestructive: false,
+            confirmText: 'Queue Anyway',
+            onConfirm: () => {
+                setConfirmConfig(null);
+                executeQueue(chap);
+            }
+        });
+        return;
     }
-    setSubmitting(true);
+    executeQueue(chap);
+  };
+
+  const executeQueue = async (chap: Chapter) => {
     try {
         await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
         loadData();
@@ -216,14 +246,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
   };
 
   const handleResetChapterAudio = async (chapterId: string) => {
-    if (window.confirm("Reset audio for this chapter? Physical files will be deleted and status reset.")) {
-      try {
-        await api.resetChapter(chapterId);
-        loadData();
-      } catch (e) {
-        console.error("Reset failed", e);
+    setConfirmConfig({
+      title: 'Reset Chapter Audio',
+      message: 'Reset audio for this chapter? Physical files will be deleted and status reset.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.resetChapter(chapterId);
+          loadData();
+        } catch (e) {
+          console.error("Reset failed", e);
+        }
       }
-    }
+    });
   };
 
   const handleExportSample = async (chapter: Chapter) => {
@@ -274,7 +309,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
               await api.addProcessingQueue(projectId, chap.id, 0, selectedVoice || undefined);
           }
           loadData();
-          onNavigateToQueue();
+          navigate('/queue');
       } catch (e) {
           console.error("Failed to enqueue all", e);
           alert("Some chapters failed to queue.");
@@ -333,7 +368,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                   setEditingChapterId(null);
                   loadData();
               }}
-              onNavigateToQueue={onNavigateToQueue}
+              onNavigateToQueue={() => navigate('/queue')}
               selectedVoice={selectedVoice}
               onVoiceChange={setSelectedVoice}
               onNext={nextChapterId ? () => setEditingChapterId(nextChapterId) : undefined}
@@ -394,7 +429,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
         {/* Project Metadata */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <button onClick={onBack} className="btn-ghost" style={{ padding: '0.5rem', marginLeft: '-0.5rem' }}>
+                <button onClick={() => navigate('/')} className="btn-ghost" style={{ padding: '0.5rem', marginLeft: '-0.5rem' }}>
                     <ArrowLeft size={20} />
                 </button>
                 <div style={{ background: 'var(--surface-light)', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'inline-block' }}>
@@ -465,32 +500,14 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
 
       {/* Assembly Progress */}
       {activeAssemblyJob && (
-          <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
+          <div style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: '12px', padding: '1.5rem', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontWeight: 600 }}>Assembling {project.name}...</h3>
+                  <h3 style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Assembling {project.name}...</h3>
                   <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                       {Math.round(activeAssemblyJob.progress * 100)}%
                   </div>
               </div>
-              <div style={{ width: '100%', height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${activeAssemblyJob.progress * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  ETA: {activeAssemblyJob.eta_seconds ? `${Math.floor(activeAssemblyJob.eta_seconds / 60)}m ${activeAssemblyJob.eta_seconds % 60}s` : 'Calculating...'}
-              </div>
-          </div>
-      )}
-
-      {/* Assembly Progress */}
-      {activeAssemblyJob && (
-          <div style={{ background: 'var(--surface-light)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontWeight: 600 }}>Assembling {project.name}...</h3>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      {Math.round(activeAssemblyJob.progress * 100)}%
-                  </div>
-              </div>
-              <div style={{ width: '100%', height: '8px', background: 'var(--surface)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '8px', background: 'rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${activeAssemblyJob.progress * 100}%`, background: 'var(--accent)', transition: 'width 0.3s' }} />
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
@@ -500,9 +517,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
       )}
 
       {finishedAssemblyJob && !activeAssemblyJob && (
-          <div style={{ background: 'var(--success-muted)', color: '#fff', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ background: 'var(--surface)', color: 'var(--success-text)', borderRadius: '12px', padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--success)' }}>
               <CheckCircle size={20} />
-              <span>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
+              <span style={{ fontWeight: 600 }}>Audiobook assembled successfully! {finishedAssemblyJob.output_mp3}</span>
           </div>
       )}
 
@@ -627,7 +644,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                   cursor: 'grab',
                   background: 'var(--surface)'
                 }}
-                whileDrag={{ background: 'var(--surface-alt)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50, cursor: 'grabbing' }}
+                whileDrag={{ background: 'var(--surface-alt)', boxShadow: 'var(--shadow-lg)', zIndex: 50, cursor: 'grabbing' }}
                 dragListener={!isAssemblyMode}
                 onClick={() => {
                     if (isAssemblyMode && chap.audio_status === 'done') {
@@ -780,20 +797,25 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                     }
                     
                     if (chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode) {
+                        const audioPath = chap.audio_file_path;
+                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                        
                         return (
                             <audio 
                                 controls 
-                                src={`/projects/${projectId}/audio/${chap.audio_file_path}`} 
-                                onError={(e) => {
-                                    const target = e.target as HTMLAudioElement;
-                                    if (target.src.includes(`/projects/${projectId}/audio/`)) {
-                                        target.src = `/out/xtts/${chap.audio_file_path}`;
-                                    }
-                                }}
+                                key={chap.id}
                                 style={{ height: '30px', width: '100%', maxWidth: '600px' }}
                                 onClick={e => e.stopPropagation()}
                                 onPointerDown={e => e.stopPropagation()} 
-                            />
+                            >
+                                <source src={`/projects/${projectId}/audio/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/projects/${projectId}/audio/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/projects/${projectId}/audio/${mp3Path}`} />}
+                                <source src={`/out/xtts/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                            </audio>
                         );
                     }
                     
@@ -894,8 +916,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                           <RefreshCw size={14} /> Reset Audio
                         </button>
                         <button 
-                          className="btn-ghost" 
-                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem', color: 'var(--error)' }}
+                          className="btn-danger" 
+                          style={{ width: '100%', justifyContent: 'flex-start', padding: '0.5rem', fontSize: '0.8rem' }}
                           onClick={() => { setOpenMenuId(null); handleDeleteChapter(chap.id); }}
                         >
                           <Trash2 size={14} /> Delete Chapter
@@ -977,8 +999,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                             >
                                 {newFile ? newFile.name : 'Choose .txt File...'}
                             </button>
-                            {newFile && (
-                                <button type="button" onClick={() => setNewFile(null)} className="btn-ghost" style={{ padding: '0.5rem', color: 'var(--error-muted)' }}>
+                             {newFile && (
+                                <button type="button" onClick={() => setNewFile(null)} className="btn-danger" style={{ padding: '0.5rem' }}>
                                     <Trash2 size={16} />
                                 </button>
                             )}
@@ -1079,7 +1101,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                     flexShrink: 0,
                                     borderRadius: '8px',
                                     border: isDraggingEditCover ? '2px solid var(--accent)' : '2px dashed var(--border)',
-                                    background: isDraggingEditCover ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface-light)',
+                                    background: isDraggingEditCover ? 'var(--accent-glow)' : 'var(--surface-light)',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
@@ -1093,11 +1115,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                 {editCoverPreview ? (
                                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                         <img src={editCoverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="New Cover Preview" />
-                                        {isDraggingEditCover && (
-                                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <ImageIcon size={24} color="white" />
-                                            </div>
-                                        )}
+                                            {isDraggingEditCover && (
+                                                <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-glow)', opacity: 0.8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <ImageIcon size={24} color="white" />
+                                                </div>
+                                            )}
                                     </div>
                                 ) : (
                                     <div style={{ textAlign: 'center', padding: '0.5rem' }}>
@@ -1129,8 +1151,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
                                         <button 
                                             type="button" 
                                             onClick={() => { setEditCover(null); setEditCoverPreview(null); }} 
-                                            className="btn-ghost" 
-                                            style={{ padding: '0.5rem', color: 'var(--error-muted)' }}
+                                            className="btn-danger" 
+                                            style={{ padding: '0.5rem' }}
                                         >
                                             <Trash2 size={16} />
                                         </button>
@@ -1155,6 +1177,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, jobs, speak
             </motion.div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
+      />
     </div>
   );
 };

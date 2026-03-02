@@ -222,11 +222,19 @@ def cleanup_and_reconcile():
     return reset_ids
 
 
-def get_speaker_wavs(profile_name: str) -> Optional[str]:
-    """Returns a comma-separated string of absolute paths for the given profile."""
+def get_speaker_wavs(profile_name_or_id: str) -> Optional[str]:
+    """Returns a comma-separated string of absolute paths for the given profile or speaker ID."""
+    from .db import get_speaker
 
-    # User choice or system default
-    target_profile = profile_name if profile_name else "Dark Fantasy"
+    # Resolve speaker ID to profile name if necessary
+    target_profile = profile_name_or_id if profile_name_or_id else "Dark Fantasy"
+
+    # Heuristic: if it looks like a UUID, check if it's a speaker ID
+    if len(target_profile) == 36 and "-" in target_profile:
+        spk = get_speaker(target_profile)
+        if spk and spk["default_profile_name"]:
+            target_profile = spk["default_profile_name"]
+
     p = VOICES_DIR / target_profile
 
     if not p.exists() or not p.is_dir():
@@ -244,9 +252,16 @@ def get_speaker_wavs(profile_name: str) -> Optional[str]:
     return ",".join([str(w.absolute()) for w in wavs])
 
 
-def get_speaker_settings(profile_name: str) -> dict:
-    """Returns metadata (like speed and test text) for a profile, falling back to global settings."""
-    target_profile = profile_name if profile_name else "Dark Fantasy"
+def get_speaker_settings(profile_name_or_id: str) -> dict:
+    """Returns metadata (like speed and test text) for a profile or speaker ID, falling back to global settings."""
+    from .db import get_speaker
+    target_profile = profile_name_or_id if profile_name_or_id else "Dark Fantasy"
+
+    # Resolve speaker ID to profile name if necessary
+    if len(target_profile) == 36 and "-" in target_profile:
+        spk = get_speaker(target_profile)
+        if spk and spk["default_profile_name"]:
+            target_profile = spk["default_profile_name"]
     p = VOICES_DIR / target_profile
 
     defaults = get_settings()
@@ -261,7 +276,9 @@ def get_speaker_settings(profile_name: str) -> dict:
 
     res = {
         "speed": float(defaults.get("xtts_speed", 1.0)),
-        "test_text": default_test_text
+        "test_text": default_test_text,
+        "speaker_id": None,
+        "variant_name": None
     }
 
     p = VOICES_DIR / target_profile
@@ -274,9 +291,30 @@ def get_speaker_settings(profile_name: str) -> dict:
                 res["speed"] = meta["speed"]
             if "test_text" in meta:
                 res["test_text"] = meta["test_text"]
+            if "speaker_id" in meta:
+                res["speaker_id"] = meta["speaker_id"]
+            if "variant_name" in meta:
+                res["variant_name"] = meta["variant_name"]
         except: pass
 
     return res
+
+def update_speaker_settings(profile_name: str, **updates):
+    """Updates metadata for a profile in its profile.json."""
+    p = VOICES_DIR / profile_name
+    if not p.exists():
+        return False
+
+    meta_path = p / "profile.json"
+    meta = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except: pass
+
+    meta.update(updates)
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return True
 
 def worker_loop(q: "queue.Queue[str]"):
     while True:

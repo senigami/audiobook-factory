@@ -14,56 +14,58 @@ describe('VoicesTab', () => {
         testProgress: {}
     }
 
-    it('renders all narrator profiles', () => {
-        render(<VoicesTab {...mockProps} />)
+    beforeEach(() => {
+        vi.clearAllMocks()
+        // Provide a default empty speakers array for all tests
+        global.fetch = vi.fn((url: string) => {
+            if (url === '/api/speakers') {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success' }) });
+        }) as any
+    })
+
+    it('renders all narrator profiles', async () => {
+        await act(async () => {
+            render(<VoicesTab {...mockProps} />)
+        })
         expect(screen.getByText('Narrator1')).toBeInTheDocument()
         expect(screen.getByText('Narrator2')).toBeInTheDocument()
     })
 
-    it('highlights the default narrator star', () => {
-        render(<VoicesTab {...mockProps} />)
-        // Narrator2 is default. The button should have "Default Narrator" title
-        const defaultBtn = screen.getByTitle('Default Narrator')
-        expect(defaultBtn).toBeInTheDocument()
-    })
-
-    it('calls fetch when setting a new default', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
-        global.fetch = fetchMock
-
-        render(<VoicesTab {...mockProps} />)
-
-        // Find the "Set as Default" button for Narrator1
-        const setBtn = screen.getByTitle('Set as Default')
-        fireEvent.click(setBtn)
-
-        expect(fetchMock).toHaveBeenCalledWith('/api/settings/default-speaker', expect.anything())
-    })
-
-    it('opens edit modal and allows renaming', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'success' }) })
-        global.fetch = fetchMock
-
-        render(<VoicesTab {...mockProps} />)
-
-        // Open modal for Narrator1
-        const editBtn = screen.getAllByTitle('Edit Sample Text')[0]
-        fireEvent.click(editBtn)
-
-        // Find name input and change it
-        const nameInput = screen.getByDisplayValue('Narrator1')
-        fireEvent.change(nameInput, { target: { value: 'Super Narrator' } })
-
-        // Click Save Changes
-        const saveBtn = screen.getByText('Save Changes')
+    it('shows the default narrator pill', async () => {
         await act(async () => {
-            fireEvent.click(saveBtn)
+            render(<VoicesTab {...mockProps} />)
         })
+        
+        // Expand card to see variant tabs
+        const voiceHeader = screen.getByText('Narrator2')
+        fireEvent.click(voiceHeader)
+        
+        expect(screen.getByText('Default')).toBeInTheDocument()
+    })
 
-        // Verify rename fetch call
-        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/speaker-profiles/Narrator1/rename'), expect.objectContaining({
-            method: 'POST',
-            body: expect.any(URLSearchParams)
-        }))
+
+    it('opens profile details and allows building voice', async () => {
+
+        render(<VoicesTab {...mockProps} />)
+
+        // Find the Voice card (it mocks unassigned names as the voice name)
+        const voiceHeader = screen.getByText('Narrator1')
+        fireEvent.click(voiceHeader)
+
+        // Now "Edit Script" or "Build Voice" should be visible in expanded view
+        const buildBtn = await screen.findByText(/Rebuild/i)
+        expect(buildBtn).toBeInTheDocument()
+    })
+
+    it('shows delete option in ActionMenu', async () => {
+        render(<VoicesTab {...mockProps} />)
+
+        // Open Voice ActionMenu
+        const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
+        fireEvent.click(actionMenus[0])
+
+        expect(screen.getByText('Delete Voice')).toBeInTheDocument()
     })
 })

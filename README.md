@@ -1,184 +1,132 @@
-# 🎧 Audiobook Studio
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Audiobook Studio Hero Banner" width="50%">
+  <img src="docs/assets/audiobook-studio.png" alt="Audiobook Studio Hero Banner" width="50%">
+</p>
 
-Audiobook Studio is a modern, self-hosted web dashboard for turning chapter-marked text files into high-quality audiobook audio using **local AI speech synthesis**.
+# Audiobook Studio
 
-- **XTTS-v2 (Native Voice Cloning)**: Clone any voice from just 60 seconds of audio.
-- **Modern Glassmorphism UI**: High-performance dashboard with deep customization.
-- **Per-Chapter Preview**: Preview and analyze text segments before synthesis.
-- **Auto-Tuning ETA**: Progress tracking that learns from your hardware's speed.
-- **Interactive Assembly**: Smart interface for renaming, reordering, and building final M4B files.
+### Professional AI Production Pipeline for Long-Form Narration
 
-![Audiobook Studio Dashboard](docs/assets/home.jpg)
+[![Build Status](https://github.com/senigami/audiobook-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/senigami/audiobook-studio/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org/)
 
-> [!TIP]
-> **View Live Project Overview**: 🎙️ [Audiobook Studio Live Showcase](https://senigami.github.io/audiobook-studio/)
-> _(Includes an embedded audio player and interactive feature tour)_
+**Audiobook Studio** is a high-performance **AI Voice Production Studio** and **Narration Engine** designed for turning manuscripts into professional audiobooks using local AI speech synthesis. No cloud subscriptions, no data harvesting—just studio-grade output running entirely on your hardware.
 
-It runs entirely locally and supports queued batch processing, live progress tracking, and browser-based audio preview.
-
-No cloud required. No subscriptions. Total privacy.
+[**Get Started**](#-installation) | [**Documentation**](docs/index.html) | [**Live Showcase**](https://senigami.github.io/audiobook-studio/)
 
 ---
 
-# 🚀 Features
+## 🎙️ The Narration Engine
 
-- 🎙 **Voice Cloning**: Use XTTS-v2 to narrate with your own cloned voice profiles.
-- 📝 **Per-Chapter Analysis**: Dedicated modal for previewing raw text vs. engine-processed text.
-- 🖥 **System Console**: Integrated terminal for real-time logs, togglable from the global header.
-- 📊 **Live Auto-Tuning ETA**: Progress bars that adapt to your hardware performance in real-time.
-- 🎧 **Interactive Assembly**: Rename, skip, or reorder chapters before final assembly into M4B.
-- 🔊 **MP3/WAV Support**: High-fidelity WAV generation with automatic MP3 backfilling.
-- 🧹 **Job Management**: One-click clearing of completed jobs and reconciliation of existing files.
+Audiobook Studio is more than just a TTS wrapper. It's a professional **Audiobook Production Pipeline** that gives you granular control over every word.
 
-![Interactive Audiobook Assembly](docs/assets/export.png)
+- **Multi-Voice Scripting**: Go beyond single-narrator books. Assign different studio voices to specific characters or paragraphs to create an immersive, multi-cast experience.
+- **Segment-Level Performance Control**: Don't throw away a 20-minute chapter because of one mispronounced word. Fine-tune and regenerate audio at the **paragraph or segment level** until every inflection is perfect.
+- **XTTS-v2 Native Voice Cloning**: Clone any voice from a 60-second sample with studio-grade accuracy and local privacy.
+- **Multi-Project Studio**: Manage an entire library of concurrent productions. Each project maintains its own manuscript, unique voice cast, and generated assets.
+- **Hardware-Aware Pipeline**: An auto-tuning ETA system that learns from your GPU/CPU throughput to give you dead-accurate completion times.
 
 ---
 
-# 🧰 Requirements
+## 🧩 Feature Suite
 
-## System Requirements
+| 🎙️ Multi-Voice Scripting                                 | 📚 Long-Form Support                                      | ⚙️ Pipeline Automation                            |
+| :------------------------------------------------------- | :-------------------------------------------------------- | :------------------------------------------------ |
+| Assign unique voices to specific dialogue or paragraphs. | Designed for 100k+ word manuscripts with stable batching. | Automatic splitting, normalization, and assembly. |
 
-- macOS, Linux, or Windows
-- Python 3.11+ (Required for XTTS)
-- `ffmpeg` (Required for MP3 and M4B generation)
+| 🧪 Segment Regeneration                                      | 🚀 Batch Processing                                            | 📊 Real-Time Feedback                                         |
+| :----------------------------------------------------------- | :------------------------------------------------------------- | :------------------------------------------------------------ |
+| Fine-tune and regenerate segments without re-doing chapters. | Queue dozens of chapters and track them with auto-tuning ETAs. | Integrated console for live engine logs and hardware metrics. |
 
 ---
 
-# 📦 Installation
+## 🛠️ System Requirements
 
-## 1️⃣ Clone Repository
+- **OS**: macOS, Linux, or Windows
+- **Python**: 3.11+ (Strictly required for XTTS)
+- **Node.js**: 18+ (For frontend dashboard)
+- **Hardare**: NVIDIA GPU (8GB+ VRAM) highly recommended for synthesis speed.
+- **System Tools**: `ffmpeg` (Required for MP3 and M4B generation)
+
+---
+
+## 📦 Installation
+
+### 1️⃣ Clone the Studio
 
 ```bash
 git clone https://github.com/senigami/audiobook-studio.git
 cd audiobook-studio
 ```
 
----
-
-## 2️⃣ Install System Dependencies
-
-### macOS (Homebrew)
+### 2️⃣ Configure the Environment
 
 ```bash
-brew install python@3.11 ffmpeg
-```
-
-### Ubuntu / Debian
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv ffmpeg
-```
-
----
-
-## 3️⃣ Create Dashboard Virtual Environment
-
-```bash
+# Setup Backend
 python3.11 -m venv venv
 source venv/bin/activate
-pip install -U pip
 pip install -r requirements.txt
-```
 
----
-
-# 🎙 XTTS Setup (Voice Cloning Engine)
-
-Create a separate environment for XTTS (Python 3.11 is required):
-
-```bash
+# Setup XTTS Engine
 python3.11 -m venv ~/xtts-env
 source ~/xtts-env/bin/activate
-pip install -U pip
 pip install -r requirements-xtts.txt
 ```
 
-### 🎤 Voice Profiles
+### 3️⃣ Add Voice Profiles
 
-Place your voice samples in the `voices/` directory:
+Place 60-second `.wav` samples in `voices/`:
 
 ```text
-    voices/
-      Default/
-        profile.json
-        speaker.wav
-      MyVoice/
-        speaker.wav
+voices/
+  Narrator-A/
+    speaker.wav
+  Narrator-B/
+    speaker.wav
 ```
-
-The system will automatically detect these profiles in the Dashboard.
 
 ---
 
-# ▶ Running Audiobook Studio
+## ▶ Running the Studio
 
-1. **Start the backend**:
+1. **Start the Engine**:
 
 ```bash
-cd audiobook-studio
 source venv/bin/activate
 uvicorn run:app --port 8123
 ```
 
-2. **Access the Dashboard**:
-   Open `http://127.0.0.1:8123` in your browser.
+2. **Access the Lab**:
+   Navigate to `http://127.0.0.1:8123` to enter the production dashboard.
 
 ---
 
-# 📖 Usage
+## 🧪 Quality Control
 
-1.  **Upload**: Upload your `.txt` manuscript.
-2.  **Split**: Automatically split the file into chapters.
-3.  **Preview**: Use the **Preview & Analyze** modal from the chapter card's menu to check text processing.
-4.  **Synthesize**: Select a Voice Profile and click **Start Batch**.
-5.  **Assemble**: Once finished, go to the **Library** tab to assemble your chapters into a final M4B audiobook.
-
----
-
-# 🧪 Testing
-
-Audiobook Studio includes a comprehensive suite of automated tests covering text sanitization, API endpoints, and job logic.
+Audiobook Studio maintains a rigorous automated testing suite ensuring every narration is technically perfect.
 
 ```bash
-source venv/bin/activate
+# Run full test suite
 pytest -v
+npm test --prefix frontend
 ```
 
-### 🛠️ Quality Control & CI
+---
 
-We use **GitHub Actions** to ensure every push and pull request meets our quality standards. The following checks are performed:
+## 🔐 Privacy & Security
 
-1.  **Backend Linting:** Uses `ruff` to enforce Python code style.
-2.  **Backend Tests:** Uses `pytest` for unit and integration tests.
-3.  **Frontend Linting:** Uses `eslint` for React/TypeScript best practices.
-4.  **Frontend Tests:** Uses `vitest` for component testing.
-5.  **Build Check:** Ensures the React frontend builds successfully.
-
-#### Local Pre-push Hook
-
-You can install a local git hook to run these checks before every push:
-
-```bash
-./scripts/install_hooks.sh
-```
-
-This prevents pushing broken code to the repository.
+Designed for **local-first production**. Audiobook Studio never uploads your manuscripts or voice clones to external servers. Your creative IP stays on your machine.
 
 ---
 
-# 🔐 Security
+## 📜 License
 
-Designed for **local use only**. Do not expose directly to the public internet without proper authentication and reverse proxy setup.
-
----
-
-# 📜 License
-
-MIT License.
+Distributed under the **MIT License**. See `LICENSE` for more information.
 
 ---
 
-# 🎧 Why Audiobook Studio?
-
-Because turning a manuscript into a high-quality audiobook shouldn't require a cloud subscription or technical wizardry—just a local machine and the right machinery.
+<p align="center">
+  <i>"Professional AI Production Pipeline for Long-Form Narration"</i>
+</p>

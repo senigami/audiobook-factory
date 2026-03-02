@@ -17,27 +17,35 @@ interface ChapterCardProps {
     isXttsWav: boolean;
   };
   makeMp3?: boolean;
+  requestConfirm?: (config: {
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  }) => void;
 }
 
 const getStatusConfig = (status: Status) => {
   const config = {
     queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
     running: { icon: Clock, color: 'var(--accent)', label: 'Processing' },
-    done: { icon: CheckCircle2, color: 'var(--success)', label: 'Ready' },
-    failed: { icon: AlertCircle, color: 'var(--error)', label: 'Failed' },
+    done: { icon: CheckCircle2, color: 'var(--success-text)', label: 'Ready' },
+    failed: { icon: AlertCircle, color: 'var(--error-text)', label: 'Failed' },
     cancelled: { icon: AlertCircle, color: 'var(--text-muted)', label: 'Cancelled' },
+    error: { icon: AlertCircle, color: 'var(--error-text)', label: 'Error' },
   };
 
   return config[status] || config.queued;
 };
 
-export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo, makeMp3 }) => {
+export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActive, onClick, onRefresh, onOpenPreview, statusInfo, makeMp3, requestConfirm }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(job?.custom_title || filename);
   const [showMenu, setShowMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const status = job?.status || 'queued';
+  const status = job?.status === 'failed' ? 'error' : (job?.status || 'queued');
 
   useEffect(() => {
     if (!showMenu) return;
@@ -146,7 +154,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 autoFocus
                 value={editedTitle}
                 onChange={e => setEditedTitle(e.target.value)}
-                style={{ background: 'var(--surface)', border: '1px solid var(--accent)', color: '#fff', fontSize: '0.8rem', padding: '2px 4px', width: '100%' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--text-primary)', fontSize: '0.8rem', padding: '2px 4px', width: '100%' }}
               />
               <button type="submit" style={{ background: 'none', border: 'none', color: 'var(--success)', padding: 0 }}><Save size={14} /></button>
               <button onClick={() => setIsEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--error)', padding: 0 }}><X size={14} /></button>
@@ -300,7 +308,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 <button
                   onClick={async () => {
                     setShowMenu(false);
-                    if (confirm(`Reset audio for ${filename}? This will delete generated WAV/MP3 files and reset status, but keep the text file.`)) {
+                    const msg = `Reset audio for ${filename}? This will delete generated WAV/MP3 files and reset status, but keep the text file.`;
+                    if (requestConfirm) {
+                      requestConfirm({
+                        title: 'Reset Chapter Audio',
+                        message: msg,
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          try {
+                            await api.resetChapter(filename);
+                            onRefresh?.();
+                          } catch (err) {
+                            console.error('Reset failed', err);
+                          }
+                        }
+                      });
+                    } else if (confirm(msg)) {
                       try {
                         await api.resetChapter(filename);
                         onRefresh?.();
@@ -318,7 +341,22 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                 <button
                   onClick={async () => {
                     setShowMenu(false);
-                    if (confirm(`DELETE CHAPTER ${filename} permanently? This deletes the text file AND all audio files.`)) {
+                    const msg = `DELETE CHAPTER ${filename} permanently? This deletes the text file AND all audio files.`;
+                    if (requestConfirm) {
+                      requestConfirm({
+                        title: 'Delete Chapter',
+                        message: msg,
+                        isDestructive: true,
+                        onConfirm: async () => {
+                          try {
+                            await api.deleteChapter(filename);
+                            onRefresh?.();
+                          } catch (err) {
+                            console.error('Delete failed', err);
+                          }
+                        }
+                      });
+                    } else if (confirm(msg)) {
                       try {
                         await api.deleteChapter(filename);
                         onRefresh?.();
@@ -327,8 +365,8 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
                       }
                     }
                   }}
-                  className="btn-ghost"
-                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)', justifyContent: 'flex-start' }}
+                  className="btn-danger"
+                  style={{ width: '100%', textAlign: 'left', padding: '8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-start' }}
                   title="Permanently delete the chapter text file and all generated audio"
                 >
                   <Trash2 size={12} /> Delete Chapter
@@ -364,7 +402,7 @@ export const ChapterCard: React.FC<ChapterCardProps> = ({ job, filename, isActiv
         )}
 
         {job?.warning_count ? (
-          <span style={{ fontSize: '0.7rem', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--warning-text)', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <AlertCircle size={12} /> {job.warning_count} Warnings
           </span>
         ) : null}

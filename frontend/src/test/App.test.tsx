@@ -1,5 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import App from '../App'
+import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 describe('App', () => {
@@ -32,36 +33,49 @@ describe('App', () => {
           json: () => Promise.resolve([])
         })
       }
+      if (url === '/api/speakers') {
+        return Promise.resolve({
+          json: () => Promise.resolve([])
+        })
+      }
       return Promise.resolve({ json: () => Promise.resolve({}) })
     }) as any
   })
 
   it('renders without crashing and fetches initials', async () => {
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
     
     await waitFor(() => {
-      expect(screen.getByText('AUDIOBOOK')).toBeTruthy()
+      expect(screen.getByText(/Audiobook/i)).toBeTruthy()
     })
   })
 
   it('switches tabs', async () => {
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
     await waitFor(() => {
-        expect(screen.getByText('AUDIOBOOK')).toBeTruthy()
+        expect(screen.getByText(/Audiobook/i)).toBeTruthy()
     })
 
     const queueTab = screen.getByText('Queue')
     fireEvent.click(queueTab)
 
     await waitFor(() => {
-        expect(screen.getByText('The queue is currently empty.')).toBeTruthy()
+        expect(screen.getByText(/Queue is empty/i)).toBeTruthy()
     })
 
     const voicesTab = screen.getByText('Voices')
     fireEvent.click(voicesTab)
 
     await waitFor(() => {
-        expect(screen.getByText('Available Narrators')).toBeTruthy()
+        expect(screen.getByText(/Voices/i, { selector: 'h2' })).toBeTruthy()
     })
   })
 })

@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Plus, Trash2, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Book, Plus, Clock, User, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ActionMenu } from './ActionMenu';
+import { ConfirmModal } from './ConfirmModal';
 import type { Project } from '../types';
 import { api } from '../api';
 
 interface ProjectLibraryProps {
-    onSelectProject: (projectId: string) => void;
+    onSelectProject?: (projectId: string) => void;
 }
 
 export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject }) => {
+    const navigate = useNavigate();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     
@@ -19,10 +23,21 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     const [author, setAuthor] = useState('');
     const [coverFile, setCoverFile] = useState<File | null>(null);
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false);
-    const [importing, setImporting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Delete Confirmation State
+    const [deleteModal, setDeleteModal] = useState<{
+        isOpen: boolean;
+        projectId: string | null;
+        projectName: string | null;
+    }>({
+        isOpen: false,
+        projectId: null,
+        projectName: null
+    });
 
     const loadProjects = async () => {
         try {
@@ -84,7 +99,8 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                 setCoverFile(null);
                 setCoverPreview(null);
                 loadProjects();
-                onSelectProject(res.project_id);
+                onSelectProject?.(res.project_id);
+                navigate(`/project/${res.project_id}`);
             }
         } catch (e) {
             console.error(e);
@@ -93,39 +109,26 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
         }
     };
 
-    const handleDeleteProject = async (e: React.MouseEvent, id: string, name: string) => {
-        e.stopPropagation();
-        if (window.confirm(`Are you sure you want to delete the project '${name}' and all its chapters?`)) {
-            try {
-                await api.deleteProject(id);
-                loadProjects();
-            } catch (err) {
-                console.error("Delete failed", err);
-            }
+    const handleDeleteClick = (id: string, name: string) => {
+        setDeleteModal({
+            isOpen: true,
+            projectId: id,
+            projectName: name
+        });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteModal.projectId) return;
+        try {
+            await api.deleteProject(deleteModal.projectId);
+            loadProjects();
+        } catch (err) {
+            console.error("Delete failed", err);
+        } finally {
+            setDeleteModal({ isOpen: false, projectId: null, projectName: null });
         }
     };
 
-    const handleImport = async () => {
-        if (!window.confirm("This will scan for existing files in 'chapters_out' and 'xtts_audio' and create a new project for them. Continue?")) return;
-        setImporting(true);
-        try {
-            const res = await api.importLegacyData();
-            if (res.status === 'success') {
-                alert(res.message);
-                loadProjects();
-                if (res.project_id) {
-                    onSelectProject(res.project_id);
-                }
-            } else {
-                alert("Import failed: " + res.message);
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Import failed. Check console for details.");
-        } finally {
-            setImporting(false);
-        }
-    };
 
     const formatDate = (timestamp: number) => {
         return new Date(timestamp * 1000).toLocaleDateString(undefined, {
@@ -142,31 +145,126 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
     }
 
     return (
-        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minHeight: '100%' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: 600 }}>Library shelf</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Manage your audiobook projects</p>
+        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '3rem', minHeight: '100%' }}>
+            {/* Hero Section */}
+            <header style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '3rem',
+                margin: '1.5rem 0 0 0',
+                border: '1px solid var(--border)',
+                background: 'linear-gradient(135deg, var(--as-info-tint) 0%, var(--surface) 100%)',
+                borderRadius: 'var(--radius-panel)',
+                boxShadow: 'var(--shadow-md)',
+                flexWrap: 'wrap',
+                gap: '2rem'
+            }}>
+                <div style={{ flex: '1', minWidth: '300px', maxWidth: '640px' }}>
+                    <h2 style={{ 
+                        fontSize: '2.75rem', 
+                        fontWeight: 900, 
+                        letterSpacing: '-0.04em', 
+                        color: 'var(--text-primary)', 
+                        marginBottom: '0.75rem',
+                        lineHeight: 1.1 
+                    }}>
+                        Natural AI Audio Lab
+                    </h2>
+                    <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '2.5rem', fontWeight: 500 }}>
+                        Professional AI voice generation for creators and authors.
+                    </p>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button 
+                            onClick={() => setShowModal(true)}
+                            className="btn-primary" 
+                            style={{ padding: '0.85rem 2.5rem', fontSize: '1rem', borderRadius: 'var(--radius-button)' }}
+                        >
+                            <Plus size={20} strokeWidth={2.5} /> New Project
+                        </button>
+                        <button 
+                            className="btn-ghost" 
+                            style={{ 
+                                padding: '0.85rem 2rem', 
+                                fontSize: '1rem', 
+                                borderRadius: 'var(--radius-button)',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)'
+                            }}
+                            onClick={() => window.open('/docs', '_blank')}
+                        >
+                            View Docs
+                        </button>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button 
-                        onClick={handleImport}
-                        disabled={importing}
-                        className="btn-ghost" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)' }}
-                    >
-                        {importing ? <Loader2 size={18} className="animate-spin" /> : <Book size={18} />}
-                        Import Legacy Data
-                    </button>
-                    <button 
-                        onClick={() => setShowModal(true)}
-                        className="btn-primary" 
-                        style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                        <Plus size={18} /> New Project
-                    </button>
+                <div style={{ 
+                    flex: '1',
+                    minWidth: '280px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                    padding: '1rem'
+                }}>
+                    <div style={{
+                        position: 'relative',
+                        width: '100%',
+                        maxWidth: '360px',
+                        aspectRatio: '4/3',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <img 
+                            src="/logo.png" 
+                            alt="Audiobook Studio" 
+                            style={{ 
+                                height: '80%', 
+                                width: 'auto',
+                                filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.15))',
+                                position: 'relative', 
+                                zIndex: 1 
+                            }} 
+                        />
+                        {/* Status Tags / Decoration */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '10%',
+                            right: '0',
+                            background: 'var(--surface)',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            boxShadow: 'var(--shadow-md)',
+                            border: '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            zIndex: 2
+                        }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />
+                            Model: XTTS-v2
+                        </div>
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '15%',
+                            left: '5%',
+                            background: 'var(--surface)',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            boxShadow: 'var(--shadow-md)',
+                            border: '1px solid var(--border)',
+                            zIndex: 2
+                        }}>
+                            Status: Ready
+                        </div>
+                    </div>
                 </div>
             </header>
+
 
             {projects.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
@@ -185,55 +283,154 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                             key={project.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="glass-panel hover-lift"
-                            onClick={() => onSelectProject(project.id)}
+                            onMouseEnter={() => setHoveredProjectId(project.id)}
+                            onMouseLeave={() => setHoveredProjectId(null)}
+                            whileHover={{ y: -4, boxShadow: '0 12px 24px -10px rgba(0,0,0,0.15)' }}
+                            onClick={() => {
+                                onSelectProject?.(project.id);
+                                navigate(`/project/${project.id}`);
+                            }}
                             style={{ 
                                 cursor: 'pointer',
                                 display: 'flex', 
                                 flexDirection: 'column',
                                 overflow: 'hidden',
                                 padding: 0,
-                                position: 'relative'
+                                position: 'relative',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-card)',
+                                boxShadow: 'var(--shadow-sm)'
                             }}
                         >
                             <div style={{ 
-                                aspectRatio: '1/1', 
-                                background: 'var(--surface)', 
+                                aspectRatio: '2/3', 
+                                background: 'linear-gradient(135deg, var(--surface-alt) 0%, var(--surface) 100%)', 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 justifyContent: 'center',
-                                borderBottom: '1px solid var(--border)'
+                                borderBottom: '1px solid var(--border)',
+                                position: 'relative',
+                                overflow: 'hidden'
                             }}>
                                 {project.cover_image_path ? (
-                                    <img 
-                                        src={project.cover_image_path} 
-                                        alt={project.name} 
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                                    />
+                                    <>
+                                        {/* Background Layer (Blurred Bleed) */}
+                                        <img 
+                                            src={project.cover_image_path} 
+                                            alt="" 
+                                            style={{ 
+                                                position: 'absolute',
+                                                width: '120%', 
+                                                height: '120%', 
+                                                objectFit: 'cover',
+                                                filter: 'blur(15px) saturate(2) brightness(1.1) contrast(1.5)',
+                                                opacity: 0.22,
+                                                zIndex: 0
+                                            }} 
+                                        />
+                                        
+                                        {/* Glass Highlight Overlay */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, transparent 40%)',
+                                            zIndex: 1
+                                        }} />
+ 
+                                        {/* Gradient Overlay for Vignette Effect */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.1) 100%)',
+                                            zIndex: 2
+                                        }} />
+ 
+                                        {/* Foreground Layer (Contain) */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            padding: '12px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            zIndex: 3
+                                        }}>
+                                            <img 
+                                                src={project.cover_image_path} 
+                                                alt={project.name} 
+                                                style={{ 
+                                                    maxWidth: '100%', 
+                                                    maxHeight: '100%', 
+                                                    objectFit: 'contain',
+                                                    filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.2))',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid rgba(255,255,255,0.2)'
+                                                }} 
+                                            />
+                                        </div>
+                                    </>
                                 ) : (
-                                    <Book size={48} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+                                    <div style={{ 
+                                        width: '100%', 
+                                        height: '100%', 
+                                        display: 'flex', 
+                                        flexDirection: 'column',
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        gap: '12px',
+                                        background: 'linear-gradient(135deg, var(--as-info-tint) 0%, var(--surface) 100%)'
+                                    }}>
+                                        <div style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            opacity: 0.08,
+                                            background: `repeating-linear-gradient(45deg, var(--accent) 0, var(--accent) 1px, transparent 0, transparent 4px)`,
+                                            backgroundSize: '8px 8px'
+                                        }} />
+                                        <Book size={48} color="var(--accent)" style={{ opacity: 0.25, position: 'relative', zIndex: 1 }} />
+                                        <div style={{ position: 'relative', zIndex: 1, fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700, opacity: 0.6, letterSpacing: '0.05em' }}>
+                                            ADD COVER
+                                        </div>
+                                    </div>
                                 )}
+                                
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                                    animate={{ 
+                                        opacity: hoveredProjectId === project.id ? 1 : 0,
+                                        y: hoveredProjectId === project.id ? 0 : -20,
+                                        scale: hoveredProjectId === project.id ? 1 : 0.9
+                                    }}
+                                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                                    style={{ 
+                                        position: 'absolute', 
+                                        top: '12px', 
+                                        right: '12px', 
+                                        zIndex: 20,
+                                        pointerEvents: hoveredProjectId === project.id ? 'auto' : 'none'
+                                    }}
+                                >
+                                    <ActionMenu onDelete={() => handleDeleteClick(project.id, project.name)} />
+                                </motion.div>
                             </div>
-                            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={project.name}>
+                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface)', zIndex: 11 }}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }} title={project.name}>
                                     {project.name}
                                 </h3>
-                                {project.author && (
-                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <User size={12} /> {project.author}
+                                {project.author ? (
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                                        <User size={14} opacity={0.7} /> {project.author}
+                                    </p>
+                                ) : (
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        No author specified
                                     </p>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Clock size={12} /> {formatDate(project.updated_at)}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                                        <Clock size={14} opacity={0.7} /> {formatDate(project.updated_at)}
                                     </p>
-                                    <button 
-                                        className="btn-ghost" 
-                                        onClick={(e) => handleDeleteProject(e, project.id, project.name)}
-                                        style={{ padding: '4px', color: 'var(--error-muted)' }}
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
                                 </div>
                             </div>
                         </motion.div>
@@ -250,8 +447,18 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="glass-panel"
-                        style={{ width: '100%', maxWidth: '500px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', border: '1px solid var(--border)' }}
+                        style={{ 
+                            width: '100%', 
+                            maxWidth: '520px', 
+                            padding: '2.5rem', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '2rem', 
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            boxShadow: 'var(--shadow-lg)',
+                            border: '1px solid var(--border)'
+                        }}
                     >
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create New Project</h3>
                         <form onSubmit={handleCreateProject} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -268,7 +475,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         flexShrink: 0,
                                         borderRadius: '8px',
                                         border: isDragging ? '2px solid var(--accent)' : '2px dashed var(--border)',
-                                        background: isDragging ? 'rgba(139, 92, 246, 0.1)' : 'var(--surface)',
+                                        background: isDragging ? 'var(--accent-glow)' : 'var(--surface)',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
@@ -283,7 +490,7 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                                         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                             <img src={coverPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Cover Preview" />
                                             {isDragging && (
-                                                <div style={{ position: 'absolute', inset: 0, background: 'rgba(139, 92, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ position: 'absolute', inset: 0, background: 'var(--accent-glow)', opacity: 0.8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     <ImageIcon size={32} color="white" />
                                                 </div>
                                             )}
@@ -371,6 +578,17 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     </motion.div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={deleteModal.isOpen}
+                title="Delete project?"
+                message=""
+                projectName={deleteModal.projectName || ''}
+                confirmText="Delete"
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteModal({ isOpen: false, projectId: null, projectName: null })}
+                isDestructive={true}
+            />
         </div>
     );
 };

@@ -66,11 +66,11 @@ export const ColorSwatchPicker: React.FC<ColorSwatchPickerProps> = ({ value, onC
                     width: swatchSize,
                     height: swatchSize,
                     borderRadius: '4px',
-                    background: value || '#8b5cf6',
-                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: value || 'var(--accent)',
+                    border: '1px solid var(--border)',
                     padding: 0,
                     cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                    boxShadow: 'var(--shadow-sm)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
@@ -82,20 +82,16 @@ export const ColorSwatchPicker: React.FC<ColorSwatchPickerProps> = ({ value, onC
 
             {/* Popover */}
             {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    left: 0,
-                    zIndex: 2000,
-                    background: '#1a1a21',
-                    border: '1px solid var(--border)',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-                    width: 'max-content',
-                    minWidth: '220px',
-                    animation: 'animate-in 0.2s ease-out'
-                }}>
+                <div 
+                    className="popover-panel"
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        left: 0,
+                        width: 'max-content',
+                        minWidth: '220px'
+                    }}
+                >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Palette</span>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -134,10 +130,10 @@ export const ColorSwatchPicker: React.FC<ColorSwatchPickerProps> = ({ value, onC
                                     height: '20px',
                                     borderRadius: '3px',
                                     background: color,
-                                    border: value === color ? '2px solid white' : '1px solid rgba(255,255,255,0.05)',
+                                    border: value === color ? '2px solid var(--accent)' : '1px solid var(--border)',
                                     padding: 0,
                                     cursor: 'pointer',
-                                    transition: 'transform 0.1s'
+                                    transition: 'all 0.1s'
                                 }}
                                 title={color}
                             >

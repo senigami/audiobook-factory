@@ -99,6 +99,11 @@ def wav_to_mp3(in_wav: Path, out_mp3: Path, on_output=None, cancel_check=None) -
     cmd = f'ffmpeg -y -i {shlex.quote(str(in_wav))} -codec:a libmp3lame -q:a {shlex.quote(MP3_QUALITY)} {shlex.quote(str(out_mp3))}'
     return run_cmd_stream(cmd, on_output, cancel_check)
 
+def convert_to_wav(in_file: Path, out_wav: Path) -> int:
+    """Converts any audio file to a standard 22050Hz mono WAV (best for XTTS references)."""
+    cmd = f'ffmpeg -y -i {shlex.quote(str(in_file))} -ar 22050 -ac 1 {shlex.quote(str(out_wav))}'
+    return subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+
 def xtts_generate(text: str, out_wav: Path, safe_mode: bool, on_output, cancel_check, speaker_wav: str = None, speed: float = 1.0) -> int:
     if not XTTS_ENV_ACTIVATE.exists():
         on_output(f"[error] XTTS activate not found: {XTTS_ENV_ACTIVATE}\n")

@@ -1,5 +1,5 @@
 export type Engine = 'xtts' | 'audiobook';
-export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'error';
 
 export interface Project {
   id: string;
@@ -54,7 +54,7 @@ export interface ProcessingQueueItem {
   project_id: string;
   chapter_id: string;
   split_part: number;
-  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  status: Status;
   created_at: number;
   completed_at: number | null;
   chapter_title?: string;
