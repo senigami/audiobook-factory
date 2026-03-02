@@ -1186,6 +1186,8 @@ def list_speaker_profiles():
 @app.get("/api/speakers")
 def api_list_speakers():
     from .db import list_speakers
+    return list_speakers()
+
 @app.post("/api/speaker-profiles")
 def api_create_speaker_profile(
     speaker_id: str = Form(...),
@@ -1223,7 +1225,6 @@ def api_create_speaker_profile(
     meta_path.write_text(json.dumps(meta, indent=2))
 
     return {"status": "success", "profile_name": profile_name}
-    return list_speakers()
 
 @app.post("/api/speakers")
 def api_create_or_update_speaker(
