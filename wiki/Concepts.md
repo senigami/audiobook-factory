@@ -12,9 +12,9 @@ Understanding how Audiobook Studio organizes data is key to a smooth workflow.
 
 ## 🎙️ AI Voice Lab
 
-- **Voice Profile**: A cloned voice based on short audio samples.
-- **Speaker**: A higher-level grouping for Voice Profiles, allowing multiple "variants" (e.g., "Main - Calm", "Main - Shouting") under one identity.
-- **Sample**: A 6–10 second `.wav` file used to train a Voice Profile.
+- **Voice**: A higher-level identity (e.g., "Dracula"). This is what you assign to Characters in your projects.
+- **Variant**: A specific stylistic or emotional performance of a Voice (e.g., "Main - Calm", "Main - Shouting").
+- **Sample**: High-quality `.wav` reference audio used to clone a Voice.
 
 ## 🔄 Generation Workflow
 
