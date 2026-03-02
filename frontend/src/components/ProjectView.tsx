@@ -923,7 +923,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                           zIndex: 1000,
                           minWidth: '160px',
                           padding: '0.5rem',
-                          marginTop: '0.5rem',
                           background: 'var(--surface)',
                           boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
                         }}

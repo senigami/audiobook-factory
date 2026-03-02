@@ -92,7 +92,8 @@ function App() {
           flexDirection: 'column',
           gap: '2.5rem',
           minWidth: 0,
-          position: 'relative'
+          position: 'relative',
+          marginBottom: '5rem'
         }}>
           <main style={{ flex: 1 }}>
             <Routes>
