@@ -314,7 +314,7 @@ interface ProfileDetailsProps {
     onDeleteVariant: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    onBuildNow: (name: string, files: File[]) => void;
+    onBuildNow: (name: string, files: File[]) => Promise<boolean>;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     voiceName: string;
     showControlsInline?: boolean;
@@ -331,6 +331,7 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     const [isPlaying, setIsPlaying] = useState(false);
     const [playingSample, setPlayingSample] = useState<string | null>(null);
     const [isRebuildRequired, setIsRebuildRequired] = useState(false);
+    const [isBuilding, setIsBuilding] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
     const sampleAudioRef = useRef<HTMLAudioElement>(null);
     const speed = localSpeed ?? profile.speed;
@@ -353,13 +354,17 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     };
 
     const handleRebuild = async () => {
-        if (pendingSamples.length > 0) {
-            onBuildNow(profile.name, pendingSamples);
-            setPendingSamples([]);
-            setIsRebuildRequired(false);
-        } else {
-            onBuildNow(profile.name, []);
-            setIsRebuildRequired(false);
+        setIsBuilding(true);
+        try {
+            const success = await onBuildNow(profile.name, pendingSamples);
+            if (success) {
+                setPendingSamples([]);
+                setIsRebuildRequired(false);
+                // The main handleBuildNow will trigger handleTest, but 
+                // we'll also play a small role here if needed.
+            }
+        } finally {
+            setIsBuilding(false);
         }
     };
 
@@ -883,14 +888,39 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                     </button>
                     
                     <button 
-                        onClick={handleRebuild}
-                        disabled={isSaving}
+                        disabled={isBuilding || isTesting}
                         className={isRebuildRequired ? "btn-primary" : "btn-ghost"}
+                        onClick={(e) => { e.stopPropagation(); handleRebuild(); }} 
                         title="Rebuild Voice Model"
-                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
+                        style={{ 
+                            padding: '8px 12px', 
+                            height: '36px', 
+                            borderRadius: '10px', 
+                            fontSize: '0.85rem', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}),
+                            minWidth: '110px',
+                            justifyContent: 'center'
+                        }}
                     >
-                        <RefreshCw size={16} className={isSaving ? "animate-spin" : ""} />
-                        Rebuild
+                        {isBuilding ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                Rebuilding...
+                            </>
+                        ) : isTesting ? (
+                            <>
+                                <RefreshCw size={16} className="animate-spin" />
+                                Generating...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw size={16} />
+                                Rebuild
+                            </>
+                        )}
                     </button>
                 </div>
 
@@ -944,7 +974,7 @@ interface VoiceCardProps {
     onDelete: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    onBuildNow: (name: string, files: File[]) => void;
+    onBuildNow: (name: string, files: File[]) => Promise<boolean>;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     onAddVariantClick: (speaker: Speaker, profileCount: number) => void;
     onRenameClick: (speaker: Speaker) => void;
@@ -1271,6 +1301,18 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
+    const formatError = (err: any, fallback: string) => {
+        if (!err) return fallback;
+        if (err.message) return err.message;
+        if (err.detail) {
+            if (Array.isArray(err.detail)) {
+                return err.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+            }
+            return typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+        }
+        return fallback;
+    };
+
     useEffect(() => {
         fetchSpeakers();
     }, [fetchSpeakers, speakerProfiles]); // Also refresh when props change
@@ -1278,6 +1320,31 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => {
         setConfirmConfig(config);
     };
+
+    const handleTest = useCallback(async (name: string) => {
+        setTestingProfile(name);
+        try {
+            const resp = await fetch('/api/speaker-profiles/test', {
+                method: 'POST',
+                body: new URLSearchParams({ name }),
+            });
+            const result = await resp.json();
+            if (result.status === 'success') {
+                onRefresh();
+            } else {
+                handleRequestConfirm({
+                    title: 'Test Failed',
+                    message: formatError(result, 'An unknown error occurred during the test.'),
+                    onConfirm: () => {},
+                    isAlert: true
+                });
+            }
+        } catch (err) {
+            console.error('Test failed', err);
+        } finally {
+            setTestingProfile(null);
+        }
+    }, [onRefresh, handleRequestConfirm]);
 
     const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
         const formData = new FormData();
@@ -1292,11 +1359,14 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             if (resp.ok) {
                 onRefresh();
                 fetchSpeakers();
+                // Automatically trigger a test after rebuild
+                setTimeout(() => handleTest(name), 300);
+                return true;
             } else {
                 let errorMsg = 'An unknown error occurred during the rebuild process.';
                 try {
                     const err = await resp.json();
-                    if (err && err.message) errorMsg = err.message;
+                    errorMsg = formatError(err, errorMsg);
                 } catch (e) {
                     console.error('Failed to parse error response', e);
                 }
@@ -1307,11 +1377,13 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                     onConfirm: () => {},
                     isAlert: true
                 });
+                return false;
             }
         } catch (e) {
             console.error('Rebuild failed', e);
+            return false;
         }
-    }, [onRefresh, fetchSpeakers, handleRequestConfirm]);
+    }, [onRefresh, fetchSpeakers, handleRequestConfirm, handleTest]);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
@@ -1375,30 +1447,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-    const handleTest = async (name: string) => {
-        setTestingProfile(name);
-        try {
-            const resp = await fetch('/api/speaker-profiles/test', {
-                method: 'POST',
-                body: new URLSearchParams({ name }),
-            });
-            const result = await resp.json();
-            if (result.status === 'success') {
-                onRefresh();
-            } else {
-                handleRequestConfirm({
-                    title: 'Test Failed',
-                    message: result.message || 'An unknown error occurred during the test.',
-                    onConfirm: () => {},
-                    isAlert: true
-                });
-            }
-        } catch (err) {
-            console.error('Test failed', err);
-        } finally {
-            setTestingProfile(null);
-        }
-    };
 
 
 
@@ -1734,7 +1782,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             const err = await resp.json();
                                             handleRequestConfirm({
                                                 title: 'Rename Failed',
-                                                message: err.message || 'An unknown error occurred while renaming the voice.',
+                                                message: formatError(err, 'An unknown error occurred while renaming the voice.'),
                                                 onConfirm: () => {},
                                                 isAlert: true
                                             });
@@ -1828,7 +1876,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             const err = await resp.json();
                                             handleRequestConfirm({
                                                 title: 'Add Variant Failed',
-                                                message: err.message || 'An unknown error occurred while adding the variant.',
+                                                message: formatError(err, 'An unknown error occurred while adding the variant.'),
                                                 onConfirm: () => {},
                                                 isAlert: true
                                             });

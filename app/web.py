@@ -1355,7 +1355,7 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
 @app.post("/api/speaker-profiles/build")
 async def build_speaker_profile(
     name: str = Form(...),
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(default=[])
 ):
     try:
         if not name or not name.strip():
@@ -1368,75 +1368,87 @@ async def build_speaker_profile(
         if not str(profile_dir.resolve()).startswith(str(VOICES_DIR.resolve())):
              return JSONResponse({"status": "error", "message": "Invalid profile name (path traversal)"}, status_code=400)
 
-        if profile_dir.exists():
-            # Try to cleanup cached latents before deleting the old profile
-            try:
-                from .jobs import get_speaker_wavs
-                from .engines import get_speaker_latent_path
-                sw = get_speaker_wavs(name)
-                if sw:
-                    lp = get_speaker_latent_path(sw)
-                    if lp and lp.exists():
-                        lp.unlink()
-            except:
-                pass
+        # Always clear the latent cache on rebuild to ensure a fresh generation
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists():
+                    lp.unlink()
+                    print(f"Cleared latent cache for rebuild: {lp}")
+        except Exception as e:
+            print(f"Warning: Failed to clear latent cache: {e}")
 
-            import shutil
-            if profile_dir.is_dir():
-                shutil.rmtree(profile_dir)
-            else:
-                profile_dir.unlink()
-        profile_dir.mkdir()
-
-        import tempfile
-        saved_count = 0
-        converted_count = 0
-        errors = []
-
-        for f in files:
-            if not f.filename:
-                continue
-
-            ext = f.filename.lower().suffix if hasattr(f.filename, 'suffix') else os.path.splitext(f.filename)[1].lower()
-            basename = os.path.basename(f.filename)
-            stem = os.path.splitext(basename)[0]
-
-            content = await f.read()
-
-            if ext == ".wav":
-                dest = profile_dir / basename
-                dest.write_bytes(content)
-                saved_count += 1
-            elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
-                # Convert to WAV
-                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-                    tmp.write(content)
-                    tmp_path = Path(tmp.name)
-
-                dest_wav = profile_dir / f"{stem}.wav"
-                rc = convert_to_wav(tmp_path, dest_wav)
-                tmp_path.unlink()
-
-                if rc == 0:
-                    converted_count += 1
+        # If we have new files, we replace the existing profile directory
+        if files and any(f.filename for f in files):
+            if profile_dir.exists():
+                import shutil
+                if profile_dir.is_dir():
+                    shutil.rmtree(profile_dir)
                 else:
-                    errors.append(f"Failed to convert {basename}")
-            else:
-                errors.append(f"Unsupported format: {basename} ({ext})")
+                    profile_dir.unlink()
 
-        total_valid = saved_count + converted_count
-        if total_valid == 0:
-            msg = "No valid audio files were found"
-            if errors: msg += f": {', '.join(errors[:2])}"
-            return JSONResponse({"status": "error", "message": msg}, status_code=400)
+            profile_dir.mkdir()
 
+            import tempfile
+            saved_count = 0
+            converted_count = 0
+            errors = []
+
+            for f in files:
+                if not f.filename:
+                    continue
+
+                ext = f.filename.lower().suffix if hasattr(f.filename, 'suffix') else os.path.splitext(f.filename)[1].lower()
+                basename = os.path.basename(f.filename)
+                stem = os.path.splitext(basename)[0]
+
+                content = await f.read()
+
+                if ext == ".wav":
+                    dest = profile_dir / basename
+                    dest.write_bytes(content)
+                    saved_count += 1
+                elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+                    # Convert to WAV
+                    from .audio import convert_to_wav
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                        tmp.write(content)
+                        tmp_path = Path(tmp.name)
+
+                    dest_wav = profile_dir / f"{stem}.wav"
+                    rc = convert_to_wav(tmp_path, dest_wav)
+                    tmp_path.unlink()
+
+                    if rc == 0:
+                        converted_count += 1
+                    else:
+                        errors.append(f"Failed to convert {basename}")
+                else:
+                    errors.append(f"Unsupported format: {basename} ({ext})")
+
+            total_valid = saved_count + converted_count
+            if total_valid == 0:
+                msg = "No valid audio files were found"
+                if errors: msg += f": {', '.join(errors[:2])}"
+                return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+            return {
+                "status": "success", 
+                "profile": name, 
+                "files_saved": saved_count,
+                "files_converted": converted_count,
+                "total_files": total_valid,
+                "errors": errors
+            }
+
+        # If no new files, we just confirm success after clearing the latent
         return {
-            "status": "success", 
-            "profile": name, 
-            "files_saved": saved_count,
-            "files_converted": converted_count,
-            "total_files": total_valid,
-            "errors": errors
+            "status": "success",
+            "profile": name,
+            "message": "Model refreshed from existing samples"
         }
     except Exception as e:
         import traceback
