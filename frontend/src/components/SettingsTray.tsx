@@ -1,29 +1,23 @@
 import React, { useState } from 'react';
-import { Settings, RefreshCw, Loader2 } from 'lucide-react';
+import { Settings, RefreshCw, Loader2, Terminal, ShieldCheck, Music } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SettingsTrayProps {
     settings: any;
     onRefresh: () => void;
-    hideFinished: boolean;
-    onToggleHideFinished: () => void;
-    requestConfirm?: (config: {
-        title: string;
-        message: string;
-        onConfirm: () => void;
-        isDestructive?: boolean;
-        confirmText?: string;
-    }) => void;
+    showLogs: boolean;
+    onToggleLogs: () => void;
 }
 
 export const SettingsTray: React.FC<SettingsTrayProps> = ({ 
     settings, 
     onRefresh, 
-    hideFinished, 
-    onToggleHideFinished,
-    requestConfirm
+    showLogs, 
+    onToggleLogs
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [hovered, setHovered] = useState(false);
+    const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     const handleToggle = async (key: string, currentValue: boolean) => {
@@ -40,27 +34,46 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
         }
     };
 
+    const rowStyle = (itemId: string): React.CSSProperties => ({
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        padding: '8px 12px',
+        margin: '0 -12px',
+        borderRadius: '8px',
+        background: hoveredItem === itemId ? 'var(--accent-glow)' : 'transparent',
+        transition: 'all 0.2s ease',
+        cursor: 'default'
+    });
+
     return (
         <div style={{ position: 'relative' }}>
             <button 
                 onClick={() => setIsOpen(!isOpen)}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
                 className="btn-ghost"
                 style={{ 
                     width: '40px',
                     height: '40px',
                     borderRadius: 'var(--radius-button)',
-                    color: isOpen ? 'var(--accent)' : 'var(--text-secondary)',
-                    background: isOpen ? 'var(--accent-glow)' : 'transparent',
-                    border: '1px solid ' + (isOpen ? 'var(--accent-glow)' : 'var(--border)'),
+                    color: isOpen 
+                        ? 'white' 
+                        : (hovered ? 'var(--accent)' : 'var(--text-secondary)'),
+                    background: isOpen 
+                        ? 'var(--accent)' 
+                        : (hovered ? 'var(--accent-glow)' : 'transparent'),
+                    border: isOpen ? 'none' : '1px solid var(--border)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     padding: 0,
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: isOpen ? 'var(--shadow-sm)' : 'none'
                 }}
                 title="Synthesis Preferences"
             >
-                <Settings size={18} strokeWidth={2} className={isOpen ? 'animate-spin-slow' : ''} />
+                <Settings size={18} strokeWidth={isOpen ? 2.5 : 2} className={isOpen ? 'animate-spin-slow' : ''} />
             </button>
 
             <AnimatePresence>
@@ -79,98 +92,120 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                 position: 'absolute',
                                 top: 'calc(100% + 12px)',
                                 right: 0,
-                                width: '320px'
+                                width: '320px',
+                                overflow: 'hidden',
+                                padding: '16px'
                             }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Settings size={14} color="var(--accent)" />
-                                    <h3 style={{ fontSize: '0.9rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Synthesis</h3>
+                            {saving && (
+                                <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
+                                    <Loader2 size={14} className="animate-spin" color="var(--accent)" />
                                 </div>
-                                {saving && <Loader2 size={12} className="animate-spin" color="var(--accent)" />}
-                            </div>
+                            )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Safe Mode</div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Auto-recover engine</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                {/* Safe Mode */}
+                                <div 
+                                    style={rowStyle('safe-mode')}
+                                    onMouseEnter={() => setHoveredItem('safe-mode')}
+                                    onMouseLeave={() => setHoveredItem(null)}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <ShieldCheck size={18} color={hoveredItem === 'safe-mode' ? 'var(--accent)' : 'var(--text-muted)'} />
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Safe Mode</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Auto-recover engine</div>
+                                        </div>
                                     </div>
                                     <button 
                                         onClick={() => handleToggle('safe_mode', settings?.safe_mode)}
                                         className={settings?.safe_mode ? 'btn-primary' : 'btn-glass'} 
-                                        style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px' }}
+                                        style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
                                     >
                                         {settings?.safe_mode ? 'ON' : 'OFF'}
                                     </button>
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Produce MP3</div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Compatible exports</div>
-                                    </div>
-                                    <button 
-                                        onClick={() => handleToggle('make_mp3', settings?.make_mp3)}
-                                        className={settings?.make_mp3 ? 'btn-primary' : 'btn-glass'} 
-                                        style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px' }}
+                                {/* Produce MP3 */}
+                                <div 
+                                    style={{ display: 'flex', flexDirection: 'column' }}
+                                    onMouseLeave={() => setHoveredItem(null)}
+                                >
+                                    <div 
+                                        style={rowStyle('make-mp3')}
+                                        onMouseEnter={() => setHoveredItem('make-mp3')}
                                     >
-                                        {settings?.make_mp3 ? 'ON' : 'OFF'}
-                                    </button>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <Music size={18} color={hoveredItem === 'make-mp3' ? 'var(--accent)' : 'var(--text-muted)'} />
+                                            <div>
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Produce MP3</div>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Compatible exports</div>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleToggle('make_mp3', settings?.make_mp3)}
+                                            className={settings?.make_mp3 ? 'btn-primary' : 'btn-glass'} 
+                                            style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
+                                        >
+                                            {settings?.make_mp3 ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+
+                                    {/* Sub-item: Create Missing MP3s */}
+                                    {settings?.make_mp3 && (
+                                        <div 
+                                            style={{
+                                                ...rowStyle('sync'),
+                                                marginLeft: '16px',
+                                                marginRight: '-12px',
+                                                cursor: 'pointer'
+                                            }}
+                                            onMouseEnter={() => setHoveredItem('sync')}
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await fetch('/queue/backfill_mp3', { method: 'POST' });
+                                                onRefresh();
+                                                alert('Sync process started.');
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <RefreshCw size={14} color={hoveredItem === 'sync' ? 'var(--accent)' : 'var(--text-muted)'} />
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: hoveredItem === 'sync' ? 'var(--accent)' : 'var(--text-secondary)' }}>Create Missing MP3s</div>
+                                            </div>
+                                            <div style={{ 
+                                                fontSize: '0.6rem', 
+                                                fontWeight: 800, 
+                                                color: 'var(--accent)', 
+                                                opacity: hoveredItem === 'sync' ? 1 : 0.6,
+                                                minWidth: '42px',
+                                                display: 'flex',
+                                                justifyContent: 'center'
+                                            }}>START</div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Hide Finished</div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Focus active only</div>
+                                {/* System Console */}
+                                <div 
+                                    style={rowStyle('console')}
+                                    onMouseEnter={() => setHoveredItem('console')}
+                                    onMouseLeave={() => setHoveredItem(null)}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <Terminal size={18} color={hoveredItem === 'console' ? 'var(--accent)' : 'var(--text-muted)'} />
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>System Console</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Show/Hide Logs</div>
+                                        </div>
                                     </div>
                                     <button 
-                                        onClick={onToggleHideFinished}
-                                        className={hideFinished ? 'btn-primary' : 'btn-glass'} 
-                                        style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px' }}
+                                        onClick={onToggleLogs}
+                                        className={showLogs ? 'btn-primary' : 'btn-glass'} 
+                                        style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
                                     >
-                                        {hideFinished ? 'ACTIVE' : 'OFF'}
+                                        {showLogs ? 'ON' : 'OFF'}
                                     </button>
                                 </div>
-                            </div>
-
-                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', gap: '8px' }}>
-                                <button 
-                                    onClick={async () => {
-                                        await fetch('/queue/backfill_mp3', { method: 'POST' });
-                                        onRefresh();
-                                        alert('Sync process started.');
-                                    }}
-                                    className="btn-glass" 
-                                    style={{ flex: 1, fontSize: '0.7rem', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                                >
-                                    <RefreshCw size={12} /> Sync
-                                </button>
-                                <button 
-                                    onClick={async () => {
-                                        const msg = 'Wipe all jobs and logs? This will clear the entire production history.';
-                                        if (requestConfirm) {
-                                            requestConfirm({
-                                                title: 'Wipe History',
-                                                message: msg,
-                                                isDestructive: true,
-                                                onConfirm: async () => {
-                                                    await fetch('/queue/clear', { method: 'POST' });
-                                                    onRefresh();
-                                                    setIsOpen(false);
-                                                }
-                                            });
-                                        } else if (confirm(msg)) {
-                                            await fetch('/queue/clear', { method: 'POST' });
-                                            onRefresh();
-                                            setIsOpen(false);
-                                        }
-                                    }}
-                                    className="btn-ghost" 
-                                    style={{ flex: 1, fontSize: '0.7rem', padding: '8px', color: 'var(--error-text)' }}
-                                >
-                                    Wipe History
-                                </button>
                             </div>
                         </motion.div>
                     </>

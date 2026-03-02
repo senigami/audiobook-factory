@@ -37,7 +37,6 @@ function App() {
   
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
-  const [hideFinished, setHideFinished] = useState(false);
   
   const [confirmConfig, setConfirmConfig] = useState<{
     title: string;
@@ -68,16 +67,13 @@ function App() {
   return (
     <div className="app-container">
       <Layout
-        showLogs={showLogs}
-        onToggleLogs={() => setShowLogs(!showLogs)}
         queueCount={queueCount}
         headerRight={
           <SettingsTray 
             settings={initialData?.settings}
             onRefresh={handleRefresh}
-            hideFinished={hideFinished}
-            onToggleHideFinished={() => setHideFinished(!hideFinished)}
-            requestConfirm={setConfirmConfig}
+            showLogs={showLogs}
+            onToggleLogs={() => setShowLogs(!showLogs)}
           />
         }
       >

@@ -526,23 +526,24 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
 
       {/* Project Tabs */}
       {!activeAssemblyJob && !finishedAssemblyJob && (
-          <div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
               <button 
                   onClick={() => setCurrentTab('chapters')}
                   onMouseEnter={() => setHoveredTab('chapters')}
                   onMouseLeave={() => setHoveredTab(null)}
                   style={{ 
-                      padding: '1rem 0.75rem', 
-                      background: hoveredTab === 'chapters' ? 'var(--accent-glow)' : 'none', 
+                      padding: '0.6rem 1.25rem', 
+                      background: currentTab === 'chapters' 
+                        ? 'var(--accent)' 
+                        : (hoveredTab === 'chapters' ? 'var(--accent-glow)' : 'transparent'), 
                       border: 'none', 
-                      color: currentTab === 'chapters' ? 'var(--accent)' : 'var(--text-muted)',
+                      color: currentTab === 'chapters' ? 'white' : 'var(--text-muted)',
                       fontWeight: 700,
-                      fontSize: '0.95rem',
+                      fontSize: '0.9rem',
                       cursor: 'pointer',
-                      borderBottom: currentTab === 'chapters' ? '3px solid var(--accent)' : '3px solid transparent',
-                      transition: 'all 0.1s ease-out',
-                      marginBottom: '-1px',
-                      borderRadius: '8px 8px 0 0'
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      borderRadius: 'var(--radius-button)',
+                      boxShadow: currentTab === 'chapters' ? 'var(--shadow-sm)' : 'none'
                   }}
               >
                   Chapters
@@ -552,17 +553,18 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                   onMouseEnter={() => setHoveredTab('characters')}
                   onMouseLeave={() => setHoveredTab(null)}
                   style={{ 
-                      padding: '1rem 0.75rem', 
-                      background: hoveredTab === 'characters' ? 'var(--accent-glow)' : 'none', 
+                      padding: '0.6rem 1.25rem', 
+                      background: currentTab === 'characters' 
+                        ? 'var(--accent)' 
+                        : (hoveredTab === 'characters' ? 'var(--accent-glow)' : 'transparent'),
                       border: 'none', 
-                      color: currentTab === 'characters' ? 'var(--accent)' : 'var(--text-muted)',
+                      color: currentTab === 'characters' ? 'white' : 'var(--text-muted)',
                       fontWeight: 700,
-                      fontSize: '0.95rem',
+                      fontSize: '0.9rem',
                       cursor: 'pointer',
-                      borderBottom: currentTab === 'characters' ? '3px solid var(--accent)' : '3px solid transparent',
-                      transition: 'all 0.1s ease-out',
-                      marginBottom: '-1px',
-                      borderRadius: '8px 8px 0 0'
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      borderRadius: 'var(--radius-button)',
+                      boxShadow: currentTab === 'characters' ? 'var(--shadow-sm)' : 'none'
                   }}
               >
                   Characters

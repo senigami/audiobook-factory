@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { Mic, Zap, Library, Terminal } from 'lucide-react';
+import { Mic, Zap, Library } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
   headerRight?: React.ReactNode;
-  showLogs?: boolean;
-  onToggleLogs?: () => void;
   queueCount?: number;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, headerRight, showLogs, onToggleLogs, queueCount }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, headerRight, queueCount }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
@@ -100,17 +98,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, headerRight, showLogs,
                        marginLeft: '4px' 
                    }}>{queueCount}</div>
                 )}
-                {activeTab === item.id && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '4px',
-                    left: '16px',
-                    right: '16px',
-                    height: '2px',
-                    background: 'rgba(255,255,255,0.4)',
-                    borderRadius: '2px'
-                  }} />
-                )}
               </button>
             ))}
           </nav>
@@ -118,28 +105,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, headerRight, showLogs,
 
         {/* Global Controls Section */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {onToggleLogs && (
-            <button
-              onClick={onToggleLogs}
-              className="btn-ghost"
-              title={showLogs ? "Hide Console" : "Show Console"}
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: 'var(--radius-button)',
-                color: showLogs ? 'var(--accent)' : 'var(--text-secondary)',
-                background: showLogs ? 'var(--accent-glow)' : 'transparent',
-                border: '1px solid ' + (showLogs ? 'var(--accent-glow)' : 'var(--border)'),
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0
-              }}
-            >
-              <Terminal size={18} strokeWidth={2} />
-            </button>
-          )}
           {headerRight}
         </div>
       </header>
