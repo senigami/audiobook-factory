@@ -12,6 +12,7 @@ interface ConfirmModalProps {
     confirmText?: string;
     cancelText?: string;
     isDestructive?: boolean;
+    isAlert?: boolean;
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -21,10 +22,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     onConfirm,
     onCancel,
     projectName,
-    confirmText = 'Confirm',
+    confirmText,
     cancelText = 'Cancel',
-    isDestructive = true
+    isDestructive = true,
+    isAlert = false
 }) => {
+    // If it's an alert, default confirm text to 'Close' if not provided
+    const finalConfirmText = confirmText || (isAlert ? 'Close' : 'Confirm');
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -76,11 +81,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                                 width: '48px', 
                                 height: '48px', 
                                 borderRadius: '12px', 
-                                background: isDestructive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                background: isDestructive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(var(--accent-rgb), 0.1)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                color: isDestructive ? 'var(--error)' : 'var(--primary)'
+                                color: isDestructive ? 'var(--error)' : 'var(--accent)'
                             }}>
                                 <AlertCircle size={24} />
                             </div>
@@ -110,28 +115,30 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                         </div>
 
                         <div style={{ display: 'flex', gap: '12px', marginTop: '0.5rem' }}>
-                            <button 
-                                onClick={onCancel}
-                                className="btn-ghost"
-                                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
-                            >
-                                {cancelText}
-                            </button>
+                            {!isAlert && (
+                                <button 
+                                    onClick={onCancel}
+                                    className="btn-ghost"
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
+                                >
+                                    {cancelText}
+                                </button>
+                            )}
                             <button 
                                 onClick={onConfirm}
-                                className={isDestructive ? 'btn-danger' : 'btn-primary'}
+                                className={isDestructive && !isAlert ? 'btn-danger' : 'btn-primary'}
                                 style={{ 
                                     flex: 1, 
                                     padding: '0.75rem', 
                                     borderRadius: '12px',
-                                    backgroundColor: isDestructive ? 'var(--error)' : 'var(--primary)',
+                                    backgroundColor: isDestructive && !isAlert ? 'var(--error)' : 'var(--accent)',
                                     color: 'white',
                                     border: 'none',
                                     fontWeight: 600,
                                     cursor: 'pointer'
                                 }}
                             >
-                                {confirmText}
+                                {finalConfirmText}
                             </button>
                         </div>
                     </motion.div>

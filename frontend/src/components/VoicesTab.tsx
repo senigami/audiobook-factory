@@ -315,7 +315,7 @@ interface ProfileDetailsProps {
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
-    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     voiceName: string;
     showControlsInline?: boolean;
 }
@@ -840,11 +840,20 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             fontSize: '0.8rem',
                             fontWeight: 700,
                             gap: '6px',
-                            color: 'var(--accent)',
+                            color: 'var(--text-primary)',
                             minWidth: '70px',
                             justifyContent: 'center',
                             display: 'flex',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.color = 'var(--accent)';
+                            e.currentTarget.style.borderColor = 'var(--accent)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--text-primary)';
+                            e.currentTarget.style.borderColor = 'var(--border)';
                         }}
                     >
                         <Sliders size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
@@ -898,9 +907,17 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 onConfirm: () => onDeleteVariant(profile.name)
                             });
                         }}
+                        onMouseEnter={(e) => {
+                            const icon = e.currentTarget.querySelector('svg');
+                            if (icon) icon.style.color = 'var(--error)';
+                        }}
+                        onMouseLeave={(e) => {
+                            const icon = e.currentTarget.querySelector('svg');
+                            if (icon) icon.style.color = 'var(--text-muted)';
+                        }}
                         title="Delete variant"
                     >
-                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                        <Trash2 size={16} style={{ width: '16px', height: '16px', flexShrink: 0, color: 'var(--text-muted)', transition: 'color 0.2s' }} />
                     </button>
                 </div>
             </div>
@@ -928,7 +945,7 @@ interface VoiceCardProps {
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
-    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     onAddVariantClick: (speaker: Speaker, profileCount: number) => void;
     onRenameClick: (speaker: Speaker) => void;
     onSetDefaultClick: (profileName: string) => void;
@@ -1192,7 +1209,8 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         title: string; 
         message: string; 
         onConfirm: () => void; 
-        isDestructive?: boolean 
+        isDestructive?: boolean;
+        isAlert?: boolean;
     } | null>(null);
     
     // Sync state with editing profile
@@ -1257,6 +1275,10 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         fetchSpeakers();
     }, [fetchSpeakers, speakerProfiles]); // Also refresh when props change
 
+    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => {
+        setConfirmConfig(config);
+    };
+
     const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
         const formData = new FormData();
         formData.append('name', name);
@@ -1271,13 +1293,25 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 onRefresh();
                 fetchSpeakers();
             } else {
-                const err = await resp.json();
-                alert(`Rebuild failed: ${err.message}`);
+                let errorMsg = 'An unknown error occurred during the rebuild process.';
+                try {
+                    const err = await resp.json();
+                    if (err && err.message) errorMsg = err.message;
+                } catch (e) {
+                    console.error('Failed to parse error response', e);
+                }
+                
+                handleRequestConfirm({
+                    title: 'Rebuild Failed',
+                    message: errorMsg,
+                    onConfirm: () => {},
+                    isAlert: true
+                });
             }
         } catch (e) {
             console.error('Rebuild failed', e);
         }
-    }, [onRefresh, fetchSpeakers]);
+    }, [onRefresh, fetchSpeakers, handleRequestConfirm]);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
@@ -1352,7 +1386,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             if (result.status === 'success') {
                 onRefresh();
             } else {
-                alert(result.message);
+                handleRequestConfirm({
+                    title: 'Test Failed',
+                    message: result.message || 'An unknown error occurred during the test.',
+                    onConfirm: () => {},
+                    isAlert: true
+                });
             }
         } catch (err) {
             console.error('Test failed', err);
@@ -1362,9 +1401,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     };
 
 
-    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => {
-        setConfirmConfig(config);
-    };
+
 
     // --- Data Processing ---
     // Merge speakers and profiles into a unified Voice concept
@@ -1695,7 +1732,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             fetchSpeakers();
                                         } else {
                                             const err = await resp.json();
-                                            alert(`Failed to rename voice: ${err.message}`);
+                                            handleRequestConfirm({
+                                                title: 'Rename Failed',
+                                                message: err.message || 'An unknown error occurred while renaming the voice.',
+                                                onConfirm: () => {},
+                                                isAlert: true
+                                            });
                                         }
                                     } finally {
                                         setIsRenamingSpeaker(false);
@@ -1784,7 +1826,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             onRefresh();
                                         } else {
                                             const err = await resp.json();
-                                            alert(`Failed to add variant: ${err.message}`);
+                                            handleRequestConfirm({
+                                                title: 'Add Variant Failed',
+                                                message: err.message || 'An unknown error occurred while adding the variant.',
+                                                onConfirm: () => {},
+                                                isAlert: true
+                                            });
                                         }
                                     } finally {
                                         setIsAddingVariantModal(false);
@@ -1879,6 +1926,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 title={confirmConfig?.title || ''}
                 message={confirmConfig?.message || ''}
                 isDestructive={confirmConfig?.isDestructive}
+                isAlert={confirmConfig?.isAlert}
                 onConfirm={() => {
                     confirmConfig?.onConfirm();
                     setConfirmConfig(null);
