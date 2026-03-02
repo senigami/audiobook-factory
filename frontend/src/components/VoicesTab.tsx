@@ -315,17 +315,13 @@ interface ProfileDetailsProps {
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
-    speakers: Speaker[];
-    isGrouped?: boolean;
     showControlsInline?: boolean;
-    totalVariantCount?: number;
 }
 
 const ProfileDetails: React.FC<ProfileDetailsProps> = ({ 
     profile, isTesting, onTest, onDelete, onRefresh, 
     onEditTestText, onBuildNow, requestConfirm, testStatus,
-    speakers, isGrouped = false, showControlsInline = false,
-    totalVariantCount = 1
+    showControlsInline = false
 }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -338,7 +334,6 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     const [isDragging, setIsDragging] = useState(false);
     const [pendingSamples, setPendingSamples] = useState<File[]>([]);
 
-    const assignedSpeaker = speakers.find(s => s.id === profile.speaker_id);
 
     useEffect(() => {
         if (profile.preview_url) {
@@ -409,96 +404,7 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 
 
     const renderControls = () => (
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* One-Line Control Bar */}
-            <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px',
-                background: 'rgba(var(--accent-rgb), 0.03)',
-                padding: '10px 12px',
-                borderRadius: '12px',
-                border: '1px solid var(--border-light)'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                {(totalVariantCount > 1 || profile.variant_name) && (
-                    <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        {profile.variant_name || 'Default Variant'}
-                    </h4>
-                )}
-                    
-                    <div style={{ width: '1px', height: '20px', background: 'var(--border)', opacity: 0.5 }} />
-
-                    {/* Speed Pill */}
-                    <button
-                        ref={speedPillRef}
-                        onClick={() => setShowSpeedPopover(!showSpeedPopover)}
-                        className="btn-ghost"
-                        style={{
-                            padding: '4px 10px',
-                            height: '32px',
-                            borderRadius: '100px',
-                            background: 'var(--surface)',
-                            border: '1px solid var(--border)',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            gap: '6px',
-                            color: 'var(--accent)',
-                            minWidth: '70px',
-                            justifyContent: 'center'
-                        }}
-                    >
-                        <Sliders size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
-                        {speed.toFixed(2)}x
-                    </button>
-
-                    {showSpeedPopover && (
-                        <SpeedPopover
-                            value={speed}
-                            onChange={(v: number) => {
-                                setLocalSpeed(v);
-                                handleSpeedChange(v);
-                            }}
-                            triggerRef={speedPillRef}
-                            onClose={() => setShowSpeedPopover(false)}
-                        />
-                    )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                        onClick={() => onEditTestText(profile)}
-                        className="btn-ghost"
-                        title="Edit Preview Script"
-                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: '0.85rem' }}
-                    >
-                        <FileEdit size={16} />
-                        Script
-                    </button>
-                    
-                    <button 
-                        onClick={handleRebuild}
-                        disabled={isSaving}
-                        className={isRebuildRequired ? "btn-primary" : "btn-ghost"}
-                        title="Rebuild Voice Model"
-                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', fontSize: '0.85rem', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
-                    >
-                        <RefreshCw size={16} className={isSaving ? "animate-spin" : ""} />
-                        Rebuild
-                    </button>
-
-                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
-                    
-                    <button 
-                        className="btn-ghost"
-                        style={{ width: '32px', height: '32px', padding: 0 }}
-                        onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
-                        title="Delete Variant"
-                    >
-                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-                    </button>
-                </div>
-            </div>
+        <div style={{ padding: '0 1.25rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
             {/* Collapsible Samples Section */}
             <div 
@@ -773,12 +679,13 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 
             <div 
                 style={{ 
-                    padding: '1.25rem', 
+                    padding: '0.75rem 1.25rem',
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
                     borderBottom: (profile.wav_count > 0 || pendingSamples.length > 0) ? '1px solid var(--border-light)' : 'none',
-                    transition: 'border-bottom 0.2s'
+                    transition: 'border-bottom 0.2s',
+                    background: 'rgba(var(--accent-rgb), 0.02)'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
@@ -821,28 +728,70 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             )}
                         </button>
                     </div>
-                    <div 
-                        style={{ 
+
+                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', opacity: 0.5, margin: '0 4px' }} />
+
+                    {/* Speed Pill */}
+                    <button
+                        ref={speedPillRef}
+                        onClick={() => setShowSpeedPopover(!showSpeedPopover)}
+                        className="btn-ghost"
+                        style={{
+                            padding: '4px 10px',
+                            height: '32px',
+                            borderRadius: '100px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            gap: '6px',
+                            color: 'var(--accent)',
+                            minWidth: '70px',
+                            justifyContent: 'center',
                             display: 'flex',
-                            flexDirection: 'column',
-                            flex: 1,
-                            padding: '4px 8px'
+                            alignItems: 'center'
                         }}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            {!isGrouped && (
-                                <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
-                                    {assignedSpeaker ? `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}` : profile.name}
-                                </h4>
-                            )}
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count + pendingSamples.length} samples</span>
-                    </div>
+                        <Sliders size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                        {speed.toFixed(2)}x
+                    </button>
+
+                    {showSpeedPopover && (
+                        <SpeedPopover
+                            value={speed}
+                            onChange={(v: number) => {
+                                setLocalSpeed(v);
+                                handleSpeedChange(v);
+                            }}
+                            triggerRef={speedPillRef}
+                            onClose={() => setShowSpeedPopover(false)}
+                        />
+                    )}
+
+                    <button 
+                        onClick={() => onEditTestText(profile)}
+                        className="btn-ghost"
+                        title="Edit Preview Script"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <FileEdit size={16} />
+                        Script
+                    </button>
+                    
+                    <button 
+                        onClick={handleRebuild}
+                        disabled={isSaving}
+                        className={isRebuildRequired ? "btn-primary" : "btn-ghost"}
+                        title="Rebuild Voice Model"
+                        style={{ padding: '8px 12px', height: '36px', borderRadius: '10px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', ...(isRebuildRequired ? {} : {background: 'var(--surface)', border: '1px solid var(--border)'}) }}
+                    >
+                        <RefreshCw size={16} className={isSaving ? "animate-spin" : ""} />
+                        Rebuild
+                    </button>
                 </div>
 
-                {!showControlsInline && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
                         className="btn-ghost"
                         style={{ width: '32px', height: '32px', padding: 0 }}
                         onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
@@ -850,12 +799,11 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                     >
                         <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
                     </button>
-                    </div>
-                )}
+                </div>
             </div>
 
             {isTesting && (
-                <div style={{ padding: showControlsInline ? '0 0 1.25rem' : '0 1.25rem 1.25rem' }}>
+                <div style={{ padding: showControlsInline ? '0 0 1.25rem' : '1.25rem' }}>
                     <div style={{ height: '4px', background: 'var(--border-light)', borderRadius: '2px', overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${testStatus?.progress || 0}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
                     </div>
@@ -886,7 +834,7 @@ interface VoiceCardProps {
 const VoiceCard: React.FC<VoiceCardProps> = ({
     speaker, profiles, isTestingProfileId, testProgress, 
     onTest, onDelete, onRefresh,
-    onEditTestText, onBuildNow, requestConfirm, speakers,
+    onEditTestText, onBuildNow, requestConfirm,
     isExpanded, onToggleExpand
 }) => {
     const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
@@ -1008,10 +956,6 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                                 letterSpacing: '0.02em'
                             }}>{status.label}</span>
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                            {activeProfile?.wav_count || 0} samples
-                            {profiles.length > 1 && ` • ${profiles.length} variants`}
-                        </span>
                     </div>
                 </div>
 
@@ -1112,10 +1056,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                                     onEditTestText={onEditTestText}
                                     onBuildNow={onBuildNow}
                                     requestConfirm={requestConfirm}
-                                    speakers={speakers}
-                                    isGrouped={true}
                                     showControlsInline={true}
-                                    totalVariantCount={profiles.length}
                                 />
                         </div>
                     </motion.div>
