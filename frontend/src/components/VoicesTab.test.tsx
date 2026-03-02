@@ -66,6 +66,6 @@ describe('VoicesTab', () => {
         const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
         fireEvent.click(actionMenus[0])
 
-        expect(screen.getByText('Delete Voice')).toBeInTheDocument()
+        expect(screen.getByText('Delete Voice (all variants)')).toBeInTheDocument()
     })
 })
