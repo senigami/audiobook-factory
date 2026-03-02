@@ -33,6 +33,11 @@ describe('App', () => {
           json: () => Promise.resolve([])
         })
       }
+      if (url === '/api/speakers') {
+        return Promise.resolve({
+          json: () => Promise.resolve([])
+        })
+      }
       return Promise.resolve({ json: () => Promise.resolve({}) })
     }) as any
   })
@@ -70,7 +75,7 @@ describe('App', () => {
     fireEvent.click(voicesTab)
 
     await waitFor(() => {
-        expect(screen.getByText(/AI Voice Lab/i)).toBeTruthy()
+        expect(screen.getByText(/Voices/i, { selector: 'h2' })).toBeTruthy()
     })
   })
 })

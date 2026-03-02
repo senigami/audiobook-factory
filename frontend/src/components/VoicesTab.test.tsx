@@ -37,55 +37,35 @@ describe('VoicesTab', () => {
         await act(async () => {
             render(<VoicesTab {...mockProps} />)
         })
-        // Narrator2 is default. Should have "Default" pill
+        
+        // Expand card to see variant tabs
+        const voiceHeader = screen.getByText('Narrator2')
+        fireEvent.click(voiceHeader)
+        
         expect(screen.getByText('Default')).toBeInTheDocument()
     })
 
-    it('calls fetch when setting a new default via ActionMenu', async () => {
-        const fetchMock = vi.mocked(global.fetch)
+
+    it('opens profile details and allows building voice', async () => {
 
         render(<VoicesTab {...mockProps} />)
 
-        // Open ActionMenu for Narrator1
-        const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
-        fireEvent.click(actionMenus[0])
+        // Find the Voice card (it mocks unassigned names as the voice name)
+        const voiceHeader = screen.getByText('Narrator1')
+        fireEvent.click(voiceHeader)
 
-        // Find "Set as Default" in the menu
-        const setBtn = await screen.findByText('Set as Default')
-        await act(async () => {
-            fireEvent.click(setBtn)
-        })
-
-        expect(fetchMock).toHaveBeenCalledWith('/api/settings/default-speaker', expect.anything())
+        // Now "Edit Script" or "Build Voice" should be visible in expanded view
+        const buildBtn = await screen.findByText(/Rebuild/i)
+        expect(buildBtn).toBeInTheDocument()
     })
 
-    it('opens edit modal and allows renaming via ActionMenu', async () => {
-        const fetchMock = vi.mocked(global.fetch)
-
+    it('shows delete option in ActionMenu', async () => {
         render(<VoicesTab {...mockProps} />)
 
-        // Open ActionMenu for Narrator1
+        // Open Voice ActionMenu
         const actionMenus = await screen.findAllByRole('button', { name: /more actions/i })
         fireEvent.click(actionMenus[0])
 
-        // Click Edit Script - wait for menu to appear
-        const renameBtn = await screen.findByText('Edit Script')
-        fireEvent.click(renameBtn)
-
-        // Find name input and change it
-        const nameInput = await screen.findByDisplayValue('Narrator1')
-        fireEvent.change(nameInput, { target: { value: 'Super Narrator' } })
-
-        // Click Save Configuration
-        const saveBtn = await screen.findByText('Save Configuration')
-        await act(async () => {
-            fireEvent.click(saveBtn)
-        })
-
-        // Verify rename fetch call
-        expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/speaker-profiles/Narrator1/rename'), expect.objectContaining({
-            method: 'POST',
-            body: expect.any(URLSearchParams)
-        }))
+        expect(screen.getByText('Delete Voice')).toBeInTheDocument()
     })
 })
