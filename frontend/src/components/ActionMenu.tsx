@@ -115,7 +115,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                 }}
                 className="kebab-trigger"
             >
-                <MoreVertical size={18} />
+                <MoreVertical size={18} style={{ width: '18px', height: '18px', flexShrink: 0 }} />
             </motion.button>
 
             {isOpen && createPortal(

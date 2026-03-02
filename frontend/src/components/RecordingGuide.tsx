@@ -69,19 +69,38 @@ export const RecordingGuide: React.FC = () => {
             {/* Quick Tips */}
             <div style={{ 
                 background: 'var(--surface-alt)', 
-                padding: '1.25rem', 
-                borderRadius: '12px', 
-                border: '1px solid var(--border)' 
+                padding: '1.5rem', 
+                borderRadius: '16px', 
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)', marginBottom: '12px' }}>
-                    <HelpCircle size={14} />
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recording Tips</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+                    <HelpCircle size={16} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Best Results Guide</span>
                 </div>
-                <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Record in a quiet room, 6–10 sec per clip</li>
-                    <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Keep mic distance consistent</li>
-                    <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Avoid music, reverb, and background noise</li>
-                </ul>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div>
+                        <h5 style={{ fontSize: '0.8rem', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>Audio Quality</h5>
+                        <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Record in a silent, upholstered room (no echo)</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Use a dedicated microphone if possible</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Avoid background hum (AC, fans, computers)</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>6–15 seconds per clip is the sweet spot</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 style={{ fontSize: '0.8rem', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>Performance</h5>
+                        <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Speak naturally, like talking to a friend</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Maintain consistent distance (about 6 inches)</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Enunciate clearly but without over-acting</li>
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Record 10–15 total samples for best quality</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             {/* Prompt Library */}

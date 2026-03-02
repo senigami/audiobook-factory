@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
-import { User, Plus, Music, Trash2, Play, Loader2, Check, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
-import { PredictiveProgressBar } from './PredictiveProgressBar';
-import { VoiceDropzone } from './VoiceDropzone';
+import { User, Plus, Music, Trash2, Play, Loader2, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
 import { RecordingGuide } from './RecordingGuide';
-import { ActionMenu } from './ActionMenu';
-import SearchableSelect from './SearchableSelect';
 import { ConfirmModal } from './ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
@@ -314,24 +310,21 @@ interface ProfileDetailsProps {
     testStatus?: any;
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
-    onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
-    onAssignToSpeaker: (profile: SpeakerProfile) => void;
-    onRemoveFromSpeaker: (name: string) => void;
-    onCreateSpeakerFromProfile: (profile: SpeakerProfile) => void;
     speakers: Speaker[];
     isGrouped?: boolean;
     showControlsInline?: boolean;
+    totalVariantCount?: number;
 }
 
 const ProfileDetails: React.FC<ProfileDetailsProps> = ({ 
-    profile, isTesting, onTest, onDelete, onSetDefault, onRefresh, 
+    profile, isTesting, onTest, onDelete, onRefresh, 
     onEditTestText, onBuildNow, requestConfirm, testStatus,
-    onAssignToSpeaker, onRemoveFromSpeaker, onCreateSpeakerFromProfile, speakers,
-    isGrouped = false, showControlsInline = false
+    speakers, isGrouped = false, showControlsInline = false,
+    totalVariantCount = 1
 }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -414,21 +407,6 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     const [isSamplesExpanded, setIsSamplesExpanded] = useState(false);
     const speedPillRef = useRef<HTMLButtonElement>(null);
 
-    const menuItems = [
-        { label: 'Edit Script', icon: FileEdit, onClick: () => onEditTestText(profile) },
-        { label: 'Rebuild Voice', icon: RefreshCw, onClick: handleRebuild },
-        { isDivider: true, label: '', onClick: () => {} },
-        ...(assignedSpeaker ? [
-            { label: 'Move to Speaker...', icon: User, onClick: () => onAssignToSpeaker(profile) },
-            { label: 'Unassign from Speaker', icon: Trash2, onClick: () => onRemoveFromSpeaker(profile.name), isDestructive: true }
-        ] : [
-            { label: 'Assign to Speaker...', icon: User, onClick: () => onAssignToSpeaker(profile) },
-            { label: 'Create Speaker from Profile', icon: Plus, onClick: () => onCreateSpeakerFromProfile(profile) }
-        ]),
-        { label: 'Set as Default', icon: Check, onClick: () => onSetDefault(profile.name) },
-        { isDivider: true, label: '', onClick: () => {} },
-        { label: 'Delete Profile', icon: Trash2, onClick: () => onDelete(profile.name), isDestructive: true }
-    ];
 
     const renderControls = () => (
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -443,9 +421,11 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                 border: '1px solid var(--border-light)'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                {(totalVariantCount > 1 || profile.variant_name) && (
                     <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                         {profile.variant_name || 'Default Variant'}
                     </h4>
+                )}
                     
                     <div style={{ width: '1px', height: '20px', background: 'var(--border)', opacity: 0.5 }} />
 
@@ -468,7 +448,7 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             justifyContent: 'center'
                         }}
                     >
-                        <Sliders size={12} />
+                        <Sliders size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
                         {speed.toFixed(2)}x
                     </button>
 
@@ -509,7 +489,14 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 
                     <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
                     
-                    <ActionMenu items={menuItems} />
+                    <button 
+                        className="btn-ghost"
+                        style={{ width: '32px', height: '32px', padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
+                        title="Delete Variant"
+                    >
+                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    </button>
                 </div>
             </div>
 
@@ -814,9 +801,9 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             {isTesting ? (
                                 <Loader2 size={18} className="animate-spin" />
                             ) : isPlaying ? (
-                                <Pause size={18} fill="currentColor" />
+                                <Pause size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
                             ) : (
-                                <Play size={18} fill="currentColor" />
+                                <Play size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
                             )}
                             {isPlaying && (
                                 <motion.div
@@ -869,7 +856,10 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 size={12} 
                                 style={{ 
                                     transform: isExpanded ? 'none' : 'rotate(180deg)',
-                                    transition: 'transform 0.3s ease'
+                                    transition: 'transform 0.3s ease',
+                                    width: '12px',
+                                    height: '12px',
+                                    flexShrink: 0
                                 }} 
                             />
                         </div>
@@ -931,19 +921,23 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 
                 {!showControlsInline && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ActionMenu items={menuItems} />
+                        <button 
+                        className="btn-ghost"
+                        style={{ width: '32px', height: '32px', padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); onDelete(profile.name); }}
+                        title="Delete Variant"
+                    >
+                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    </button>
                     </div>
                 )}
             </div>
 
             {isTesting && (
                 <div style={{ padding: showControlsInline ? '0 0 1.25rem' : '0 1.25rem 1.25rem' }}>
-                    <PredictiveProgressBar
-                        progress={testStatus?.progress || 0}
-                        startedAt={testStatus?.started_at}
-                        etaSeconds={25}
-                        label="Generating Preview..."
-                    />
+                    <div style={{ height: '4px', background: 'var(--border-light)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${testStatus?.progress || 0}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
+                    </div>
                 </div>
             )}
 
@@ -974,132 +968,198 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 };
 
 
-interface SpeakerGroupCardProps {
+interface VoiceCardProps {
     speaker: Speaker;
     profiles: SpeakerProfile[];
     isTestingProfileId: string | null;
     testProgress: Record<string, any>;
     onTest: (name: string) => void;
     onDelete: (name: string) => void;
-    onSetDefault: (name: string) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
-    onAssignToSpeaker: (profile: SpeakerProfile) => void;
-    onRemoveFromSpeaker: (name: string) => void;
-    onCreateSpeakerFromProfile: (profile: SpeakerProfile) => void;
     speakers: Speaker[];
 }
 
-const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
+const VoiceCard: React.FC<VoiceCardProps> = ({
     speaker, profiles, isTestingProfileId, testProgress, 
-    onTest, onDelete, onSetDefault, onRefresh,
-    onEditTestText, onBuildNow, requestConfirm,
-    onAssignToSpeaker, onRemoveFromSpeaker, onCreateSpeakerFromProfile, speakers
+    onTest, onDelete, onRefresh,
+    onEditTestText, onBuildNow, requestConfirm, speakers
 }) => {
-    const defaultProfile = profiles.find(p => p.is_default) || profiles[0];
+    const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
     const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isSpeedOpen, setIsSpeedOpen] = useState(false);
+    const speedTriggerRef = useRef<HTMLButtonElement>(null);
+
     const activeProfile = profiles.find(p => p.name === activeProfileId) || defaultProfile;
 
-    const speakerMenuItems = [
-        { label: 'Rename Speaker', icon: FileEdit, onClick: () => {
-             const newName = prompt("Enter new speaker name:", speaker.name);
-             if (newName && newName !== speaker.name) {
-                 const formData = new URLSearchParams();
-                 formData.append('name', newName);
-                 fetch(`/api/speakers/${speaker.id}/rename`, { method: 'POST', body: formData })
-                     .then(r => { if(r.ok) { onRefresh(); } });
-             }
-        }},
-        { label: 'Delete Speaker', icon: Trash2, isDestructive: true, onClick: () => {
-             requestConfirm({
-                title: 'Delete Speaker',
-                message: `Are you sure you want to delete speaker "${speaker.name}"? This will not delete the associated profiles; they will become unassigned.`,
-                isDestructive: true,
-                onConfirm: async () => {
-                    await fetch(`/api/speakers/${speaker.id}`, { method: 'DELETE' });
-                    onRefresh();
-                }
-            });
-        }}
-    ];
+    const handleAddVariant = async () => {
+        const name = prompt("Enter variant name:", `Variant ${profiles.length + 1}`);
+        if (!name) return;
+        
+        // For now, we'll just show the user how to build it or create an empty profile if API allows
+        // Logic: New variant = new profile name.
+        onBuildNow(name, []); 
+    };
 
-    if (!activeProfile) return null;
+    const getStatusInfo = (p: SpeakerProfile | undefined) => {
+        if (!p || p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
+        return { label: 'BUILT', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+    };
+
+    const status = getStatusInfo(activeProfile as SpeakerProfile);
 
     return (
-        <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isExpanded ? '1px solid var(--border-light)' : 'none' }}>
+        <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: isExpanded ? '1px solid var(--accent)' : '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '80px', padding: '0 1.5rem' }}>
                 <div 
                     onClick={() => setIsExpanded(!isExpanded)}
                     style={{ 
-                        padding: '1.25rem', 
                         display: 'flex', 
                         alignItems: 'center', 
                         gap: '16px', 
                         cursor: 'pointer',
                         flex: 1,
-                        userSelect: 'none'
+                        userSelect: 'none',
+                        height: '100%'
                     }}
                 >
                     <div style={{ 
-                        width: '48px', 
-                        height: '48px', 
-                        borderRadius: '16px', 
+                        width: '40px', 
+                        height: '40px', 
+                        borderRadius: '12px', 
                         background: 'var(--accent)', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
                         color: 'white',
-                        boxShadow: 'var(--shadow-md)',
-                        position: 'relative'
+                        boxShadow: 'var(--shadow-sm)'
                     }}>
-                        <User size={24} />
-                        <div style={{
-                            position: 'absolute',
-                            bottom: -4,
-                            right: -4,
-                            width: '18px',
-                            height: '18px',
-                            borderRadius: '50%',
-                            background: 'var(--surface)',
-                            border: '2px solid var(--accent)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--accent)'
-                        }}>
-                            <ChevronUp 
-                                size={12} 
-                                style={{ 
-                                    transform: isExpanded ? 'none' : 'rotate(180deg)',
-                                    transition: 'transform 0.3s ease'
-                                }} 
-                            />
-                        </div>
+                        <User size={20} />
                     </div>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{speaker.name}</h3>
-                            {profiles.some(p => p.is_default) && (
-                                <span style={{ 
-                                    fontSize: '0.65rem', 
-                                    padding: '2px 6px', 
-                                    background: 'var(--accent)', 
-                                    color: 'white',
-                                    borderRadius: '4px',
-                                    fontWeight: 700
-                                }}>DEFAULT</span>
-                            )}
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>{speaker.name}</h3>
+                            <span style={{ 
+                                fontSize: '0.65rem', 
+                                padding: '2px 8px', 
+                                background: status.bg, 
+                                color: status.color,
+                                borderRadius: '100px',
+                                fontWeight: 800,
+                                letterSpacing: '0.02em'
+                            }}>{status.label}</span>
                         </div>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                            {profiles.length} variant{profiles.length !== 1 ? 's' : ''}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                            {activeProfile?.wav_count || 0} samples
                         </span>
                     </div>
                 </div>
-                <div style={{ paddingRight: '1.25rem' }}>
-                    <ActionMenu items={speakerMenuItems} />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Primary Actions */}
+                    <button 
+                        className="btn-ghost" 
+                        style={{ width: '36px', height: '36px', borderRadius: '10px', padding: 0 }}
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (activeProfile?.preview_url) {
+                                const audio = new Audio(activeProfile.preview_url);
+                                audio.play();
+                            } else if (activeProfile) {
+                                onTest(activeProfile.name);
+                            }
+                        }}
+                    >
+                        <Play size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                    </button>
+
+                    <button 
+                        ref={speedTriggerRef}
+                        className="btn-ghost" 
+                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 800, gap: '6px' }}
+                        onClick={(e) => { e.stopPropagation(); setIsSpeedOpen(true); }}
+                    >
+                        <Sliders size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                        {activeProfile?.speed.toFixed(2)}x
+                    </button>
+
+                    {isSpeedOpen && (
+                        <SpeedPopover
+                            value={activeProfile?.speed || 1.0}
+                            onChange={async (newSpeed) => {
+                                if (!activeProfile) return;
+                                const formData = new URLSearchParams();
+                                formData.append('speed', newSpeed.toString());
+                                await fetch(`/api/speaker-profiles/${encodeURIComponent(activeProfile.name)}/speed`, { method: 'POST', body: formData });
+                                onRefresh();
+                            }}
+                            triggerRef={speedTriggerRef}
+                            onClose={() => setIsSpeedOpen(false)}
+                        />
+                    )}
+
+                    <button 
+                        className="btn-ghost" 
+                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 700 }}
+                        onClick={(e) => { e.stopPropagation(); onEditTestText(activeProfile as SpeakerProfile); }}
+                    >
+                        Script
+                    </button>
+
+                    <button 
+                        className="btn-ghost" 
+                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 700, gap: '6px' }}
+                        disabled={activeProfile?.wav_count === 0}
+                        onClick={(e) => { e.stopPropagation(); onBuildNow(activeProfile?.name || '', []); }}
+                    >
+                        <RefreshCw size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                        Rebuild
+                    </button>
+
+                    {profiles.length === 1 && (
+                        <button 
+                            className="btn-ghost" 
+                            style={{ height: '32px', borderRadius: '100px', padding: '0 8px', fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent)', gap: '4px' }}
+                            onClick={(e) => { e.stopPropagation(); handleAddVariant(); }}
+                        >
+                            <Plus size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                            Variant
+                        </button>
+                    )}
+
+                    <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 4px' }} />
+
+                    <button 
+                        className="btn-ghost"
+                        style={{ width: '32px', height: '32px', padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); onDelete(activeProfile?.name || ''); }}
+                        title="Delete Variant"
+                    >
+                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    </button>
+                    
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
+                        style={{ 
+                            marginLeft: '4px',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s',
+                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(180deg)',
+                            background: isExpanded ? 'var(--accent-glow)' : 'transparent',
+                            color: isExpanded ? 'var(--accent)' : 'var(--text-muted)'
+                        }}
+                    >
+                        <ChevronUp size={18} style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+                    </button>
                 </div>
             </div>
 
@@ -1112,8 +1172,8 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         style={{ overflow: 'hidden' }}
                     >
-                        <div style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-light)' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {(profiles.length > 1) && (
+                            <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(var(--accent-rgb), 0.02)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
                                 {profiles.map(p => {
                                     const isActive = activeProfileId === p.name;
                                     return (
@@ -1121,50 +1181,65 @@ const SpeakerGroupCard: React.FC<SpeakerGroupCardProps> = ({
                                             key={p.name}
                                             onClick={() => setActiveProfileId(p.name)}
                                             style={{
-                                                padding: '8px 16px',
-                                                borderRadius: '12px',
-                                                fontSize: '0.85rem',
-                                                fontWeight: 700,
+                                                padding: '6px 14px',
+                                                borderRadius: '100px',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 800,
                                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                                 border: '1px solid',
-                                                borderColor: isActive ? 'var(--accent)' : 'var(--border)',
+                                                borderColor: isActive ? 'var(--accent)' : 'transparent',
                                                 background: isActive ? 'var(--accent)' : 'transparent',
-                                                color: isActive ? 'white' : 'var(--text-secondary)',
+                                                color: isActive ? 'white' : 'var(--text-muted)',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                gap: '8px',
-                                                boxShadow: isActive ? 'var(--shadow-md)' : 'none',
-                                                transform: isActive ? 'translateY(-1px)' : 'none'
+                                                gap: '6px',
+                                                whiteSpace: 'nowrap'
                                             }}
-                                            className={isActive ? "active-variant-chip" : "ghost-variant-chip"}
                                         >
-                                            <Music size={12} style={{ opacity: isActive ? 1 : 0.6 }} />
                                             {p.variant_name || 'Default'}
                                         </button>
                                     );
                                 })}
+                                <button 
+                                    onClick={handleAddVariant}
+                                    className="btn-ghost"
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '100px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 800,
+                                        color: 'var(--accent)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: 'rgba(var(--accent-rgb), 0.05)',
+                                        border: '1px dashed var(--accent)',
+                                        marginLeft: '4px',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    <Plus size={14} />
+                                    Variant
+                                </button>
                             </div>
-                        </div>
+                        )}
 
                         <div key={activeProfileId} className="animate-in" style={{ background: 'var(--surface-light)' }}>
-                            <ProfileDetails
-                                profile={activeProfile}
-                                isTesting={isTestingProfileId === activeProfile.name}
-                                testStatus={testProgress[activeProfile.name]}
-                                onTest={onTest}
-                                onDelete={onDelete}
-                                onSetDefault={onSetDefault}
-                                onRefresh={onRefresh}
-                                onEditTestText={onEditTestText}
-                                onBuildNow={onBuildNow}
-                                requestConfirm={requestConfirm}
-                                onAssignToSpeaker={onAssignToSpeaker}
-                                onRemoveFromSpeaker={onRemoveFromSpeaker}
-                                onCreateSpeakerFromProfile={onCreateSpeakerFromProfile}
-                                speakers={speakers}
-                                isGrouped={true}
-                                showControlsInline={true}
-                            />
+                                <ProfileDetails
+                                    profile={activeProfile as SpeakerProfile}
+                                    isTesting={isTestingProfileId === activeProfile?.name}
+                                    testStatus={testProgress[activeProfile?.name || '']}
+                                    onTest={onTest}
+                                    onDelete={onDelete}
+                                    onRefresh={onRefresh}
+                                    onEditTestText={onEditTestText}
+                                    onBuildNow={onBuildNow}
+                                    requestConfirm={requestConfirm}
+                                    speakers={speakers}
+                                    isGrouped={true}
+                                    showControlsInline={true}
+                                    totalVariantCount={profiles.length}
+                                />
                         </div>
                     </motion.div>
                 )}
@@ -1180,19 +1255,12 @@ interface VoicesTabProps {
 }
 
 export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles, testProgress }) => {
-    const [newName, setNewName] = useState('');
-    const [files, setFiles] = useState<File[]>([]);
-    const [isBuilding, setIsBuilding] = useState(false);
+    // --- State ---
     const [testingProfile, setTestingProfile] = useState<string | null>(null);
     const [editingProfile, setEditingProfile] = useState<SpeakerProfile | null>(null);
     const [testText, setTestText] = useState('');
-    const [editedName, setEditedName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
     const [showGuide, setShowGuide] = useState(false);
-    const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-    const [editedVariantName, setEditedVariantName] = useState('');
-    const [buildSpeakerId, setBuildSpeakerId] = useState<'none' | 'new' | string>('none');
-    const [buildVariantName, setBuildVariantName] = useState('');
     const [confirmConfig, setConfirmConfig] = useState<{ 
         title: string; 
         message: string; 
@@ -1200,14 +1268,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         isDestructive?: boolean 
     } | null>(null);
 
-    // --- Speaker Grouping State ---
-    const [viewMode, setViewMode] = useState<'profiles' | 'speakers'>('profiles');
+    // --- Voice Management State ---
     const [speakers, setSpeakers] = useState<Speaker[]>([]);
-    const [isAssignDrawerOpen, setIsAssignDrawerOpen] = useState(false);
-    const [selectedProfileForAssign, setSelectedProfileForAssign] = useState<SpeakerProfile | null>(null);
-    const [variantName, setVariantName] = useState('');
-    const [profileSearch, setProfileSearch] = useState('');
-    const [drawerSpeakerId, setDrawerSpeakerId] = useState<'none' | 'new' | string>('none');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [newVoiceName, setNewVoiceName] = useState('');
+    const [isCreatingVoice, setIsCreatingVoice] = useState(false);
 
     const fetchSpeakers = useCallback(async () => {
         try {
@@ -1216,9 +1282,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 const data = await resp.json();
                 if (Array.isArray(data)) {
                     setSpeakers(data);
-                } else {
-                    console.error('Expected array of speakers, got:', data);
-                    setSpeakers([]);
                 }
             }
         } catch (e) {
@@ -1228,59 +1291,9 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
 
     useEffect(() => {
         fetchSpeakers();
-    }, [fetchSpeakers]);
-
-    const handleAssignProfile = async (profileName: string, speakerId: string | null, vName: string) => {
-        try {
-            const formData = new URLSearchParams();
-            if (speakerId) formData.append('speaker_id', speakerId);
-            if (vName) formData.append('variant_name', vName);
-            
-            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profileName)}/assign`, {
-                method: 'POST',
-                body: formData
-            });
-            if (resp.ok) {
-                setIsAssignDrawerOpen(false);
-                setSelectedProfileForAssign(null);
-                setVariantName('');
-                onRefresh();
-            }
-        } catch (e) {
-            console.error('Failed to assign profile', e);
-        }
-    };
-
-    const handleRemoveFromSpeaker = async (profileName: string) => {
-        try {
-            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profileName)}/assign`, {
-                method: 'POST' // No speaker_id or variant_name clears them
-            });
-            if (resp.ok) {
-                onRefresh();
-            }
-        } catch (e) {
-            console.error('Failed to remove from speaker', e);
-        }
-    };
-
-    const handleCreateSpeakerFromProfile = async (profile: SpeakerProfile) => {
-        try {
-            const formData = new URLSearchParams();
-            formData.append('name', profile.name);
-            const resp = await fetch('/api/speakers', { method: 'POST', body: formData });
-            if (resp.ok) {
-                const newSpk = await resp.json();
-                fetchSpeakers();
-                await handleAssignProfile(profile.name, newSpk.id, '');
-            }
-        } catch (e) {
-            console.error('Failed to create speaker from profile', e);
-        }
-    };
+    }, [fetchSpeakers, speakerProfiles]); // Also refresh when props change
 
     const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
-        setIsBuilding(true);
         const formData = new FormData();
         formData.append('name', name);
         newFiles.forEach(f => formData.append('files', f));
@@ -1292,64 +1305,30 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             });
             if (resp.ok) {
                 onRefresh();
+                fetchSpeakers();
             } else {
                 const err = await resp.json();
                 alert(`Rebuild failed: ${err.message}`);
             }
         } catch (e) {
             console.error('Rebuild failed', e);
-        } finally {
-            setIsBuilding(false);
         }
-    }, [onRefresh]);
-
-    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => {
-        setConfirmConfig(config);
-    };
+    }, [onRefresh, fetchSpeakers]);
 
     const handleSaveTestText = async () => {
         if (!editingProfile) return;
         setIsSavingText(true);
         try {
-            // 1. Handle Rename if needed
-            let currentName = editingProfile.name;
-            if (editedName.trim() && editedName.trim() !== editingProfile.name) {
-                const renameData = new URLSearchParams();
-                renameData.append('new_name', editedName.trim());
-                const renameResp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/rename`, {
-                    method: 'POST',
-                    body: renameData
-                });
-                if (!renameResp.ok) {
-                    const error = await renameResp.json();
-                    alert(`Rename failed: ${error.message}`);
-                    setIsSavingText(false);
-                    return;
-                }
-                currentName = editedName.trim();
-            }
-
-            // 2. Handle Text Update
             const formData = new URLSearchParams();
             formData.append('text', testText);
-            await fetch(`/api/speaker-profiles/${encodeURIComponent(currentName)}/test-text`, {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/test-text`, {
                 method: 'POST',
                 body: formData
             });
-
-            // 3. Handle Variant Update if assigned
-            if (editingProfile.speaker_id) {
-                const assignData = new URLSearchParams();
-                assignData.append('speaker_id', editingProfile.speaker_id);
-                assignData.append('variant_name', editedVariantName.trim());
-                await fetch(`/api/speaker-profiles/${encodeURIComponent(currentName)}/assign`, {
-                    method: 'POST',
-                    body: assignData
-                });
+            if (resp.ok) {
+                setEditingProfile(null);
+                onRefresh();
             }
-
-            onRefresh();
-            setEditingProfile(null);
         } catch (e) {
             console.error('Failed to save profile', e);
         } finally {
@@ -1375,65 +1354,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             setIsSavingText(false);
         }
     };
-
-    const handleBuild = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newName || files.length === 0) return;
-
-        setIsBuilding(true);
-        const formData = new FormData();
-        formData.append('name', newName);
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
-        }
-
-        try {
-            const resp = await fetch('/api/speaker-profiles/build', {
-                method: 'POST',
-                body: formData,
-            });
-            if (resp.ok) {
-                const result = await resp.json();
-                
-                // --- Post-build Assignment ---
-                let targetSpeakerId = buildSpeakerId;
-                if (buildSpeakerId === 'new') {
-                    // Create new speaker with profile name
-                    const spkResp = await fetch('/api/speakers', {
-                        method: 'POST',
-                        body: new URLSearchParams({ name: newName })
-                    });
-                    if (spkResp.ok) {
-                        const newSpk = await spkResp.json();
-                        targetSpeakerId = newSpk.id;
-                        fetchSpeakers();
-                    }
-                }
-
-                if (targetSpeakerId !== 'none' && targetSpeakerId !== 'new') {
-                    await handleAssignProfile(newName, targetSpeakerId, buildVariantName);
-                }
-
-                setNewName('');
-                setFiles([]);
-                setBuildSpeakerId('none');
-                setBuildVariantName('');
-                if (result.errors && result.errors.length > 0) {
-                    alert(`Profile built with ${result.total_files} samples.\n\nNote: Some files were skipped or failed conversion:\n- ${result.errors.join('\n- ')}`);
-                }
-                onRefresh();
-            } else {
-                const errorData = await resp.json();
-                alert(`Build failed: ${errorData.message}`);
-            }
-        } catch (err) {
-            console.error('Failed to build profile', err);
-        } finally {
-            setIsBuilding(false);
-        }
-    };
-
-
 
     const handleDelete = async (name: string) => {
         handleRequestConfirm({
@@ -1473,29 +1393,41 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-    const handleSetDefault = async (name: string) => {
-        try {
-            const formData = new URLSearchParams();
-            formData.append('name', name);
-            await fetch('/api/settings/default-speaker', {
-                method: 'POST',
-                body: formData
-            });
-            onRefresh();
-        } catch (err) {
-            console.error('Failed to set default speaker', err);
-        }
+
+    const handleRequestConfirm = (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => {
+        setConfirmConfig(config);
     };
 
-    const groupedProfiles = (speakers || []).map(speaker => ({
-        speaker,
+    // --- Data Processing ---
+    // Merge speakers and profiles into a unified Voice concept
+    const voices = (speakers || []).map(speaker => ({
+        id: speaker.id,
+        name: speaker.name,
         profiles: speakerProfiles.filter(p => p.speaker_id === speaker.id)
     }));
-    const unassignedProfiles = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
+
+    // Identify profiles that aren't linked to any speaker
+    const unassigned = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
+    
+    // Treat unassigned as standalone voices for now to bridge the transition
+    const unassignedVoices = unassigned.map(p => ({
+        id: `unassigned-${p.name}`,
+        name: p.name,
+        profiles: [p],
+        isUnassigned: true
+    }));
+
+    const allVoices = [...voices, ...unassignedVoices];
+
+    const filteredVoices = allVoices.filter(v => {
+        const query = searchQuery.toLowerCase();
+        return v.name.toLowerCase().includes(query) || 
+               v.profiles.some(p => (p.variant_name || p.name).toLowerCase().includes(query));
+    });
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-            {/* Header with View Toggle */}
+            {/* Header with Search and New Voice Action */}
             <div style={{ 
                 padding: '1.25rem 2rem', 
                 borderBottom: '1px solid var(--border)',
@@ -1505,10 +1437,49 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 background: 'var(--surface-light)',
                 zIndex: 10
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>AI Voice Lab</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Voices</h2>
+                    
+                    <div style={{ position: 'relative' }}>
+                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <input
+                            type="text"
+                            placeholder="Search voices..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                padding: '8px 12px 8px 36px',
+                                borderRadius: '100px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)',
+                                fontSize: '0.85rem',
+                                width: '240px',
+                                transition: 'all 0.2s'
+                            }}
+                            onFocus={(e) => {
+                                e.currentTarget.style.width = '320px';
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                            }}
+                            onBlur={(e) => {
+                                e.currentTarget.style.width = '240px';
+                                e.currentTarget.style.borderColor = 'var(--border)';
+                            }}
+                        />
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button 
+                        onClick={() => setIsCreateModalOpen(true)} 
+                        className="btn-primary" 
+                        style={{ gap: '8px', padding: '0 20px', height: '40px', borderRadius: '100px' }}
+                    >
+                        <Plus size={18} />
+                        New Voice
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 8px' }} />
+                    
                     <button onClick={() => setShowGuide(true)} className="btn-ghost" style={{ gap: '8px' }}>
                         <Info size={16} />
                         Recording Guide
@@ -1516,540 +1487,214 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 </div>
             </div>
 
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                <div style={{ 
-                    flex: '0 0 400px', 
-                    borderRight: '1px solid var(--border)', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    background: 'var(--surface)',
-                    position: 'relative'
-                }}>
-                    <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Plus size={18} className="text-accent" />
-                            Create Voice Profile
-                        </h3>
-                        <form onSubmit={handleBuild} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>PROFILE NAME</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. Dark Fantasy Narrator"
-                                    value={newName}
-                                    onChange={(e) => setNewName(e.target.value)}
-                                    className="form-input"
-                                />
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>VOICE SAMPLES (WAV/MP3)</label>
-                                <VoiceDropzone files={files} onFilesChange={setFiles} />
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>SPEAKER ASSIGNMENT</label>
-                                <SearchableSelect
-                                    options={speakers}
-                                    value={buildSpeakerId}
-                                    onChange={(val) => setBuildSpeakerId(val)}
-                                    placeholder="Select speaker..."
-                                    noneLabel="None (Unassigned)"
-                                />
-                            </div>
-
-                            {(buildSpeakerId !== 'none') && (
-                                <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>VARIANT LABEL</label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. Angry, Whispering..."
-                                        value={buildVariantName}
-                                        onChange={(e) => setBuildVariantName(e.target.value)}
-                                        className="form-input"
-                                        style={{ background: 'var(--surface-light)' }}
-                                    />
-                                </div>
-                            )}
-
-                            <div style={{ 
-                                position: 'sticky', 
-                                bottom: -24, 
-                                left: -24, 
-                                right: -24, 
-                                padding: '1.5rem', 
-                                background: 'linear-gradient(transparent, var(--surface) 20%)',
-                                marginTop: '1rem',
-                                borderTop: '1px solid var(--border-light)'
-                            }}>
-                                <button 
-                                    type="submit" 
-                                    disabled={isBuilding || !newName || files.length === 0} 
-                                    className={isBuilding || !newName || files.length === 0 ? "btn-ghost" : "btn-primary"}
-                                    style={{ 
-                                        width: '100%', 
-                                        justifyContent: 'center', 
-                                        gap: '10px',
-                                        height: '48px',
-                                        fontSize: '0.95rem',
-                                        background: (!isBuilding && newName && files.length > 0) ? 'var(--accent)' : 'var(--surface-alt)',
-                                        color: (!isBuilding && newName && files.length > 0) ? 'white' : 'var(--text-muted)'
-                                    }}
-                                >
-                                    {isBuilding ? (
-                                        <>
-                                            <Loader2 size={18} className="animate-spin" />
-                                            Building Voice...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Music size={18} />
-                                            Build Voice Profile
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <div style={{ flex: 1, overflowY: 'auto', background: 'var(--surface-alt)', padding: '2rem' }}>
-                    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-                        {/* Header Stats & Search */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+                <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {allVoices.length === 0 ? (
                         <div style={{ 
-                            display: 'flex', 
-                            justifyContent: 'space-between', 
-                            alignItems: 'center', 
-                            marginBottom: '1rem',
-                            gap: '2rem'
+                            padding: '60px', 
+                            textAlign: 'center', 
+                            background: 'rgba(var(--accent-rgb), 0.02)', 
+                            borderRadius: '24px', 
+                            border: '2px dashed var(--border)' 
                         }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div className="glass-panel" style={{ padding: '4px', display: 'flex', gap: '4px' }}>
-                                    <button 
-                                        onClick={() => setViewMode('profiles')}
-                                        className={viewMode === 'profiles' ? 'btn-primary' : 'btn-ghost'}
-                                        style={{ 
-                                            padding: '6px 16px', 
-                                            fontSize: '0.8rem', 
-                                            borderRadius: '8px',
-                                            height: 'auto'
-                                        }}
-                                    >
-                                        Profiles
-                                    </button>
-                                    <button 
-                                        onClick={() => setViewMode('speakers')}
-                                        className={viewMode === 'speakers' ? 'btn-primary' : 'btn-ghost'}
-                                        style={{ 
-                                            padding: '6px 16px', 
-                                            fontSize: '0.8rem', 
-                                            borderRadius: '8px',
-                                            height: 'auto'
-                                        }}
-                                    >
-                                        Grouped
-                                    </button>
-                                </div>
-
-                                <div style={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: '12px',
-                                    color: 'var(--text-muted)',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 500
-                                }}>
-                                    <Music size={16} />
-                                    <span>{speakerProfiles.length} Profiles</span>
-                                    <span style={{ opacity: 0.3 }}>•</span>
-                                    <User size={16} />
-                                    <span>{speakers.length} Speakers</span>
-                                </div>
+                            <div style={{ 
+                                width: '64px', 
+                                height: '64px', 
+                                borderRadius: '20px', 
+                                background: 'var(--surface-alt)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                margin: '0 auto 20px',
+                                color: 'var(--text-muted)'
+                            }}>
+                                <User size={32} />
                             </div>
-
-                            <div style={{ position: 'relative', flex: '0 1 500px', minWidth: '400px' }}>
-                                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                                <input
-                                    type="text"
-                                    placeholder="Search by profile or variant..."
-                                    value={profileSearch}
-                                    onChange={(e) => setProfileSearch(e.target.value)}
-                                    className="form-input"
-                                    style={{ 
-                                        paddingLeft: '36px', 
-                                        background: 'var(--surface)', 
-                                        height: '40px',
-                                        fontSize: '0.9rem',
-                                        width: '100%'
-                                    }}
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px' }}>No Voices Yet</h3>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '300px', margin: '0 auto 24px' }}>
+                                Create your first voice to start generating premium AI audio.
+                            </p>
+                            <button 
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="btn-primary" 
+                                style={{ gap: '8px', padding: '0 24px', height: '44px', borderRadius: '12px' }}
+                            >
+                                <Plus size={20} />
+                                Create New Voice
+                            </button>
+                        </div>
+                    ) : filteredVoices.length === 0 ? (
+                        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <Search size={48} style={{ opacity: 0.2, marginBottom: '20px' }} />
+                            <h3 style={{ margin: '0 0 10px', fontSize: '1.25rem' }}>No Matches Found</h3>
+                            <p style={{ margin: 0 }}>Try adjusting your search query.</p>
+                        </div>
+                    ) : (
+                        <>
+                            {filteredVoices.map(voice => (
+                                <VoiceCard
+                                    key={voice.id}
+                                    speaker={{ id: voice.id.startsWith('unassigned-') ? '' : voice.id, name: voice.name, default_profile_name: voice.profiles[0]?.name || null }}
+                                    profiles={voice.profiles}
+                                    onRefresh={onRefresh}
+                                    onTest={handleTest}
+                                    onDelete={handleDelete}
+                                    onEditTestText={setEditingProfile}
+                                    onBuildNow={handleBuildNow}
+                                    requestConfirm={handleRequestConfirm}
+                                    testProgress={testProgress}
+                                    isTestingProfileId={testingProfile}
+                                    speakers={speakers}
                                 />
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                            {viewMode === 'profiles' ? 
-                                "Listing all individual voice profiles including their variant labels." : 
-                                "Speakers group related voice profiles together (e.g. Dracula: Normal, Angry, Whispering)."}
-                        </div>
-
-                        {viewMode === 'profiles' ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '1.5rem' }}>
-                                {speakerProfiles.filter(p => 
-                                    p.name.toLowerCase().includes(profileSearch.toLowerCase()) || 
-                                    (p.variant_name || '').toLowerCase().includes(profileSearch.toLowerCase())
-                                ).map((p) => (
-                                    <ProfileDetails
-                                        key={p.name}
-                                        profile={p}
-                                        isTesting={testingProfile === p.name}
-                                        testStatus={testProgress[p.name]}
-                                        onTest={handleTest}
-                                        onDelete={handleDelete}
-                                        onSetDefault={handleSetDefault}
-                                        onRefresh={onRefresh}
-                                        isGrouped={false}
-                                        onEditTestText={(p) => {
-                                            setEditingProfile(p);
-                                            setTestText(p.test_text || '');
-                                            setEditedName(p.name);
-                                            setEditedVariantName(p.variant_name || '');
-                                        }}
-                                        onBuildNow={handleBuildNow}
-                                        requestConfirm={handleRequestConfirm}
-                                        onAssignToSpeaker={(profile) => {
-                                            setSelectedProfileForAssign(profile);
-                                            setVariantName(profile.variant_name || '');
-                                            setDrawerSpeakerId(profile.speaker_id || 'none');
-                                            setIsAssignDrawerOpen(true);
-                                        }}
-                                        onRemoveFromSpeaker={handleRemoveFromSpeaker}
-                                        onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
-                                        speakers={speakers}
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                                {/* Grouped Speakers */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(500px, 1fr))', gap: '2rem' }}>
-                                    {groupedProfiles.filter(({speaker, profiles}) => 
-                                        speaker.name.toLowerCase().includes(profileSearch.toLowerCase()) ||
-                                        profiles.some(p => (p.variant_name || '').toLowerCase().includes(profileSearch.toLowerCase()))
-                                    ).map(({ speaker, profiles }) => (
-                                        <SpeakerGroupCard
-                                            key={speaker.id}
-                                            speaker={speaker}
-                                            profiles={profiles}
-                                            isTestingProfileId={testingProfile}
-                                            testProgress={testProgress}
-                                            onTest={handleTest}
-                                            onDelete={handleDelete}
-                                            onSetDefault={handleSetDefault}
-                                            onRefresh={onRefresh}
-                                            onEditTestText={(p) => {
-                                                setEditingProfile(p);
-                                                setTestText(p.test_text || '');
-                                                setEditedName(p.name);
-                                                setEditedVariantName(p.variant_name || '');
-                                            }}
-                                            onBuildNow={handleBuildNow}
-                                            requestConfirm={handleRequestConfirm}
-                                            onAssignToSpeaker={(profile) => {
-                                                setSelectedProfileForAssign(profile);
-                                                setVariantName(profile.variant_name || '');
-                                                setDrawerSpeakerId(profile.speaker_id || 'none');
-                                                setIsAssignDrawerOpen(true);
-                                            }}
-                                            onRemoveFromSpeaker={handleRemoveFromSpeaker}
-                                            onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
-                                            speakers={speakers}
-                                        />
-                                    ))}
-                                </div>
-
-                                {/* Unassigned Profiles */}
-                                {unassignedProfiles.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                                        <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--warning)' }}></div>
-                                            Unassigned Profiles ({unassignedProfiles.length})
-                                        </h3>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '1.5rem' }}>
-                                            {unassignedProfiles.filter(p => 
-                                                p.name.toLowerCase().includes(profileSearch.toLowerCase()) || 
-                                                (p.variant_name || '').toLowerCase().includes(profileSearch.toLowerCase())
-                                            ).map((p) => (
-                                                <ProfileDetails
-                                                    key={p.name}
-                                                    profile={p}
-                                                    isTesting={testingProfile === p.name}
-                                                    testStatus={testProgress[p.name]}
-                                                    onTest={handleTest}
-                                                    onDelete={handleDelete}
-                                                    onSetDefault={handleSetDefault}
-                                                    onRefresh={onRefresh}
-                                                    isGrouped={false}
-                                                    onEditTestText={(p) => {
-                                                        setEditingProfile(p);
-                                                        setTestText(p.test_text || '');
-                                                        setEditedName(p.name);
-                                                        setEditedVariantName(p.variant_name || '');
-                                                    }}
-                                                    onBuildNow={handleBuildNow}
-                                                    requestConfirm={handleRequestConfirm}
-                                                    onAssignToSpeaker={(profile) => {
-                                                        setSelectedProfileForAssign(profile);
-                                                        setVariantName(profile.variant_name || '');
-                                                        setDrawerSpeakerId(profile.speaker_id || 'none');
-                                                        setIsAssignDrawerOpen(true);
-                                                    }}
-                                                    onRemoveFromSpeaker={handleRemoveFromSpeaker}
-                                                    onCreateSpeakerFromProfile={handleCreateSpeakerFromProfile}
-                                                    speakers={speakers}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div style={{ 
-                                        padding: '1.5rem', 
-                                        textAlign: 'center', 
-                                        color: 'var(--text-muted)', 
-                                        fontSize: '0.85rem',
-                                        background: 'rgba(255,255,255,0.02)',
-                                        borderRadius: '12px',
-                                        border: '1px dashed var(--border-light)'
-                                    }}>
-                                        No unassigned profiles found.
-                                    </div>
-                                )}
-
-                                {speakers.length === 0 && unassignedProfiles.length === 0 && speakerProfiles.length > 0 && (
-                                    <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-                                        <p style={{ color: 'var(--text-muted)' }}>No speakers defined. Use "Assign to Speaker" to create one.</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                            ))}
+                        </>
+                    )}
                 </div>
             </div>
 
-            <Drawer
-                isOpen={!!editingProfile}
-                onClose={() => setEditingProfile(null)}
-                title={`Configure Voice Profile: ${editingProfile?.name}`}
-            >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {!editingProfile?.speaker_id && (
-                        <div className="input-group">
-                            <label>Voice Profile Name</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input
-                                    type="text"
-                                    value={editedName}
-                                    onChange={(e) => setEditedName(e.target.value)}
-                                    placeholder="Enter narrator name..."
-                                    disabled={isSavingText}
-                                    style={{
-                                        fontSize: '1rem',
-                                        fontWeight: 600,
-                                        background: 'var(--surface-light)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '8px',
-                                        padding: '10px 14px',
-                                        flex: 1,
-                                        color: 'var(--text-primary)'
-                                    }}
-                                />
-                            </div>
-                            {editedName.trim() !== editingProfile?.name && editedName.trim() !== '' && (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>
-                                    Profile will be renamed on save
-                                </span>
-                            )}
-                        </div>
-                    )}
-
-                    {editingProfile?.speaker_id && (
-                        <div className="input-group">
-                            <label>Variant Label</label>
+            {/* New Voice Modal */}
+            {isCreateModalOpen && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 1000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(4px)'
+                }}>
+                    <motion.div 
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        style={{
+                            width: '400px',
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            padding: '24px',
+                            boxShadow: 'var(--shadow-lg)',
+                            border: '1px solid var(--border)'
+                        }}
+                    >
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '8px' }}>Create New Voice</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                            Give your voice a name. You can add variants and audio samples once it's created.
+                        </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>VOICE NAME</label>
                             <input
+                                autoFocus
                                 type="text"
-                                value={editedVariantName}
-                                onChange={(e) => setEditedVariantName(e.target.value)}
-                                placeholder="e.g. Angry, Whispering, Neutral..."
-                                disabled={isSavingText}
+                                placeholder="e.g. Victor the Vampire"
+                                value={newVoiceName}
+                                onChange={(e) => setNewVoiceName(e.target.value)}
                                 className="form-input"
-                                style={{
-                                    background: 'var(--surface-light)',
-                                    border: '1px solid var(--border)',
-                                    borderRadius: '8px',
-                                    padding: '10px 14px'
-                                }}
-                            />
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                This will rename the profile to "{speakers.find(s => s.id === editingProfile.speaker_id)?.name} - {editedVariantName || 'Default'}"
-                            </p>
-                        </div>
-                    )}
-
-                    <div className="input-group">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label>Preview Narrative Script</label>
-                            <button
-                                onClick={handleResetTestText}
-                                className="btn-ghost"
-                                disabled={isSavingText}
-                                style={{ height: 'auto', padding: '4px 8px', fontSize: '0.75rem', gap: '4px' }}
-                            >
-                                <RotateCcw size={12} /> Reset to Default
-                            </button>
-                        </div>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-8px' }}>
-                            The text used when generating voice previews.
-                        </p>
-                        <textarea
-                            value={testText}
-                            onChange={(e) => setTestText(e.target.value)}
-                            style={{ minHeight: '180px', lineHeight: '1.6', resize: 'vertical', fontSize: '0.9rem' }}
-                            placeholder="Enter preview text..."
-                            disabled={isSavingText}
-                        />
-                    </div>
-
-                    <div style={{
-                        background: 'var(--as-info-tint)',
-                        padding: '1rem',
-                        borderRadius: '10px',
-                        border: '1px solid var(--accent-glow)',
-                        display: 'flex',
-                        gap: '12px'
-                    }}>
-                        <Info size={16} color="var(--accent)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-                            Generate a preview after saving to audition the voice with these changes.
-                        </p>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                                onClick={handleSaveTestText}
-                                className="btn-primary"
-                                disabled={isSavingText || !editedName.trim()}
-                                style={{ height: '44px', flex: 1 }}
-                            >
-                                {isSavingText ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-                                {isSavingText ? 'Saving...' : 'Save Configuration'}
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    if (editingProfile) {
-                                        setIsGeneratingPreview(true);
-                                        await handleTest(editingProfile.name);
-                                        setIsGeneratingPreview(false);
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newVoiceName.trim()) {
+                                        // Trigger creation
                                     }
                                 }}
-                                className="btn-glass"
-                                disabled={isSavingText || isGeneratingPreview}
-                                style={{ height: '44px', padding: '0 12px' }}
-                                title="Generate Preview"
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button 
+                                onClick={() => setIsCreateModalOpen(false)}
+                                className="btn-ghost"
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
                             >
-                                <RefreshCw size={18} className={isGeneratingPreview ? "animate-spin" : ""} />
+                                Cancel
+                            </button>
+                            <button 
+                                disabled={!newVoiceName.trim() || isCreatingVoice}
+                                onClick={async () => {
+                                    setIsCreatingVoice(true);
+                                    try {
+                                        const resp = await fetch('/api/speakers', {
+                                            method: 'POST',
+                                            body: new URLSearchParams({ name: newVoiceName.trim() })
+                                        });
+                                        if (resp.ok) {
+                                            setIsCreateModalOpen(false);
+                                            setNewVoiceName('');
+                                            fetchSpeakers();
+                                        }
+                                    } finally {
+                                        setIsCreatingVoice(false);
+                                    }
+                                }}
+                                className="btn-primary"
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
+                            >
+                                {isCreatingVoice ? 'Creating...' : 'Create Voice'}
                             </button>
                         </div>
-                        <button onClick={() => setEditingProfile(null)} className="btn-ghost" style={{ width: '100%', height: '44px' }}>Cancel</button>
-                    </div>
+                    </motion.div>
                 </div>
-            </Drawer>
+            )}
 
-            <Drawer
-                isOpen={showGuide}
-                onClose={() => setShowGuide(false)}
-                title="Voice Recording Guide"
+            {/* Recording Guide Drawer */}
+            <Drawer 
+                isOpen={showGuide} 
+                onClose={() => setShowGuide(false)} 
+                title="Recording Guide"
             >
                 <RecordingGuide />
             </Drawer>
 
-            {/* Assign to Speaker Drawer */}
-            <Drawer 
-                isOpen={isAssignDrawerOpen} 
-                onClose={() => {
-                    setIsAssignDrawerOpen(false);
-                    setProfileSearch('');
-                    setVariantName('');
-                    setDrawerSpeakerId('none');
-                }}
-                title={selectedProfileForAssign?.speaker_id ? `Move ${selectedProfileForAssign?.name} to Different Speaker` : `Assign ${selectedProfileForAssign?.name} to Speaker`}
+            {/* Script Editor Drawer */}
+            <Drawer
+                isOpen={!!editingProfile}
+                onClose={() => setEditingProfile(null)}
+                title={`Edit Script: ${editingProfile?.variant_name || editingProfile?.name || ''}`}
             >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)' }}>
-                            <Music size={18} />
-                            <span style={{ fontWeight: 600 }}>{selectedProfileForAssign?.name}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>PREVIEW TEXT SCRIPT</label>
+                            <button 
+                                onClick={handleResetTestText} 
+                                className="btn-ghost"
+                                style={{ fontSize: '0.7rem', height: '28px', padding: '0 8px' }}
+                            >
+                                <RotateCcw size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                                Reset to Default
+                            </button>
                         </div>
-                        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                            Group this profile under a speaker to organize your variants.
-                        </p>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                                SELECT SPEAKER
-                            </label>
-                            <SearchableSelect
-                                options={speakers}
-                                value={drawerSpeakerId}
-                                onChange={(val) => setDrawerSpeakerId(val)}
-                                placeholder="Select or create speaker..."
-                                noneLabel="Unassigned"
-                            />
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                                VARIANT LABEL (OPTIONAL)
-                            </label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="e.g. Menacing, Whisper, Neutral"
-                                value={variantName}
-                                onChange={(e) => setVariantName(e.target.value)}
-                            />
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                Label this specific variant or emotion for this speaker.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '1rem' }}>
-                        <button 
-                            className="btn-primary" 
-                            style={{ flex: 1, justifyContent: 'center' }}
-                            disabled={!selectedProfileForAssign || (drawerSpeakerId === 'none' && !selectedProfileForAssign.speaker_id)}
-                            onClick={() => {
-                                if (selectedProfileForAssign) {
-                                    handleAssignProfile(selectedProfileForAssign.name, drawerSpeakerId === 'none' ? null : drawerSpeakerId, variantName);
-                                }
+                        <textarea
+                            value={testText}
+                            onChange={(e) => setTestText(e.target.value)}
+                            style={{
+                                width: '100%',
+                                minHeight: '200px',
+                                padding: '1rem',
+                                borderRadius: '12px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface)',
+                                color: 'var(--text)',
+                                fontSize: '0.95rem',
+                                lineHeight: '1.6',
+                                resize: 'vertical',
+                                marginBottom: '1.5rem'
                             }}
+                        />
+                        <button
+                            onClick={handleSaveTestText}
+                            disabled={isSavingText}
+                            className="btn-primary"
+                            style={{ width: '100%', height: '44px', borderRadius: '12px', justifyContent: 'center' }}
                         >
-                            Confirm Changes
+                            {isSavingText ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    Saving Changes...
+                                </>
+                            ) : (
+                                "Save Script"
+                            )}
                         </button>
                     </div>
-
-                    {selectedProfileForAssign?.speaker_id && (
-                        <button 
-                            onClick={() => handleRemoveFromSpeaker(selectedProfileForAssign.name)}
-                            className="btn-ghost"
-                            style={{ alignSelf: 'flex-start', fontSize: '0.85rem', color: 'var(--error)' }}
-                        >
-                            <Trash2 size={14} />
-                            Remove from Current Speaker
-                        </button>
-                    )}
                 </div>
             </Drawer>
 
