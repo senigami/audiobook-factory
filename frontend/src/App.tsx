@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Panel } from './components/Panel';
 import { PreviewModal } from './components/PreviewModal';
@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Job } from './types';
 
 function App() {
+  const navigate = useNavigate();
   const [queueCount, setQueueCount] = useState(0);
   const [queueRefreshTrigger, setQueueRefreshTrigger] = useState(0);
 
@@ -92,10 +93,9 @@ function App() {
           flexDirection: 'column',
           gap: '2.5rem',
           minWidth: 0,
-          position: 'relative',
-          marginBottom: '5rem'
+          position: 'relative'
         }}>
-          <main style={{ flex: 1 }}>
+          <div style={{ flex: 1 }}>
             <Routes>
               <Route path="/" element={<ProjectLibrary />} />
               <Route path="/project/:projectId" element={
@@ -123,7 +123,7 @@ function App() {
               } />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </main>
+          </div>
 
           {showLogs && (
             <Panel
@@ -193,7 +193,7 @@ function App() {
             <button 
               onClick={() => {
                 setToast(null);
-                window.location.hash = '#/queue'; // Simple internal nav
+                navigate('/queue');
               }}
               style={{ 
                 background: 'var(--accent)', 

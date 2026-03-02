@@ -46,7 +46,7 @@ describe('ProjectView', () => {
             <MemoryRouter initialEntries={['/project/1']}>
                 <Routes>
                     <Route path="/project/:projectId" element={
-                        <ProjectView jobs={{}} speakerProfiles={[]} onOpenPreview={vi.fn()} />
+                        <ProjectView jobs={{}} speakerProfiles={[]} speakers={[]} />
                     } />
                 </Routes>
             </MemoryRouter>

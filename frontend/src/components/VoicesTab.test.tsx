@@ -4,8 +4,8 @@ import { describe, it, expect, vi } from 'vitest'
 
 describe('VoicesTab', () => {
     const mockProfiles = [
-        { name: 'Narrator1', wav_count: 5, speed: 1.0, is_default: false, preview_url: null },
-        { name: 'Narrator2', wav_count: 3, speed: 1.2, is_default: true, preview_url: '/preview.wav' }
+        { name: 'Narrator1', wav_count: 5, speed: 1.0, is_default: false, preview_url: null, speaker_id: null, variant_name: null },
+        { name: 'Narrator2', wav_count: 3, speed: 1.2, is_default: true, preview_url: '/preview.wav', speaker_id: null, variant_name: null }
     ]
 
     const mockProps = {

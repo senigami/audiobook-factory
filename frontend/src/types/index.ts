@@ -68,12 +68,15 @@ export interface ProcessingQueueItem {
 export interface SpeakerProfile {
   name: string;
   wav_count: number;
+  samples?: string[];
   speed: number;
   is_default: boolean;
   test_text?: string;
   speaker_id: string | null;
   variant_name: string | null;
   preview_url: string | null;
+  is_rebuild_required?: boolean;
+  samples_detailed?: Array<{ name: string; is_new: boolean }>;
 }
 
 export interface Speaker {

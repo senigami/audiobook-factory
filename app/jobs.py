@@ -278,7 +278,8 @@ def get_speaker_settings(profile_name_or_id: str) -> dict:
         "speed": float(defaults.get("xtts_speed", 1.0)),
         "test_text": default_test_text,
         "speaker_id": None,
-        "variant_name": None
+        "variant_name": None,
+        "built_samples": []
     }
 
     p = VOICES_DIR / target_profile
@@ -295,6 +296,8 @@ def get_speaker_settings(profile_name_or_id: str) -> dict:
                 res["speaker_id"] = meta["speaker_id"]
             if "variant_name" in meta:
                 res["variant_name"] = meta["variant_name"]
+            if "built_samples" in meta:
+                res["built_samples"] = meta["built_samples"]
         except: pass
 
     return res

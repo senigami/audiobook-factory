@@ -1159,28 +1159,40 @@ def list_speaker_profiles():
 
     profiles = []
     for d in dirs:
-        wav_files = sorted([f.name for f in d.glob("*.wav") if f.name != "sample.wav"])
-        wav_count = len(wav_files)
+        raw_wavs = sorted([f.name for f in d.glob("*.wav") if f.name != "sample.wav"])
 
         # Load metadata if exists
         from .jobs import get_speaker_settings
         spk_settings = get_speaker_settings(d.name)
-        speed = spk_settings["speed"]
-        test_text = spk_settings["test_text"]
-        speaker_id = spk_settings.get("speaker_id")
-        variant_name = spk_settings.get("variant_name")
+        built_samples = spk_settings.get("built_samples", [])
+
+        # Identify new samples (on disk but not in built_samples)
+        samples = []
+        is_rebuild_required = False
+        for w in raw_wavs:
+            is_new = w not in built_samples
+            samples.append({"name": w, "is_new": is_new})
+            if is_new: is_rebuild_required = True
+
+        # If built_samples has more than raw_wavs (some were deleted), still needs rebuild
+        if len([b for b in built_samples if (d / b).exists()]) < len(built_samples):
+             is_rebuild_required = True
 
         test_wav = VOICES_DIR / d.name / "sample.wav"
+        if not test_wav.exists() and len(raw_wavs) > 0:
+            is_rebuild_required = True
 
         profiles.append({
             "name": d.name,
             "is_default": d.name == default_speaker,
-            "wav_count": wav_count,
-            "samples": wav_files,
-            "speed": speed,
-            "test_text": test_text,
-            "speaker_id": speaker_id,
-            "variant_name": variant_name,
+            "wav_count": len(raw_wavs),
+            "samples_detailed": samples,
+            "samples": raw_wavs,
+            "is_rebuild_required": is_rebuild_required,
+            "speed": spk_settings["speed"],
+            "test_text": spk_settings["test_text"],
+            "speaker_id": spk_settings.get("speaker_id"),
+            "variant_name": spk_settings.get("variant_name"),
             "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
         })
     return profiles
@@ -1216,9 +1228,9 @@ def api_create_speaker_profile(
     profile_dir = VOICES_DIR / profile_name
     profile_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write meta.json
+    # Write profile.json
     import json
-    meta_path = profile_dir / "meta.json"
+    meta_path = profile_dir / "profile.json"
     meta = {
         "speaker_id": speaker_id,
         "variant_name": variant_name,
@@ -1358,6 +1370,8 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
 @app.post("/api/speaker-profiles/build")
 async def build_speaker_profile(
     name: str = Form(...),
+    speaker_id: Optional[str] = Form(None),
+    variant_name: Optional[str] = Form(None),
     files: List[UploadFile] = File(default=[])
 ):
     try:
@@ -1383,6 +1397,19 @@ async def build_speaker_profile(
                     print(f"Cleared latent cache for rebuild: {lp}")
         except Exception as e:
             print(f"Warning: Failed to clear latent cache: {e}")
+
+        # Preserve old meta if it exists
+        old_meta = {}
+        if profile_dir.exists():
+            import json
+            meta_path = profile_dir / "profile.json"
+            alt_meta = profile_dir / "meta.json"
+            if meta_path.exists():
+                try: old_meta = json.loads(meta_path.read_text())
+                except: pass
+            elif alt_meta.exists():
+                try: old_meta = json.loads(alt_meta.read_text())
+                except: pass
 
         # If we have new files, we replace the existing profile directory
         if files and any(f.filename for f in files):
@@ -1433,6 +1460,19 @@ async def build_speaker_profile(
                     errors.append(f"Unsupported format: {basename} ({ext})")
 
             total_valid = saved_count + converted_count
+
+            # Save or restore profile.json
+            if speaker_id is not None: old_meta["speaker_id"] = speaker_id
+            if variant_name is not None: old_meta["variant_name"] = variant_name
+
+            # Sync built_samples
+            current_wavs = sorted([f.name for f in profile_dir.glob("*.wav") if f.name != "sample.wav"])
+            old_meta["built_samples"] = current_wavs
+
+            if old_meta:
+                import json
+                (profile_dir / "profile.json").write_text(json.dumps(old_meta, indent=2))
+
             if total_valid == 0:
                 msg = "No valid audio files were found"
                 if errors: msg += f": {', '.join(errors[:2])}"
@@ -1448,6 +1488,17 @@ async def build_speaker_profile(
             }
 
         # If no new files, we just confirm success after clearing the latent
+        # Sync built_samples
+        current_wavs = sorted([f.name for f in profile_dir.glob("*.wav") if f.name != "sample.wav"])
+        old_meta["built_samples"] = current_wavs
+
+        # Update meta if new fields provided
+        if speaker_id is not None: old_meta["speaker_id"] = speaker_id
+        if variant_name is not None: old_meta["variant_name"] = variant_name
+        if old_meta and profile_dir.exists():
+            import json
+            (profile_dir / "profile.json").write_text(json.dumps(old_meta, indent=2))
+
         return {
             "status": "success",
             "profile": name,
@@ -1459,6 +1510,55 @@ async def build_speaker_profile(
         print(f"ERROR in build_speaker_profile: {error_msg}")
         traceback.print_exc()
         return JSONResponse({"status": "error", "message": error_msg, "traceback": traceback.format_exc()}, status_code=500)
+
+@app.post("/api/speaker-profiles/{name}/samples/upload")
+async def api_upload_speaker_samples(name: str, files: List[UploadFile] = File(...)):
+    try:
+        profile_dir = VOICES_DIR / name
+        if not profile_dir.exists():
+             return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+        import tempfile
+        import os
+        saved_count = 0
+        converted_count = 0
+        errors = []
+
+        for f in files:
+            if not f.filename: continue
+
+            ext = os.path.splitext(f.filename)[1].lower()
+            basename = os.path.basename(f.filename)
+            stem = os.path.splitext(basename)[0]
+            content = await f.read()
+
+            if ext == ".wav":
+                dest = profile_dir / basename
+                dest.write_bytes(content)
+                saved_count += 1
+            elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+                from .audio import convert_to_wav
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(content)
+                    tmp_path = Path(tmp.name)
+
+                dest_wav = profile_dir / f"{stem}.wav"
+                rc = convert_to_wav(tmp_path, dest_wav)
+                tmp_path.unlink()
+                if rc == 0: converted_count += 1
+                else: errors.append(f"Failed to convert {basename}")
+            else:
+                errors.append(f"Unsupported format: {basename}")
+
+        return {
+            "status": "success",
+            "saved": saved_count,
+            "converted": converted_count,
+            "errors": errors
+        }
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
 
 def rename_speaker_profile_internal(name: str, new_name: str):
     """Internal helper to rename a voice profile and update all references."""

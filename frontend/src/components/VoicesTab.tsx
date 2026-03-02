@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import type { SpeakerProfile, Speaker } from '../types';
 import { User, Plus, Music, Trash2, Play, Loader2, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search, Star } from 'lucide-react';
 import { RecordingGuide } from './RecordingGuide';
 import { ConfirmModal } from './ConfirmModal';
@@ -289,23 +290,7 @@ const SpeedPopover: React.FC<SpeedPopoverProps> = ({ value, onChange, triggerRef
     );
 };
 
-interface SpeakerProfile {
-    name: string;
-    wav_count: number;
-    samples?: string[];
-    speed: number;
-    is_default: boolean;
-    test_text?: string;
-    preview_url: string | null;
-    speaker_id?: string;
-    variant_name?: string;
-}
 
-interface Speaker {
-    id: string;
-    name: string;
-    default_profile_name: string | null;
-}
 
 interface ProfileDetailsProps {
     profile: SpeakerProfile;
@@ -316,29 +301,30 @@ interface ProfileDetailsProps {
     onMoveVariant: (profile: SpeakerProfile) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    onBuildNow: (name: string, files: File[]) => Promise<boolean>;
+    onBuildNow: (name: string, files: File[], speakerId?: string, variantName?: string) => Promise<boolean>;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     voiceName: string;
     showControlsInline?: boolean;
+    buildingProfiles: Record<string, boolean>;
 }
 
 const ProfileDetails: React.FC<ProfileDetailsProps> = ({ 
     profile, isTesting, onTest, onDeleteVariant, onMoveVariant, onRefresh, 
     onEditTestText, onBuildNow, requestConfirm, testStatus,
-    voiceName, showControlsInline = false
+    voiceName, showControlsInline = false, buildingProfiles
 }) => {
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
     const [isPlaying, setIsPlaying] = useState(false);
     const [playingSample, setPlayingSample] = useState<string | null>(null);
-    const [isRebuildRequired, setIsRebuildRequired] = useState(false);
-    const [isBuilding, setIsBuilding] = useState(false);
+    const [hoveredSampleIdx, setHoveredSampleIdx] = useState<number | null>(null);
+    const isBuilding = buildingProfiles[profile.name];
     const audioRef = useRef<HTMLAudioElement>(null);
     const sampleAudioRef = useRef<HTMLAudioElement>(null);
+    const speedPillRef = useRef<HTMLButtonElement>(null);
     const speed = localSpeed ?? profile.speed;
 
     const [isDragging, setIsDragging] = useState(false);
-    const [pendingSamples, setPendingSamples] = useState<File[]>([]);
 
 
     useEffect(() => {
@@ -349,23 +335,27 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
 
 
     const uploadFiles = async (files: FileList | File[]) => {
-        const fileList = Array.from(files);
-        setPendingSamples(prev => [...prev, ...fileList]);
-        setIsRebuildRequired(true);
+        const formData = new FormData();
+        Array.from(files).forEach(f => formData.append('files', f));
+        
+        try {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                onRefresh();
+            }
+        } catch (err) {
+            console.error('Failed to upload samples', err);
+        }
     };
 
     const handleRebuild = async () => {
-        setIsBuilding(true);
         try {
-            const success = await onBuildNow(profile.name, pendingSamples);
-            if (success) {
-                setPendingSamples([]);
-                setIsRebuildRequired(false);
-                // The main handleBuildNow will trigger handleTest, but 
-                // we'll also play a small role here if needed.
-            }
-        } finally {
-            setIsBuilding(false);
+            await onBuildNow(profile.name, [], profile.speaker_id || undefined, profile.variant_name || undefined);
+        } catch (err) {
+            console.error('Failed to rebuild', err);
         }
     };
 
@@ -429,12 +419,18 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     };
 
     const [showSpeedPopover, setShowSpeedPopover] = useState(false);
-    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0);
-    const speedPillRef = useRef<HTMLButtonElement>(null);
-
-    // Auto-expand if no samples, auto-collapse if samples exist
+    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0 || (profile.samples && profile.samples.length === 0));
+    const [isRebuildRequired, setIsRebuildRequired] = useState(profile.is_rebuild_required || false);
+    
     useEffect(() => {
-        setIsSamplesExpanded(profile.wav_count === 0);
+        setIsRebuildRequired(profile.is_rebuild_required || false);
+    }, [profile.is_rebuild_required, profile.name]);
+
+    // Auto-expand if no samples
+    useEffect(() => {
+        if (profile.wav_count === 0) {
+            setIsSamplesExpanded(true);
+        }
     }, [profile.wav_count, profile.name]);
 
 
@@ -609,10 +605,15 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 minHeight: '40px'
                             }}>
 
-                    {profile.samples && profile.samples.length > 0 ? (
+                    {profile.samples_detailed && profile.samples_detailed.length > 0 ? (
                         <>
-                            {profile.samples.map((s, idx) => (
-                                <div key={idx} className="sample-row" style={{ 
+                            {profile.samples_detailed.map((s, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className="sample-row" 
+                                    onMouseEnter={() => setHoveredSampleIdx(idx)}
+                                    onMouseLeave={() => setHoveredSampleIdx(null)}
+                                    style={{ 
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     justifyContent: 'space-between',
@@ -620,49 +621,45 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                     padding: '6px 10px',
                                     borderRadius: '6px',
                                     background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                    transition: 'background 0.2s'
+                                    transition: 'background 0.2s',
+                                    ...(s.is_new ? {
+                                        background: 'rgba(var(--accent-rgb), 0.05)',
+                                        border: '1px dashed var(--accent-glow)'
+                                    } : {})
                                 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden' }}>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handlePlaySample(s);
-                                            }}
-                                            className="btn-ghost"
-                                            style={{
-                                                padding: 0,
-                                                width: '24px',
-                                                height: '24px',
-                                                borderRadius: '6px',
-                                                background: playingSample === s ? 'var(--accent-glow)' : 'rgba(255,255,255,0.05)',
-                                                border: playingSample === s ? '1px solid var(--accent)' : '1px solid var(--border-light)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: playingSample === s ? 'var(--accent)' : 'var(--text-muted)',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                if (playingSample !== s) {
-                                                    e.currentTarget.style.borderColor = 'var(--accent)';
-                                                    e.currentTarget.style.color = 'var(--accent)';
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                if (playingSample !== s) {
-                                                    e.currentTarget.style.borderColor = 'var(--border-light)';
-                                                    e.currentTarget.style.color = 'var(--text-muted)';
-                                                }
-                                            }}
-                                        >
-                                            {playingSample === s ? (
-                                                <Pause size={12} fill="currentColor" />
-                                            ) : (
-                                                <Play size={12} fill="currentColor" />
-                                            )}
-                                        </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handlePlaySample(s.name);
+                                                }}
+                                                className="btn-ghost"
+                                                style={{
+                                                    padding: 0,
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    borderRadius: '6px',
+                                                    background: playingSample === s.name ? 'var(--accent-glow)' : 'rgba(255,255,255,0.05)',
+                                                    border: playingSample === s.name ? '1px solid var(--accent)' : '1px solid var(--border-light)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: playingSample === s.name ? 'var(--accent)' : 'var(--text-muted)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {playingSample === s.name ? (
+                                                    <Pause size={12} fill="currentColor" />
+                                                ) : (
+                                                    <Play size={12} fill="currentColor" />
+                                                )}
+                                            </button>
+
+                                        {s.is_new && (
+                                            <span style={{ color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(var(--accent-rgb), 0.1)', padding: '2px 4px', borderRadius: '4px' }}>NEW</span>
+                                        )}
                                         <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {s}
+                                            {s.name}
                                         </span>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -672,16 +669,15 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                             e.stopPropagation();
                                             requestConfirm({
                                                 title: 'Remove Sample',
-                                                message: `Are you sure you want to remove "${s}"? A voice rebuild will be required to apply this change.`,
+                                                message: `Are you sure you want to remove "${s.name}"? A voice rebuild will be required to apply this change.`,
                                                 isDestructive: true,
                                                 onConfirm: async () => {
                                                     try {
-                                                        const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s)}`, {
+                                                        const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s.name)}`, {
                                                             method: 'DELETE'
                                                         });
                                                         if (resp.ok) {
                                                             onRefresh();
-                                                            setIsRebuildRequired(true);
                                                         }
                                                     } catch (err) {
                                                         console.error('Failed to remove sample', err);
@@ -689,11 +685,25 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                                 }
                                             });
                                         }}
-                                        className="sample-remove-btn"
-                                        style={{ padding: '4px', height: 'auto' }}
-                                        title="Remove Sample"
+                                        className="btn-ghost"
+                                        style={{ 
+                                            padding: '4px', 
+                                            borderRadius: '4px', 
+                                            color: 'var(--text-muted)', 
+                                            opacity: hoveredSampleIdx === idx ? 1 : 0,
+                                            pointerEvents: hoveredSampleIdx === idx ? 'auto' : 'none',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.color = 'var(--error)';
+                                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.color = 'var(--text-muted)';
+                                            e.currentTarget.style.background = 'transparent';
+                                        }}
                                     >
-                                        <X size={12} />
+                                        <X size={14} />
                                     </button>
                                     </div>
                                 </div>
@@ -704,34 +714,6 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             No samples yet. Drag and drop samples here to start building the voice.
                         </div>
                     )}
-                    
-                    {pendingSamples.map((file, pIdx) => (
-                        <div key={`pending-${pIdx}`} className="sample-row" style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            fontSize: '0.8rem',
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            background: 'rgba(var(--accent-rgb), 0.05)',
-                            border: '1px dashed var(--accent-glow)'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, overflow: 'hidden' }}>
-                                <span style={{ color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 700 }}>NEW</span>
-                                <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {file.name}
-                                </span>
-                            </div>
-                            <button
-                                onClick={() => setPendingSamples(prev => prev.filter((_, i) => i !== pIdx))}
-                                className="sample-remove-btn"
-                                style={{ padding: '4px', height: 'auto' }}
-                                title="Remove pending sample"
-                            >
-                                <X size={12} />
-                            </button>
-                        </div>
-                    ))}
                             </div>
                         </motion.div>
                     )}
@@ -764,7 +746,7 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
-                    borderBottom: (profile.wav_count > 0 || pendingSamples.length > 0) ? '1px solid var(--border-light)' : 'none',
+                    borderBottom: profile.wav_count > 0 ? '1px solid var(--border-light)' : 'none',
                     transition: 'border-bottom 0.2s',
                     background: 'rgba(var(--accent-rgb), 0.02)'
                 }}
@@ -976,13 +958,15 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                             });
                         }}
                         className="btn-ghost"
-                        style={{ color: 'var(--error)', gap: '6px', fontSize: '0.8rem', padding: '0 12px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)' }}
+                        style={{ color: 'var(--text-muted)', gap: '6px', fontSize: '0.8rem', padding: '0 12px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)' }}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.borderColor = 'var(--error)';
+                            e.currentTarget.style.color = 'var(--error)';
                             e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)';
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.borderColor = 'var(--border)';
+                            e.currentTarget.style.color = 'var(--text-muted)';
                             e.currentTarget.style.background = 'var(--surface)';
                         }}
                     >
@@ -1005,19 +989,21 @@ interface VoiceCardProps {
     onMoveVariant: (profile: SpeakerProfile) => void;
     onRefresh: () => void;
     onEditTestText: (profile: SpeakerProfile) => void;
-    onBuildNow: (name: string, files: File[]) => Promise<boolean>;
+    onBuildNow: (name: string, files: File[], speakerId?: string, variantName?: string) => Promise<boolean>;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void;
     onAddVariantClick: (speaker: Speaker, profileCount: number) => void;
     onRenameClick: (speaker: Speaker) => void;
     onSetDefaultClick: (profileName: string) => void;
     isExpanded: boolean;
     onToggleExpand: () => void;
+    buildingProfiles: Record<string, boolean>;
 }
 const VoiceCard: React.FC<VoiceCardProps> = ({
     speaker, profiles, isTestingProfileId, testProgress, 
     onTest, onDelete, onRefresh,
     onEditTestText, onBuildNow, requestConfirm,
-    onAddVariantClick, onRenameClick, onSetDefaultClick, isExpanded, onToggleExpand, onMoveVariant
+    onAddVariantClick, onRenameClick, onSetDefaultClick, isExpanded, onToggleExpand, onMoveVariant,
+    buildingProfiles
 }) => {
     const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
     const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
@@ -1028,7 +1014,9 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
     const handleAddVariant = () => onAddVariantClick(speaker, profiles.length);
 
     const getStatusInfo = (p: SpeakerProfile | undefined) => {
-        if (!p || p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
+        if (!p) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
+        if (buildingProfiles[p.name]) return { label: 'BUILDING...', color: 'var(--accent)', bg: 'rgba(var(--accent-rgb), 0.1)' };
+        if (p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
         return { label: 'BUILT', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
     };
 
@@ -1062,7 +1050,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                         boxShadow: 'var(--shadow-sm)'
                     }}>
                         <User size={20} />
-                        {profiles.some(p => p.wav_count === 0) && (
+                        {profiles.some(p => p.is_rebuild_required) && (
                             <div style={{
                                 position: 'absolute',
                                 top: -4,
@@ -1244,6 +1232,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                                     requestConfirm={requestConfirm}
                                     voiceName={speaker.name}
                                     showControlsInline={true}
+                                    buildingProfiles={buildingProfiles}
                                 />
                         </div>
                     </motion.div>
@@ -1306,6 +1295,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [moveVariantProfile, setMoveVariantProfile] = useState<SpeakerProfile | null>(null);
     const [selectedMoveSpeakerId, setSelectedMoveSpeakerId] = useState<string>('');
     const [isMovingVariant, setIsMovingVariant] = useState(false);
+    const [buildingProfiles, setBuildingProfiles] = useState<Record<string, boolean>>({});
 
     const fetchSpeakers = useCallback(async () => {
         try {
@@ -1382,9 +1372,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     }, [onRefresh, handleRequestConfirm]);
 
-    const handleBuildNow = useCallback(async (name: string, newFiles: File[]) => {
+    const handleBuildNow = useCallback(async (name: string, newFiles: File[], speakerId?: string, variantName?: string) => {
+        setBuildingProfiles(prev => ({ ...prev, [name]: true }));
         const formData = new FormData();
         formData.append('name', name);
+        if (speakerId) formData.append('speaker_id', speakerId);
+        if (variantName) formData.append('variant_name', variantName);
         newFiles.forEach(f => formData.append('files', f));
         
         try {
@@ -1418,6 +1411,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         } catch (e) {
             console.error('Rebuild failed', e);
             return false;
+        } finally {
+            setBuildingProfiles(prev => {
+                const updated = { ...prev };
+                delete updated[name];
+                return updated;
+            });
         }
     }, [onRefresh, fetchSpeakers, handleRequestConfirm, handleTest]);
 
@@ -1499,7 +1498,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 variant_name: 'Default',
                 wav_count: 0,
                 speed: 1.0,
-                is_default: true,
+                is_default: false,
                 preview_url: null,
                 wav_files: []
             } as SpeakerProfile);
@@ -1630,7 +1629,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             {filteredVoices.map(voice => (
                                 <VoiceCard
                                     key={voice.id}
-                                    speaker={{ id: voice.id.startsWith('unassigned-') ? '' : voice.id, name: voice.name, default_profile_name: voice.profiles[0]?.name || null }}
+                                    speaker={{ id: voice.id.startsWith('unassigned-') ? '' : voice.id, name: voice.name, default_profile_name: voice.profiles[0]?.name || null, created_at: 0, updated_at: 0 }}
                                     profiles={voice.profiles}
                                     onRefresh={onRefresh}
                                     onTest={handleTest}
@@ -1645,6 +1644,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     isTestingProfileId={testingProfile}
                                     testProgress={testProgress}
                                     requestConfirm={handleRequestConfirm}
+                                    buildingProfiles={buildingProfiles}
                                     onAddVariantClick={(s, count) => {
                                         setAddVariantSpeaker({ speaker: s, nextVariantNum: count + 1 });
                                         setNewVariantNameModal(`Variant ${count + 1}`);
@@ -1729,9 +1729,14 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                             body: new URLSearchParams({ name: newVoiceName.trim() })
                                         });
                                         if (resp.ok) {
+                                            const data = await resp.json();
                                             setIsCreateModalOpen(false);
                                             setNewVoiceName('');
-                                            fetchSpeakers();
+                                            await fetchSpeakers();
+                                            // Automatically expand the new voice
+                                            if (data.id) {
+                                                setExpandedVoiceId(data.id);
+                                            }
                                         }
                                     } finally {
                                         setIsCreatingVoice(false);

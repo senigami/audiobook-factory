@@ -40,6 +40,7 @@ describe('ChapterEditor Newline Normalization', () => {
         chapterId="chap1" 
         projectId="proj1" 
         speakerProfiles={[]} 
+        speakers={[]}
         onBack={() => {}} 
         onNavigateToQueue={() => {}} 
       />
@@ -60,6 +61,7 @@ describe('ChapterEditor Newline Normalization', () => {
         chapterId="chap1" 
         projectId="proj1" 
         speakerProfiles={[]} 
+        speakers={[]}
         onBack={() => {}} 
         onNavigateToQueue={() => {}} 
       />
@@ -83,6 +85,7 @@ describe('ChapterEditor Newline Normalization', () => {
          chapterId="chap1" 
          projectId="proj1" 
          speakerProfiles={[]} 
+         speakers={[]}
          onBack={() => {}} 
          onNavigateToQueue={() => {}} 
        />
