@@ -853,43 +853,22 @@ interface VoiceCardProps {
     onEditTestText: (profile: SpeakerProfile) => void;
     onBuildNow: (name: string, files: File[]) => void;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
+    onAddVariantClick: (speaker: Speaker, profileCount: number) => void;
     isExpanded: boolean;
     onToggleExpand: () => void;
 }
-
 const VoiceCard: React.FC<VoiceCardProps> = ({
     speaker, profiles, isTestingProfileId, testProgress, 
     onTest, onDelete, onRefresh,
     onEditTestText, onBuildNow, requestConfirm,
-    isExpanded, onToggleExpand
+    onAddVariantClick, isExpanded, onToggleExpand
 }) => {
     const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
     const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
 
     const activeProfile = profiles.find(p => p.name === activeProfileId) || defaultProfile;
 
-    const handleAddVariant = async () => {
-        const name = prompt("Enter variant name:", `Variant ${profiles.length + 1}`);
-        if (!name) return;
-        
-        try {
-            const formData = new URLSearchParams();
-            formData.append('speaker_id', speaker.id);
-            formData.append('variant_name', name);
-            const resp = await fetch('/api/speaker-profiles', {
-                method: 'POST',
-                body: formData
-            });
-            if (resp.ok) {
-                onRefresh();
-            } else {
-                const err = await resp.json();
-                alert(`Failed to add variant: ${err.message}`);
-            }
-        } catch (e) {
-            console.error('Failed to add variant', e);
-        }
-    };
+    const handleAddVariant = () => onAddVariantClick(speaker, profiles.length);
 
     const getStatusInfo = (p: SpeakerProfile | undefined) => {
         if (!p || p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
@@ -1129,8 +1108,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [speakers, setSpeakers] = useState<Speaker[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isAddVariantModalOpen, setIsAddVariantModalOpen] = useState(false);
+    const [addVariantSpeaker, setAddVariantSpeaker] = useState<{ speaker: Speaker, nextVariantNum: number } | null>(null);
     const [newVoiceName, setNewVoiceName] = useState('');
+    const [newVariantNameModal, setNewVariantNameModal] = useState('');
     const [isCreatingVoice, setIsCreatingVoice] = useState(false);
+    const [isAddingVariantModal, setIsAddingVariantModal] = useState(false);
     const [expandedVoiceId, setExpandedVoiceId] = useState<string | null>(null);
 
     const fetchSpeakers = useCallback(async () => {
@@ -1422,6 +1405,11 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     isTestingProfileId={testingProfile}
                                     testProgress={testProgress}
                                     requestConfirm={handleRequestConfirm}
+                                    onAddVariantClick={(s, count) => {
+                                        setAddVariantSpeaker({ speaker: s, nextVariantNum: count + 1 });
+                                        setNewVariantNameModal(`Variant ${count + 1}`);
+                                        setIsAddVariantModalOpen(true);
+                                    }}
                                     isExpanded={expandedVoiceId === voice.id}
                                     onToggleExpand={() => setExpandedVoiceId(expandedVoiceId === voice.id ? null : voice.id)}
                                 />
@@ -1469,9 +1457,27 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 value={newVoiceName}
                                 onChange={(e) => setNewVoiceName(e.target.value)}
                                 className="form-input"
+                                style={{ 
+                                    padding: '10px 14px',
+                                    borderRadius: '100px',
+                                    background: 'var(--surface)',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '0.85rem',
+                                    width: '100%',
+                                    transition: 'all 0.2s'
+                                }}
+                                onFocus={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--accent)';
+                                    e.currentTarget.style.boxShadow = '0 0 0 2px rgba(var(--accent-rgb), 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--border)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && newVoiceName.trim()) {
-                                        // Trigger creation
+                                        const button = e.currentTarget.closest('div')?.parentElement?.querySelector('button.btn-primary') as HTMLButtonElement;
+                                        button?.click();
                                     }
                                 }}
                             />
@@ -1507,6 +1513,115 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                 style={{ flex: 1, height: '44px', borderRadius: '12px' }}
                             >
                                 {isCreatingVoice ? 'Creating...' : 'Create Voice'}
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Add Variant Modal */}
+            {isAddVariantModalOpen && addVariantSpeaker && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 1000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(4px)'
+                }}>
+                    <motion.div 
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        style={{
+                            width: '400px',
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            padding: '24px',
+                            boxShadow: 'var(--shadow-lg)',
+                            border: '1px solid var(--border)'
+                        }}
+                    >
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '8px' }}>Add Variant</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                            Create a new variant for voice <span style={{ color: 'var(--accent)', fontWeight: 700 }}>"{addVariantSpeaker?.speaker.name}"</span>.
+                        </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>VARIANT NAME</label>
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder={`e.g. Variant ${addVariantSpeaker?.nextVariantNum}`}
+                                value={newVariantNameModal}
+                                onChange={(e) => setNewVariantNameModal(e.target.value)}
+                                className="form-input"
+                                style={{ 
+                                    padding: '10px 14px',
+                                    borderRadius: '100px',
+                                    background: 'var(--surface)',
+                                    border: '1px solid var(--border)',
+                                    fontSize: '0.85rem',
+                                    width: '100%',
+                                    transition: 'all 0.2s'
+                                }}
+                                onFocus={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--accent)';
+                                    e.currentTarget.style.boxShadow = '0 0 0 2px rgba(var(--accent-rgb), 0.1)';
+                                }}
+                                onBlur={(e) => {
+                                    e.currentTarget.style.borderColor = 'var(--border)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }}
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newVariantNameModal.trim() && !isAddingVariantModal) {
+                                        // Submit if Enter is pressed
+                                        const button = e.currentTarget.closest('div')?.parentElement?.querySelector('button.btn-primary') as HTMLButtonElement;
+                                        button?.click();
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button 
+                                onClick={() => setIsAddVariantModalOpen(false)}
+                                className="btn-ghost"
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                disabled={!newVariantNameModal.trim() || isAddingVariantModal}
+                                onClick={async () => {
+                                    if (!addVariantSpeaker) return;
+                                    setIsAddingVariantModal(true);
+                                    try {
+                                        const formData = new URLSearchParams();
+                                        formData.append('speaker_id', addVariantSpeaker.speaker.id);
+                                        formData.append('variant_name', newVariantNameModal.trim());
+                                        const resp = await fetch('/api/speaker-profiles', {
+                                            method: 'POST',
+                                            body: formData
+                                        });
+                                        if (resp.ok) {
+                                            setIsAddVariantModalOpen(false);
+                                            setAddVariantSpeaker(null);
+                                            setNewVariantNameModal('');
+                                            onRefresh();
+                                        } else {
+                                            const err = await resp.json();
+                                            alert(`Failed to add variant: ${err.message}`);
+                                        }
+                                    } finally {
+                                        setIsAddingVariantModal(false);
+                                    }
+                                }}
+                                className="btn-primary"
+                                style={{ flex: 1, height: '44px', borderRadius: '12px' }}
+                            >
+                                {isAddingVariantModal ? 'Adding...' : 'Add Variant'}
                             </button>
                         </div>
                     </motion.div>
