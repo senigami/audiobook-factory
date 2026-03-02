@@ -96,7 +96,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                     setIsOpen(!isOpen);
                 }}
                 aria-label="More actions"
-                whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', color: 'var(--accent)' }}
+                whileHover={{ backgroundColor: 'rgba(15, 23, 42, 0.08)', color: 'var(--accent)' }}
                 whileTap={{ scale: 0.92 }}
                 style={{
                     width: '32px',
@@ -105,10 +105,10 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete }) => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'rgba(15, 23, 42, 0.2)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: 'var(--text-secondary)',
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    backdropFilter: 'blur(4px)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     padding: 0,
                     transition: 'all 0.2s ease'

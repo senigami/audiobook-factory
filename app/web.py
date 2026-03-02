@@ -1186,6 +1186,43 @@ def list_speaker_profiles():
 @app.get("/api/speakers")
 def api_list_speakers():
     from .db import list_speakers
+@app.post("/api/speaker-profiles")
+def api_create_speaker_profile(
+    speaker_id: str = Form(...),
+    variant_name: str = Form(...)
+):
+    from .db import get_speaker
+    speaker = get_speaker(speaker_id)
+    if not speaker:
+        return JSONResponse({"status": "error", "message": "Speaker not found"}, status_code=404)
+
+    # Generate a unique profile directory name
+    # Base it on speaker name + variant name
+    clean_v = "".join(x for x in variant_name if x.isalnum() or x in " -_").strip()
+    profile_name = f"{speaker['name']} - {clean_v}" if clean_v != "Default" else speaker['name']
+
+    # Ensure profile name is unique if directory exists
+    counter = 1
+    base_profile_name = profile_name
+    while (VOICES_DIR / profile_name).exists():
+        profile_name = f"{base_profile_name}_{counter}"
+        counter += 1
+
+    profile_dir = VOICES_DIR / profile_name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write meta.json
+    import json
+    meta_path = profile_dir / "meta.json"
+    meta = {
+        "speaker_id": speaker_id,
+        "variant_name": variant_name,
+        "speed": 1.0,
+        "test_text": "Greetings, let's test this voice."
+    }
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+    return {"status": "success", "profile_name": profile_name}
     return list_speakers()
 
 @app.post("/api/speakers")
@@ -1219,6 +1256,15 @@ def api_create_or_update_speaker(
 @app.delete("/api/speakers/{speaker_id}")
 def api_delete_speaker(speaker_id: str):
     from .db import delete_speaker
+    # Cascade deletion to all variant profiles on disk
+    try:
+        profiles = list_speaker_profiles()
+        for p in profiles:
+            if p.get("speaker_id") == speaker_id:
+                delete_speaker_profile(p["name"])
+    except Exception as e:
+        print(f"Warning: Cascade deletion of profiles failed: {e}")
+
     success = delete_speaker(speaker_id)
     return {"status": "success" if success else "error"}
 

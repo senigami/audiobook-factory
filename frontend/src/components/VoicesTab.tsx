@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from
 import { User, Plus, Music, Trash2, Play, Loader2, Info, RefreshCw, FileEdit, X, RotateCcw, ChevronUp, Sliders, Pause, Upload, AlertTriangle, Search } from 'lucide-react';
 import { RecordingGuide } from './RecordingGuide';
 import { ConfirmModal } from './ConfirmModal';
+import { ActionMenu } from './ActionMenu';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -329,7 +330,6 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     const [localSpeed, setLocalSpeed] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [cacheBuster, setCacheBuster] = useState(Date.now());
-    const [isExpanded, setIsExpanded] = useState(showControlsInline);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isRebuildRequired, setIsRebuildRequired] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -346,16 +346,11 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
         }
     }, [profile.preview_url, isTesting]);
 
-    useEffect(() => {
-        if (showControlsInline && !isExpanded) setIsExpanded(true);
-    }, [showControlsInline]);
 
     const uploadFiles = async (files: FileList | File[]) => {
         const fileList = Array.from(files);
         setPendingSamples(prev => [...prev, ...fileList]);
         setIsRebuildRequired(true);
-        if (!showControlsInline) setIsExpanded(true);
-        setIsSamplesExpanded(true); // Always expand samples section to show new files
     };
 
     const handleRebuild = async () => {
@@ -404,8 +399,13 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
     };
 
     const [showSpeedPopover, setShowSpeedPopover] = useState(false);
-    const [isSamplesExpanded, setIsSamplesExpanded] = useState(false);
+    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0);
     const speedPillRef = useRef<HTMLButtonElement>(null);
+
+    // Auto-expand if no samples, auto-collapse if samples exist
+    useEffect(() => {
+        setIsSamplesExpanded(profile.wav_count === 0);
+    }, [profile.wav_count, profile.name]);
 
 
     const renderControls = () => (
@@ -777,12 +777,12 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
-                    borderBottom: (isExpanded && (profile.wav_count > 0 || pendingSamples.length > 0)) ? '1px solid var(--border-light)' : 'none',
+                    borderBottom: (profile.wav_count > 0 || pendingSamples.length > 0) ? '1px solid var(--border-light)' : 'none',
                     transition: 'border-bottom 0.2s'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <div style={{ flexShrink: 0 }}>
                         <button 
                             onClick={handlePlayClick}
                             className="btn-primary"
@@ -820,99 +820,20 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                                 />
                             )}
                         </button>
-                        <div 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsExpanded(!isExpanded);
-                            }}
-                            style={{
-                                position: 'absolute',
-                                bottom: -4,
-                                right: -4,
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '50%',
-                                background: 'var(--surface)',
-                                border: '2px solid var(--accent)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--accent)',
-                                cursor: 'pointer',
-                                boxShadow: 'var(--shadow-sm)',
-                                zIndex: 2,
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.1)';
-                                e.currentTarget.style.borderColor = 'var(--accent-active)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.borderColor = 'var(--accent)';
-                            }}
-                        >
-                            <ChevronUp 
-                                size={12} 
-                                style={{ 
-                                    transform: isExpanded ? 'none' : 'rotate(180deg)',
-                                    transition: 'transform 0.3s ease',
-                                    width: '12px',
-                                    height: '12px',
-                                    flexShrink: 0
-                                }} 
-                            />
-                        </div>
                     </div>
                     <div 
-                        onClick={() => setIsExpanded(!isExpanded)}
                         style={{ 
-                            cursor: 'pointer',
-                            userSelect: 'none',
                             display: 'flex',
                             flexDirection: 'column',
                             flex: 1,
-                            padding: '4px 8px',
-                            margin: '0 -8px',
-                            borderRadius: '8px',
-                            transition: 'background 0.2s ease'
+                            padding: '4px 8px'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(var(--accent-rgb), 0.05)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        className="profile-header-clickable"
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             {!isGrouped && (
                                 <h4 style={{ fontWeight: 600, fontSize: '1rem', margin: 0 }}>
                                     {assignedSpeaker ? `${assignedSpeaker.name}: ${profile.variant_name || 'Default'}` : profile.name}
                                 </h4>
-                            )}
-                            {profile.is_default && (
-                                <span style={{ 
-                                    fontSize: '0.65rem', 
-                                    padding: '2px 6px', 
-                                    background: 'var(--accent)', 
-                                    color: 'white',
-                                    borderRadius: '4px',
-                                    fontWeight: 700,
-                                    textTransform: 'uppercase'
-                                }}>Default</span>
-                            )}
-                            {isRebuildRequired && (
-                                <span style={{ 
-                                    fontSize: '0.65rem', 
-                                    padding: '2px 6px', 
-                                    background: 'var(--warning-text)', 
-                                    color: 'white',
-                                    borderRadius: '4px',
-                                    fontWeight: 700,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                }}>
-                                    <AlertTriangle size={10} />
-                                    REBUILD REQUIRED
-                                </span>
                             )}
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{profile.wav_count + pendingSamples.length} samples</span>
@@ -941,32 +862,10 @@ const ProfileDetails: React.FC<ProfileDetailsProps> = ({
                 </div>
             )}
 
-            <AnimatePresence>
-                {isExpanded && (
-                    <motion.div
-                        initial={showControlsInline ? false : { height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        style={{ overflow: 'hidden', borderTop: showControlsInline ? 'none' : '1px solid var(--border)', background: 'var(--surface-light)' }}
-                    >
-                        {renderControls()}
-                        {!showControlsInline && (
-                            <button
-                                onClick={() => setIsExpanded(false)}
-                                className="btn-ghost"
-                                style={{ margin: '0 1.25rem 1.25rem', width: 'calc(100% - 2.5rem)', fontSize: '0.75rem', padding: '8px' }}
-                            >
-                                <ChevronUp size={14} />
-                                Collapse
-                            </button>
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {renderControls()}
         </div>
     );
 };
-
 
 interface VoiceCardProps {
     speaker: Speaker;
@@ -980,18 +879,18 @@ interface VoiceCardProps {
     onBuildNow: (name: string, files: File[]) => void;
     requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean }) => void;
     speakers: Speaker[];
+    isExpanded: boolean;
+    onToggleExpand: () => void;
 }
 
 const VoiceCard: React.FC<VoiceCardProps> = ({
     speaker, profiles, isTestingProfileId, testProgress, 
     onTest, onDelete, onRefresh,
-    onEditTestText, onBuildNow, requestConfirm, speakers
+    onEditTestText, onBuildNow, requestConfirm, speakers,
+    isExpanded, onToggleExpand
 }) => {
     const defaultProfile = profiles.find(p => p.is_default) || profiles[0] || { name: '', speed: 1.0, wav_count: 0 } as SpeakerProfile;
     const [activeProfileId, setActiveProfileId] = useState(defaultProfile?.name || '');
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [isSpeedOpen, setIsSpeedOpen] = useState(false);
-    const speedTriggerRef = useRef<HTMLButtonElement>(null);
 
     const activeProfile = profiles.find(p => p.name === activeProfileId) || defaultProfile;
 
@@ -999,9 +898,23 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         const name = prompt("Enter variant name:", `Variant ${profiles.length + 1}`);
         if (!name) return;
         
-        // For now, we'll just show the user how to build it or create an empty profile if API allows
-        // Logic: New variant = new profile name.
-        onBuildNow(name, []); 
+        try {
+            const formData = new URLSearchParams();
+            formData.append('speaker_id', speaker.id);
+            formData.append('variant_name', name);
+            const resp = await fetch('/api/speaker-profiles', {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                onRefresh();
+            } else {
+                const err = await resp.json();
+                alert(`Failed to add variant: ${err.message}`);
+            }
+        } catch (e) {
+            console.error('Failed to add variant', e);
+        }
     };
 
     const getStatusInfo = (p: SpeakerProfile | undefined) => {
@@ -1015,18 +928,19 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         <div className="glass-panel animate-in" style={{ padding: '0', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: isExpanded ? '1px solid var(--accent)' : '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '80px', padding: '0 1.5rem' }}>
                 <div 
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '16px', 
-                        cursor: 'pointer',
-                        flex: 1,
-                        userSelect: 'none',
-                        height: '100%'
-                    }}
-                >
+                onClick={onToggleExpand}
+                style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '16px', 
+                    cursor: 'pointer',
+                    flex: 1,
+                    userSelect: 'none',
+                    height: '100%'
+                }}
+            >
                     <div style={{ 
+                        position: 'relative',
                         width: '40px', 
                         height: '40px', 
                         borderRadius: '12px', 
@@ -1038,6 +952,47 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                         boxShadow: 'var(--shadow-sm)'
                     }}>
                         <User size={20} />
+                        {profiles.some(p => p.wav_count === 0) && (
+                            <div style={{
+                                position: 'absolute',
+                                top: -4,
+                                left: -4,
+                                width: '18px',
+                                height: '18px',
+                                background: 'var(--warning-text)',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '2px solid var(--border-light)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                color: 'white'
+                            }}>
+                                <RefreshCw size={10} style={{ width: '10px', height: '10px' }} />
+                            </div>
+                        )}
+                        <div 
+                            style={{
+                                position: 'absolute',
+                                bottom: -4,
+                                right: -4,
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: 'var(--surface)',
+                                border: `2px solid ${isExpanded ? 'var(--accent)' : 'var(--border)'}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: isExpanded ? 'var(--accent)' : 'var(--text-muted)',
+                                boxShadow: 'var(--shadow-sm)',
+                                zIndex: 2,
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                transform: isExpanded ? 'rotate(0deg)' : 'rotate(180deg)'
+                            }}
+                        >
+                            <ChevronUp size={12} style={{ width: '12px', height: '12px', flexShrink: 0 }} />
+                        </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -1055,111 +1010,32 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                         </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                             {activeProfile?.wav_count || 0} samples
+                            {profiles.length > 1 && ` • ${profiles.length} variants`}
                         </span>
                     </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* Primary Actions */}
-                    <button 
-                        className="btn-ghost" 
-                        style={{ width: '36px', height: '36px', borderRadius: '10px', padding: 0 }}
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            if (activeProfile?.preview_url) {
-                                const audio = new Audio(activeProfile.preview_url);
-                                audio.play();
-                            } else if (activeProfile) {
-                                onTest(activeProfile.name);
+                    <ActionMenu 
+                        items={[
+                            { 
+                                label: 'Delete Voice', 
+                                icon: Trash2,
+                                onClick: () => requestConfirm({
+                                    title: 'Delete Voice?',
+                                    message: `Are you sure you want to delete "${speaker.name}" and all its variants/samples? This cannot be undone.`,
+                                    isDestructive: true,
+                                    onConfirm: () => {
+                                        fetch(`/api/speakers/${speaker.id}`, { method: 'DELETE' })
+                                            .then(resp => {
+                                                if (resp.ok) onRefresh();
+                                            });
+                                    }
+                                }),
+                                isDestructive: true 
                             }
-                        }}
-                    >
-                        <Play size={18} fill="currentColor" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-                    </button>
-
-                    <button 
-                        ref={speedTriggerRef}
-                        className="btn-ghost" 
-                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 800, gap: '6px' }}
-                        onClick={(e) => { e.stopPropagation(); setIsSpeedOpen(true); }}
-                    >
-                        <Sliders size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                        {activeProfile?.speed.toFixed(2)}x
-                    </button>
-
-                    {isSpeedOpen && (
-                        <SpeedPopover
-                            value={activeProfile?.speed || 1.0}
-                            onChange={async (newSpeed) => {
-                                if (!activeProfile) return;
-                                const formData = new URLSearchParams();
-                                formData.append('speed', newSpeed.toString());
-                                await fetch(`/api/speaker-profiles/${encodeURIComponent(activeProfile.name)}/speed`, { method: 'POST', body: formData });
-                                onRefresh();
-                            }}
-                            triggerRef={speedTriggerRef}
-                            onClose={() => setIsSpeedOpen(false)}
-                        />
-                    )}
-
-                    <button 
-                        className="btn-ghost" 
-                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 700 }}
-                        onClick={(e) => { e.stopPropagation(); onEditTestText(activeProfile as SpeakerProfile); }}
-                    >
-                        Script
-                    </button>
-
-                    <button 
-                        className="btn-ghost" 
-                        style={{ height: '32px', borderRadius: '100px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 700, gap: '6px' }}
-                        disabled={activeProfile?.wav_count === 0}
-                        onClick={(e) => { e.stopPropagation(); onBuildNow(activeProfile?.name || '', []); }}
-                    >
-                        <RefreshCw size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                        Rebuild
-                    </button>
-
-                    {profiles.length === 1 && (
-                        <button 
-                            className="btn-ghost" 
-                            style={{ height: '32px', borderRadius: '100px', padding: '0 8px', fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent)', gap: '4px' }}
-                            onClick={(e) => { e.stopPropagation(); handleAddVariant(); }}
-                        >
-                            <Plus size={14} style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                            Variant
-                        </button>
-                    )}
-
-                    <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 4px' }} />
-
-                    <button 
-                        className="btn-ghost"
-                        style={{ width: '32px', height: '32px', padding: 0 }}
-                        onClick={(e) => { e.stopPropagation(); onDelete(activeProfile?.name || ''); }}
-                        title="Delete Variant"
-                    >
-                        <Trash2 size={16} color="var(--error)" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-                    </button>
-                    
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-                        style={{ 
-                            marginLeft: '4px',
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s',
-                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(180deg)',
-                            background: isExpanded ? 'var(--accent-glow)' : 'transparent',
-                            color: isExpanded ? 'var(--accent)' : 'var(--text-muted)'
-                        }}
-                    >
-                        <ChevronUp size={18} style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-                    </button>
+                        ]}
+                    />
                 </div>
             </div>
 
@@ -1172,14 +1048,16 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         style={{ overflow: 'hidden' }}
                     >
-                        {(profiles.length > 1) && (
-                            <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(var(--accent-rgb), 0.02)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
+                        <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(var(--accent-rgb), 0.02)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
                                 {profiles.map(p => {
                                     const isActive = activeProfileId === p.name;
                                     return (
                                         <button
                                             key={p.name}
-                                            onClick={() => setActiveProfileId(p.name)}
+                                            onClick={() => {
+                                                setActiveProfileId(p.name);
+                                                if (!isExpanded) onToggleExpand(); // Expand if not already expanded
+                                            }}
                                             style={{
                                                 padding: '6px 14px',
                                                 borderRadius: '100px',
@@ -1221,8 +1099,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
                                     <Plus size={14} />
                                     Variant
                                 </button>
-                            </div>
-                        )}
+                        </div>
 
                         <div key={activeProfileId} className="animate-in" style={{ background: 'var(--surface-light)' }}>
                                 <ProfileDetails
@@ -1274,6 +1151,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [newVoiceName, setNewVoiceName] = useState('');
     const [isCreatingVoice, setIsCreatingVoice] = useState(false);
+    const [expandedVoiceId, setExpandedVoiceId] = useState<string | null>(null);
 
     const fetchSpeakers = useCallback(async () => {
         try {
@@ -1400,11 +1278,27 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
 
     // --- Data Processing ---
     // Merge speakers and profiles into a unified Voice concept
-    const voices = (speakers || []).map(speaker => ({
-        id: speaker.id,
-        name: speaker.name,
-        profiles: speakerProfiles.filter(p => p.speaker_id === speaker.id)
-    }));
+    const voices = (speakers || []).map(speaker => {
+        const pList = speakerProfiles.filter(p => p.speaker_id === speaker.id);
+        // If no profiles, synthesize an initial "Default" profile to allow the user to add samples
+        if (pList.length === 0) {
+            pList.push({
+                name: speaker.name,
+                speaker_id: speaker.id,
+                variant_name: 'Default',
+                wav_count: 0,
+                speed: 1.0,
+                is_default: true,
+                preview_url: null,
+                wav_files: []
+            } as SpeakerProfile);
+        }
+        return {
+            id: speaker.id,
+            name: speaker.name,
+            profiles: pList
+        };
+    });
 
     // Identify profiles that aren't linked to any speaker
     const unassigned = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
@@ -1539,12 +1433,14 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                     onRefresh={onRefresh}
                                     onTest={handleTest}
                                     onDelete={handleDelete}
-                                    onEditTestText={setEditingProfile}
+                                    onEditTestText={(p) => setEditingProfile(p)}
                                     onBuildNow={handleBuildNow}
-                                    requestConfirm={handleRequestConfirm}
-                                    testProgress={testProgress}
                                     isTestingProfileId={testingProfile}
-                                    speakers={speakers}
+                                    testProgress={testProgress}
+                                    requestConfirm={handleRequestConfirm}
+                                    speakers={speakers || []}
+                                    isExpanded={expandedVoiceId === voice.id}
+                                    onToggleExpand={() => setExpandedVoiceId(expandedVoiceId === voice.id ? null : voice.id)}
                                 />
                             ))}
                         </>
