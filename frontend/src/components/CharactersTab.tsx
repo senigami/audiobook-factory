@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Character, Speaker } from '../types';
+import type { Character } from '../types';
 import { api } from '../api';
 import { Plus, Trash2, User as UserIcon } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
@@ -7,13 +7,11 @@ import { ConfirmModal } from './ConfirmModal';
 
 interface CharactersTabProps {
   projectId: string;
-  // The 'speakers' prop is intentionally kept as it's used by the component.
-  // The instruction to remove 'speakerProfiles' seems to be based on a misunderstanding
-  // as 'speakerProfiles' is not present in this interface or its usage.
   speakers: import('../types').Speaker[];
+  speakerProfiles: import('../types').SpeakerProfile[];
 }
 
-export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speakers }) => {
+export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speakers, speakerProfiles }) => {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -45,6 +43,15 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   useEffect(() => {
     loadCharacters();
   }, [projectId]);
+
+  // Compute merged voices groupings
+  const availableVoices = React.useMemo(() => {
+    const list = (speakers || []).map(s => ({ id: s.id, name: s.name, is_speaker: true }));
+    const orphans = (speakerProfiles || [])
+      .filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
+      .map(p => ({ id: `unassigned-${p.name}`, name: p.name, is_speaker: false }));
+    return [...list, ...orphans];
+  }, [speakers, speakerProfiles]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +101,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   const handleDelete = async (id: string, name: string) => {
     setConfirmConfig({
       title: 'Delete Character',
-      message: `Delete character "${name}"? All assigned sentences will revert to the default narrator.`,
+      message: `Delete character "${name}"? All assigned sentences will revert to the default speaker.`,
       isDestructive: true,
       onConfirm: async () => {
         try {
@@ -155,9 +162,9 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                 onChange={e => setNewVoice(e.target.value)}
                 style={{ width: '100%' }}
               >
-                <option value="">Unassigned (Default Narrator)</option>
-                {speakers.map(s => (
-                  <option key={s.id} value={s.name}>{s.name}</option>
+                <option value="">Unassigned (Default Speaker)</option>
+                {availableVoices.map(v => (
+                  <option key={v.id} value={v.name}>{v.name}</option>
                 ))}
               </select>
             </div>
@@ -201,10 +208,10 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                   onChange={e => handleUpdateVoice(char.id, e.target.value)}
                   style={{ width: '100%' }}
                 >
-                  <option value="">Default Narrator</option>
-                  {speakers.map(s => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
-                  ))}
+                  <option value="">Default Speaker</option>
+                          {availableVoices.map(v => (
+                            <option key={v.id} value={v.name}>{v.name}</option>
+                          ))}
                 </select>
               </div>
 

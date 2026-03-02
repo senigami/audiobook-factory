@@ -10,6 +10,7 @@ interface ChapterEditorProps {
   chapterId: string;
   projectId: string;
   speakerProfiles: SpeakerProfile[];
+  speakers: import('../types').Speaker[];
   job?: Job;
   selectedVoice?: string;
   onVoiceChange?: (voice: string) => void;
@@ -20,7 +21,7 @@ interface ChapterEditorProps {
   segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev, segmentUpdate }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, speakers, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev, segmentUpdate }) => {
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -31,6 +32,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
   const segmentsRef = useRef<ChapterSegment[]>(segments);
+  
+  // Compute merged voices groupings
+  const availableVoices = React.useMemo(() => {
+    const list = (speakers || []).map(s => ({ id: s.id, name: s.name, is_speaker: true }));
+    const orphans = (speakerProfiles || [])
+      .filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
+      .map(p => ({ id: `unassigned-${p.name}`, name: p.name, is_speaker: false }));
+    return [...list, ...orphans];
+  }, [speakers, speakerProfiles]);
   
   useEffect(() => {
     segmentsRef.current = segments;
@@ -592,9 +602,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     }}
                     title="Select Voice Profile for this chapter"
                 >
-                    <option value="">Default Voice</option>
-                    {speakerProfiles.map(sp => (
-                        <option key={sp.name} value={sp.name}>{sp.name}</option>
+                    <option value="">Unassigned (Default Speaker)</option>
+                    {availableVoices.map(v => (
+                        <option key={v.id} value={v.name}>{v.name}</option>
                     ))}
                 </select>
             )}

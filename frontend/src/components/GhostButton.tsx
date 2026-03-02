@@ -11,6 +11,7 @@ interface GhostButtonProps {
     title?: string;
     isActive?: boolean;
     disabled?: boolean;
+    iconClassName?: string;
 }
 
 export const GhostButton: React.FC<GhostButtonProps> = ({
@@ -22,7 +23,8 @@ export const GhostButton: React.FC<GhostButtonProps> = ({
     iconSize = 18,
     title,
     isActive = false,
-    disabled = false
+    disabled = false,
+    iconClassName = ""
 }) => {
     const [isHovered, setIsHovered] = useState(false);
 
@@ -56,7 +58,7 @@ export const GhostButton: React.FC<GhostButtonProps> = ({
             title={title}
             disabled={disabled}
         >
-            <Icon size={iconSize} strokeWidth={isActive ? 2.5 : 2} style={{ flexShrink: 0 }} />
+            <Icon size={iconSize} strokeWidth={isActive ? 2.5 : 2} className={iconClassName} style={{ flexShrink: 0 }} />
             {label && <span className="nav-label">{label}</span>}
         </button>
     );

@@ -71,6 +71,8 @@ export interface SpeakerProfile {
   speed: number;
   is_default: boolean;
   test_text?: string;
+  speaker_id: string | null;
+  variant_name: string | null;
   preview_url: string | null;
 }
 

@@ -45,7 +45,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
         borderRadius: '8px',
         background: hoveredItem === itemId ? 'var(--accent-glow)' : 'transparent',
         transition: 'all 0.2s ease',
-        cursor: 'default'
+        cursor: 'pointer'
     });
 
     return (
@@ -55,7 +55,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                 icon={Settings}
                 isActive={isOpen}
                 title="Synthesis Preferences"
-                className={isOpen ? "animate-spin-slow" : ""}
+                iconClassName={isOpen ? "animate-spin-slow" : ""}
             />
 
             <AnimatePresence>
@@ -91,6 +91,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                     style={rowStyle('safe-mode')}
                                     onMouseEnter={() => setHoveredItem('safe-mode')}
                                     onMouseLeave={() => setHoveredItem(null)}
+                                    onClick={() => handleToggle('safe_mode', settings?.safe_mode)}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <ShieldCheck size={18} color={hoveredItem === 'safe-mode' ? 'var(--accent)' : 'var(--text-muted)'} />
@@ -100,7 +101,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                         </div>
                                     </div>
                                     <button 
-                                        onClick={() => handleToggle('safe_mode', settings?.safe_mode)}
+                                        onClick={(e) => { e.stopPropagation(); handleToggle('safe_mode', settings?.safe_mode); }}
                                         className={settings?.safe_mode ? 'btn-primary' : 'btn-glass'} 
                                         style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
                                     >
@@ -116,6 +117,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                     <div 
                                         style={rowStyle('make-mp3')}
                                         onMouseEnter={() => setHoveredItem('make-mp3')}
+                                        onClick={() => handleToggle('make_mp3', settings?.make_mp3)}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <Music size={18} color={hoveredItem === 'make-mp3' ? 'var(--accent)' : 'var(--text-muted)'} />
@@ -125,7 +127,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                             </div>
                                         </div>
                                         <button 
-                                            onClick={() => handleToggle('make_mp3', settings?.make_mp3)}
+                                            onClick={(e) => { e.stopPropagation(); handleToggle('make_mp3', settings?.make_mp3); }}
                                             className={settings?.make_mp3 ? 'btn-primary' : 'btn-glass'} 
                                             style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
                                         >
@@ -136,15 +138,20 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                 {/* Backfill MP3s */}
                                 {settings?.make_mp3 && (
                                     <div 
-                                        style={rowStyle('sync')}
+                                        style={{ ...rowStyle('sync'), paddingLeft: '28px' }}
                                         onMouseEnter={() => setHoveredItem('sync')}
                                         onMouseLeave={() => setHoveredItem(null)}
+                                        onClick={async () => {
+                                            await fetch('/queue/backfill_mp3', { method: 'POST' });
+                                            onRefresh();
+                                            onShowNotification?.('Generating missing MP3s. Check queue for progress.');
+                                        }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <RefreshCw size={18} color={hoveredItem === 'sync' ? 'var(--accent)' : 'var(--text-muted)'} />
                                             <div>
                                                 <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>Backfill MP3s</div>
-                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Generate missing high-quality MP3s</div>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Generate missing MP3s</div>
                                             </div>
                                         </div>
                                         <button 
@@ -180,6 +187,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                     style={rowStyle('console')}
                                     onMouseEnter={() => setHoveredItem('console')}
                                     onMouseLeave={() => setHoveredItem(null)}
+                                    onClick={onToggleLogs}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <Terminal size={18} color={hoveredItem === 'console' ? 'var(--accent)' : 'var(--text-muted)'} />
@@ -189,7 +197,7 @@ export const SettingsTray: React.FC<SettingsTrayProps> = ({
                                         </div>
                                     </div>
                                     <button 
-                                        onClick={onToggleLogs}
+                                        onClick={(e) => { e.stopPropagation(); onToggleLogs(); }}
                                         className={showLogs ? 'btn-primary' : 'btn-glass'} 
                                         style={{ fontSize: '0.65rem', padding: '4px 10px', borderRadius: '6px', minWidth: '42px' }}
                                     >

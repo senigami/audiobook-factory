@@ -51,7 +51,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
   const [newFile, setNewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
   const [confirmConfig, setConfirmConfig] = useState<{
     title: string;
     message: string;
@@ -59,6 +58,15 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
     isDestructive?: boolean;
     confirmText?: string;
   } | null>(null);
+
+  // Compute merged voices grouping for dropdowns (matches VoicesTab logic)
+  const mergedVoices = React.useMemo(() => {
+    const list = (speakers || []).map(s => ({ id: s.id, name: s.name, is_speaker: true }));
+    const orphans = (speakerProfiles || [])
+      .filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
+      .map(p => ({ id: `unassigned-${p.name}`, name: p.name, is_speaker: false }));
+    return [...list, ...orphans];
+  }, [speakers, speakerProfiles]);
 
   const loadData = async () => {
     try {
@@ -364,6 +372,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
               chapterId={editingChapterId} 
               projectId={projectId} 
               speakerProfiles={speakerProfiles}
+              speakers={speakers}
               job={Object.values(jobs).find(j => j.project_id === projectId && j.chapter_file && j.chapter_file.startsWith(editingChapterId))}
               onBack={() => {
                   setEditingChapterId(null);
@@ -404,12 +413,9 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
         <div 
             onClick={() => project.cover_image_path ? setShowCoverModal(true) : null}
             style={{
-                width: '160px',
-                height: '160px',
+                height: '200px',
                 flexShrink: 0,
                 borderRadius: '12px',
-                background: 'var(--surface-light)',
-                border: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -428,9 +434,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                         width: '100%', 
                         height: '100%', 
                         objectFit: 'contain',
-                        padding: '12px',
-                        background: 'rgba(0,0,0,0.03)',
-                        borderRadius: '12px'
                     }} 
                 />
             ) : (
@@ -495,7 +498,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                             fontSize: '1rem', 
                             textDecoration: 'none',
                             background: 'var(--accent)',
-                            boxShadow: 'var(--shadow-md)'
+                            boxShadow: 'var(--shadow-md)',
+                            borderRadius: '12px'
                         }}
                     >
                       <Download size={20} />
@@ -513,7 +517,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                     )}
                 </div>
             ) : (
-                <button className="btn-primary" disabled style={{ padding: '1rem', opacity: 0.5, cursor: 'not-allowed', width: '100%' }}>
+                <button className="btn-primary" disabled style={{ padding: '1rem', opacity: 0.5, cursor: 'not-allowed', width: '100%', borderRadius: '12px' }}>
                     No Assembly Yet
                 </button>
             )}
@@ -606,7 +610,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
       )}
 
       {currentTab === 'characters' ? (
-          <CharactersTab projectId={projectId} speakers={speakers} />
+          <CharactersTab projectId={projectId} speakers={speakers} speakerProfiles={speakerProfiles} />
       ) : (
           <>
       {/* Chapters List */}
@@ -644,10 +648,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                           <select 
                               style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem', cursor: 'pointer' }}
                               onChange={(e) => setSelectedVoice(e.target.value)}
-                              value={selectedVoice || (speakers.find(s => s.name === (speakerProfiles.find(p => p.is_default)?.name))?.name || (speakers[0]?.name || ''))}
+                              value={selectedVoice}
                           >
-                              {speakers.map(s => (
-                                  <option key={s.id} value={s.name}>{s.name}</option>
+                              <option value="">Unassigned (Default Speaker)</option>
+                              {mergedVoices.map(v => (
+                                  <option key={v.id} value={v.name}>{v.name}</option>
                               ))}
                           </select>
                       </div>
