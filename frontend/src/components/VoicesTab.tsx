@@ -1015,7 +1015,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
 
     const getStatusInfo = (p: SpeakerProfile | undefined) => {
         if (!p) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
-        if (buildingProfiles[p.name]) return { label: 'BUILDING...', color: 'var(--accent)', bg: 'rgba(var(--accent-rgb), 0.1)' };
+        if (buildingProfiles[p.name] || isTestingProfileId === p.name) return { label: 'BUILDING...', color: 'var(--accent)', bg: 'rgba(var(--accent-rgb), 0.1)' };
         if (p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
         return { label: 'BUILT', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
     };
@@ -1389,7 +1389,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 onRefresh();
                 fetchSpeakers();
                 // Automatically trigger a test after rebuild
-                setTimeout(() => handleTest(name), 300);
+                await handleTest(name);
                 return true;
             } else {
                 let errorMsg = 'An unknown error occurred during the rebuild process.';

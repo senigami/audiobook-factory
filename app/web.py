@@ -1267,6 +1267,56 @@ def api_create_or_update_speaker(
         return {"status": "success" if success else "error", "id": id}
     else:
         speaker_id = create_speaker(name, default_profile_name)
+
+        # Auto-create or link a profile directory to prevent "synthesized/duplicate" issues
+        base_profile_name = name
+        profile_name = base_profile_name
+        profile_dir = VOICES_DIR / profile_name
+
+        import json
+        from .jobs import get_speaker_settings
+
+        # If directory exists, check if it's already assigned. If not, link it.
+        if profile_dir.exists():
+            try:
+                meta = get_speaker_settings(profile_name)
+                # If unassigned, link it and we're done
+                if not meta.get("speaker_id"):
+                    meta["speaker_id"] = speaker_id
+                    meta["variant_name"] = meta.get("variant_name") or "Default"
+                    (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+                else:
+                    # If already assigned to someone else, we need a unique name for our new profile
+                    counter = 1
+                    while (VOICES_DIR / profile_name).exists():
+                        profile_name = f"{base_profile_name}_{counter}"
+                        counter += 1
+
+                    profile_dir = VOICES_DIR / profile_name
+                    profile_dir.mkdir(parents=True, exist_ok=True)
+                    meta = {
+                        "speaker_id": speaker_id,
+                        "variant_name": "Default",
+                        "speed": 1.0,
+                        "test_text": "Greetings, let's test this voice."
+                    }
+                    (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+            except Exception as e:
+                print(f"Warning: Failed to handle existing profile directory: {e}")
+        else:
+            # Simple creation
+            try:
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                meta = {
+                    "speaker_id": speaker_id,
+                    "variant_name": "Default",
+                    "speed": 1.0,
+                    "test_text": "Greetings, let's test this voice."
+                }
+                (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+            except Exception as e:
+                print(f"Warning: Failed to create initial profile directory: {e}")
+
         return {"status": "success", "id": speaker_id}
 
 @app.delete("/api/speakers/{speaker_id}")
