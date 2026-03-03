@@ -1,130 +1,101 @@
-import { Mic, Zap, Library, Terminal } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, Zap, Library } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  onTabChange: (tab: any) => void;
   headerRight?: React.ReactNode;
-  showLogs?: boolean;
-  onToggleLogs?: () => void;
   queueCount?: number;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, headerRight, showLogs, onToggleLogs, queueCount }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, headerRight, queueCount }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
+
+  // Derive active tab from path
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path === '/' || path.startsWith('/project/')) return 'library';
+    if (path.startsWith('/queue')) return 'queue';
+    if (path.startsWith('/voices')) return 'voices';
+    return 'library';
+  };
+
+  const activeTab = getActiveTab();
+
   const navItems = [
-    { id: 'library', label: 'Library', icon: Library },
-    { id: 'queue', label: 'Queue', icon: Zap },
-    { id: 'voices', label: 'Voices', icon: Mic },
-    { id: 'assembly', label: 'Assembly', icon: Library },
+    { id: 'library', label: 'Library', icon: Library, path: '/' },
+    { id: 'queue', label: 'Queue', icon: Zap, path: '/queue' },
+    { id: 'voices', label: 'Voices', icon: Mic, path: '/voices' },
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw' }}>
-      <header className="glass-panel header-container" style={{
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw', backgroundColor: 'var(--bg)' }}>
+      <header className="header-container" style={{
         height: 'var(--header-height, 72px)',
         width: '100%',
         position: 'fixed',
         top: 0,
         left: 0,
-        borderRadius: 0,
-        borderTop: 'none',
-        borderLeft: 'none',
-        borderRight: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 2.5rem',
+        padding: '0 2rem',
         zIndex: 100,
-        backgroundColor: 'rgba(10, 10, 12, 0.8)',
-        backdropFilter: 'blur(40px)',
-        borderBottom: '1px solid var(--border)'
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid var(--border)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2.5rem' }}>
           {/* Logo Section */}
           <div
-            style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
-            onClick={() => onTabChange('library-root')}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            onClick={() => navigate('/')}
           >
-            <div style={{
-              position: 'relative',
-              width: '42px',
-              height: '42px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <div style={{
-                position: 'absolute',
-                inset: '-8px',
-                background: 'var(--accent)',
-                borderRadius: '14px',
-                opacity: 0.15,
-                filter: 'blur(12px)'
-              }} />
-              <img
-                src="/logo.svg"
-                alt="Audiobook Studio"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 4px 12px rgba(139, 92, 246, 0.3))',
-                  zIndex: 1
-                }}
-              />
-            </div>
-            <div className="header-logo-text" style={{ display: 'flex', flexDirection: 'column' }}>
-              <h1 style={{
-                fontSize: '1.1rem',
-                fontWeight: 900,
-                letterSpacing: '-0.03em',
-                margin: 0,
-                background: 'linear-gradient(to bottom, #fff, #94a3b8)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                lineHeight: 1
-              }}>
-                AUDIOBOOK
-              </h1>
-              <span style={{
-                fontSize: '0.8rem',
-                fontWeight: 800,
-                color: 'var(--accent)',
-                letterSpacing: '0.6em',
-                textTransform: 'uppercase',
-                opacity: 0.8,
-                marginTop: '1px'
-              }}>
-                STUDIO
-              </span>
-            </div>
+            <BrandLogo scale={0.8} showIcon={true} />
           </div>
 
           {/* Navigation Section */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             {navItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => onTabChange(item.id)}
-                className={activeTab === item.id ? 'btn-primary' : 'btn-ghost'}
+                onClick={() => navigate(item.path)}
+                onMouseEnter={() => setHoveredTab(item.id)}
+                onMouseLeave={() => setHoveredTab(null)}
+                className="btn-ghost"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 18px',
-                  borderRadius: '10px',
-                  background: activeTab === item.id ? 'var(--accent)' : 'transparent',
-                  boxShadow: activeTab === item.id ? '0 8px 20px var(--accent-glow)' : 'none',
-                  color: activeTab === item.id ? 'white' : 'var(--text-secondary)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-button)',
+                  background: activeTab === item.id 
+                    ? 'var(--accent)' 
+                    : (hoveredTab === item.id ? 'var(--accent-glow)' : 'transparent'),
+                  color: activeTab === item.id 
+                    ? 'white' 
+                    : (hoveredTab === item.id ? 'var(--text-primary)' : 'var(--text-secondary)'),
+                  position: 'relative',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  border: 'none',
+                  boxShadow: activeTab === item.id ? 'var(--shadow-sm)' : 'none',
+                  fontWeight: 700
                 }}
               >
-                <item.icon size={16} opacity={activeTab === item.id ? 1 : 0.6} />
-                <span className="nav-label" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{item.label}</span>
+                <item.icon size={16} strokeWidth={activeTab === item.id ? 2.5 : 2} />
+                <span className="nav-label" style={{ fontSize: '0.9rem' }}>{item.label}</span>
                 {item.id === 'queue' && queueCount !== undefined && queueCount > 0 && (
                    <div style={{ 
-                       background: 'var(--accent)', color: 'white', borderRadius: '10px', 
-                       padding: '2px 8px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '4px' 
+                       background: activeTab === item.id ? 'white' : 'var(--accent)', 
+                       color: activeTab === item.id ? 'var(--accent)' : 'white', 
+                       borderRadius: '6px', 
+                       padding: '1px 6px', 
+                       fontSize: '0.7rem', 
+                       fontWeight: 800, 
+                       marginLeft: '4px' 
                    }}>{queueCount}</div>
                 )}
               </button>
@@ -133,29 +104,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         </div>
 
         {/* Global Controls Section */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          {onToggleLogs && (
-            <button
-              onClick={onToggleLogs}
-              className="btn-ghost"
-              title={showLogs ? "Hide Console" : "Show Console"}
-              style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '12px',
-                color: showLogs ? 'var(--accent)' : 'var(--text-muted)',
-                background: showLogs ? 'rgba(139, 92, 246, 0.1)' : 'var(--glass)',
-                border: showLogs ? '1px solid var(--accent)' : '1px solid var(--border)',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0
-              }}
-            >
-              <Terminal size={18} />
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {headerRight}
         </div>
       </header>
@@ -168,7 +117,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        padding: '2.5rem'
+        padding: '3rem 2.5rem'
       }}>
         <div style={{ maxWidth: '1600px', width: '100%', margin: '0 auto' }}>
           {children}

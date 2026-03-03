@@ -1,5 +1,5 @@
 export type Engine = 'xtts' | 'audiobook';
-export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+export type Status = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'error';
 
 export interface Project {
   id: string;
@@ -27,6 +27,7 @@ export interface ChapterSegment {
   text_content: string;
   sanitized_text?: string;
   character_id: string | null;
+  speaker_profile_name: string | null;
   audio_file_path: string | null;
   audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
   audio_generated_at: number | null;
@@ -54,7 +55,7 @@ export interface ProcessingQueueItem {
   project_id: string;
   chapter_id: string;
   split_part: number;
-  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  status: Status;
   created_at: number;
   completed_at: number | null;
   chapter_title?: string;
@@ -68,10 +69,23 @@ export interface ProcessingQueueItem {
 export interface SpeakerProfile {
   name: string;
   wav_count: number;
+  samples?: string[];
   speed: number;
   is_default: boolean;
   test_text?: string;
+  speaker_id: string | null;
+  variant_name: string | null;
   preview_url: string | null;
+  is_rebuild_required?: boolean;
+  samples_detailed?: Array<{ name: string; is_new: boolean }>;
+}
+
+export interface Speaker {
+  id: string;
+  name: string;
+  default_profile_name: string | null;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface Job {
@@ -134,4 +148,5 @@ export interface GlobalState {
   xtts_wav_only: string[];
   narrator_ok: boolean;
   speaker_profiles: SpeakerProfile[];
+  speakers: Speaker[];
 }

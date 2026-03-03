@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info, Volume2, List } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, RefreshCw, Zap, User, Info, Volume2, List, ChevronRight, ChevronDown } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
+import { ConfirmModal } from './ConfirmModal';
 
 import { api } from '../api';
 import type { Chapter, SpeakerProfile, Job, Character, ChapterSegment } from '../types';
@@ -9,6 +10,7 @@ interface ChapterEditorProps {
   chapterId: string;
   projectId: string;
   speakerProfiles: SpeakerProfile[];
+  speakers: import('../types').Speaker[];
   job?: Job;
   selectedVoice?: string;
   onVoiceChange?: (voice: string) => void;
@@ -19,7 +21,7 @@ interface ChapterEditorProps {
   segmentUpdate?: { chapterId: string; tick: number };
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev, segmentUpdate }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, projectId, speakerProfiles, speakers, job, selectedVoice: externalVoice, onVoiceChange, onBack, onNavigateToQueue, onNext, onPrev, segmentUpdate }) => {
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -31,13 +33,32 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   const [segments, setSegments] = useState<ChapterSegment[]>([]);
   const segmentsRef = useRef<ChapterSegment[]>(segments);
   
+  // Compute merged voices groupings
+  const availableVoices = React.useMemo(() => {
+    const list = (speakers || []).map(s => ({ id: s.id, name: s.name, is_speaker: true }));
+    const orphans = (speakerProfiles || [])
+      .filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
+      .map(p => ({ id: `unassigned-${p.name}`, name: p.name, is_speaker: false }));
+    return [...list, ...orphans];
+  }, [speakers, speakerProfiles]);
+  
   useEffect(() => {
     segmentsRef.current = segments;
   }, [segments]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+  const [selectedProfileName, setSelectedProfileName] = useState<string | null>(null);
+  const [expandedCharacterId, setExpandedCharacterId] = useState<string | null>(null);
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
   
   const selectedVoice = externalVoice !== undefined ? externalVoice : localVoice;
   const handleVoiceChange = (voice: string) => {
@@ -213,32 +234,55 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             return;
         }
 
-        const url = projectId 
-            ? `/projects/${projectId}/audio/${seg.audio_file_path}`
-            : `/out/xtts/${seg.audio_file_path}`;
-        const audio = new Audio(url);
+        const audioPath = seg.audio_file_path;
+        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
         
-        audio.onended = () => {
-            if (!isPlayingRef.current) return;
-            let nextIdx = idx + 1;
-            while (nextIdx < playbackQueueRef.current.length) {
-                const nextId = playbackQueueRef.current[nextIdx];
-                const nextSeg = segmentsRef.current.find(s => s.id === nextId);
-                if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
-                    nextIdx++;
-                } else {
-                    break;
+        const urls = [
+            projectId ? `/projects/${projectId}/audio/${audioPath}` : `/out/xtts/${audioPath}`,
+            projectId ? `/projects/${projectId}/audio/${wavPath}` : `/out/xtts/${wavPath}`,
+            projectId ? `/projects/${projectId}/audio/${mp3Path}` : `/out/xtts/${mp3Path}`,
+            `/out/xtts/${audioPath}`,
+            `/out/xtts/${wavPath}`,
+            `/out/xtts/${mp3Path}`
+        ].filter((v, i, a) => a.indexOf(v) === i); // unique
+        
+        let urlIdx = 0;
+        const playWithFallback = (u: string) => {
+            const audio = new Audio(u);
+            audio.onended = () => {
+                if (!isPlayingRef.current) return;
+                let nextIdx = idx + 1;
+                while (nextIdx < playbackQueueRef.current.length) {
+                    const nextId = playbackQueueRef.current[nextIdx];
+                    const nextSeg = segmentsRef.current.find(s => s.id === nextId);
+                    if (nextSeg && nextSeg.audio_file_path && nextSeg.audio_file_path === seg.audio_file_path) {
+                        nextIdx++;
+                    } else {
+                        break;
+                    }
                 }
-            }
-            playFromIndex(nextIdx);
+                playFromIndex(nextIdx);
+            };
+            
+            audio.onerror = () => {
+                if (!isPlayingRef.current) return;
+                urlIdx++;
+                if (urlIdx < urls.length) {
+                    playWithFallback(urls[urlIdx]);
+                } else {
+                    playFromIndex(idx + 1);
+                }
+            };
+            
+            audio.play().catch(e => {
+                console.error("Playback failed", e);
+                audio.onerror?.(new Event('error') as any);
+            });
+            audioPlayerRef.current = audio;
         };
         
-        audio.onerror = () => { if (isPlayingRef.current) playFromIndex(idx + 1); };
-        audio.play().catch(e => {
-            console.error("Playback failed", e);
-            if (isPlayingRef.current) playFromIndex(idx + 1);
-        });
-        audioPlayerRef.current = audio;
+        playWithFallback(urls[0]);
     };
 
     await playFromIndex(currentIndex);
@@ -413,21 +457,70 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   };
 
   const handleParagraphBulkAssign = async (segmentIds: string[]) => {
-    if (!selectedCharacterId) return;
+    const isClearing = selectedCharacterId === 'CLEAR_ASSIGNMENT';
+    const characterId = isClearing ? null : selectedCharacterId;
+    const profileName = isClearing ? null : (selectedCharacterId ? selectedProfileName : null);
+    const audioStatus = isClearing ? undefined : 'unprocessed';
+
+    // Optimistic update
+    setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { 
+        ...s, 
+        character_id: characterId,
+        speaker_profile_name: profileName,
+        audio_status: audioStatus || s.audio_status
+    } : s));
+
     try {
-        await api.updateSegmentsBulk(segmentIds, { character_id: selectedCharacterId });
-        setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { ...s, character_id: selectedCharacterId } : s));
+        await api.updateSegmentsBulk(segmentIds, { 
+            character_id: characterId,
+            speaker_profile_name: profileName,
+            audio_status: audioStatus
+        });
     } catch (e) {
         console.error("Bulk assign failed", e);
+        // Fallback or refresh? Maybe loadChapter() if failed
     }
   };
 
+  const toggleCharacterExpansion = (characterId: string) => {
+    setExpandedCharacterId(prev => prev === characterId ? null : characterId);
+  };
+
   const handleParagraphBulkReset = async (segmentIds: string[]) => {
+    // Optimistic update
+    setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { 
+        ...s, 
+        character_id: null,
+        speaker_profile_name: null 
+    } : s));
+
     try {
-        await api.updateSegmentsBulk(segmentIds, { character_id: null });
-        setSegments(prev => prev.map(s => segmentIds.includes(s.id) ? { ...s, character_id: null } : s));
+        await api.updateSegmentsBulk(segmentIds, { 
+            character_id: null,
+            speaker_profile_name: null
+        });
     } catch (e) {
         console.error("Bulk reset failed", e);
+    }
+  };
+
+  const executeQueue = async () => {
+    setSubmitting(true);
+    try {
+        const voiceToUse = selectedVoice || undefined;
+        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
+        onNavigateToQueue();
+    } catch (e) {
+        console.error("Failed to enqueue", e);
+        setConfirmConfig({
+            title: 'Queue Failed',
+            message: 'Failed to queue chapter.',
+            onConfirm: () => setConfirmConfig(null),
+            isDestructive: false,
+            confirmText: 'OK'
+        });
+    } finally {
+        setSubmitting(false);
     }
   };
 
@@ -453,7 +546,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
   if (loading) return <div style={{ padding: '2rem' }}>Loading editor...</div>;
   if (!chapter) return <div style={{ padding: '2rem' }}>Chapter not found.</div>;
 
-  const hasUnsavedChanges = title !== chapter.title || text !== (chapter.text_content || '');
+  const hasUnsavedChanges = (title || "").trim() !== (chapter.title || "").trim() || 
+                           (text || "").replace(/\r\n/g, '\n') !== (chapter.text_content || "").replace(/\r\n/g, '\n');
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 72px)', margin: '-2.5rem', background: 'var(--bg)', position: 'relative', zIndex: 100 }}>
@@ -499,19 +593,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             
             {chapter.audio_status === 'done' && chapter.audio_file_path && (
                 <div style={{ paddingLeft: '1rem', borderLeft: '1px solid var(--border)' }}>
-                    <audio 
-                        controls 
-                        src={chapter.project_id 
-                            ? `/projects/${chapter.project_id}/audio/${chapter.audio_file_path}`
-                            : `/out/xtts/${chapter.audio_file_path}`} 
-                        onError={(e) => {
-                            const target = e.target as HTMLAudioElement;
-                            if (target.src.includes('/projects/')) {
-                                target.src = `/out/xtts/${chapter.audio_file_path}`;
-                            }
-                        }}
-                        style={{ height: '32px', maxWidth: '300px' }}
-                    />
+                    {(() => {
+                        const audioPath = chapter.audio_file_path;
+                        if (!audioPath) return null;
+                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                        
+                        return (
+                            <audio 
+                                controls 
+                                key={chapter.id}
+                                style={{ height: '32px', maxWidth: '300px' }}
+                            >
+                                <source src={`/projects/${chapter.project_id}/audio/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/projects/${chapter.project_id}/audio/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/projects/${chapter.project_id}/audio/${mp3Path}`} />}
+                                <source src={`/out/xtts/${audioPath}`} />
+                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
+                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                            </audio>
+                        );
+                    })()}
                 </div>
             )}
         </div>
@@ -531,9 +633,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     }}
                     title="Select Voice Profile for this chapter"
                 >
-                    <option value="">Default Voice</option>
-                    {speakerProfiles.map(sp => (
-                        <option key={sp.name} value={sp.name}>{sp.name}</option>
+                    <option value="">Unassigned (Default Speaker)</option>
+                    {availableVoices.map(v => (
+                        <option key={v.id} value={v.name}>{v.name}</option>
                     ))}
                 </select>
             )}
@@ -541,19 +643,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             <button
                 onClick={async () => {
                     if (chapter?.char_count && chapter.char_count > 50000) {
-                        if (!window.confirm(`This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Queue anyway?`)) return;
+                        setConfirmConfig({
+                            title: 'Large Chapter Warning',
+                            message: `This chapter is quite long (${chapter.char_count.toLocaleString()} chars). Processing very large chapters in a single job may cause issues. Queue anyway?`,
+                            isDestructive: false,
+                            confirmText: 'Queue Anyway',
+                            onConfirm: async () => {
+                                setConfirmConfig(null);
+                                await executeQueue();
+                            }
+                        });
+                        return;
                     }
-                    setSubmitting(true);
-                    try {
-                        const voiceToUse = selectedVoice || undefined;
-                        await api.addProcessingQueue(projectId, chapterId, 0, voiceToUse);
-                        onNavigateToQueue();
-                    } catch (e) {
-                        console.error("Failed to enqueue", e);
-                        alert("Failed to queue chapter.");
-                    } finally {
-                        setSubmitting(false);
-                    }
+                    await executeQueue();
                 }}
                 disabled={submitting || (job?.status === 'queued' || job?.status === 'running') || chapter?.audio_status === 'processing'}
                 className="btn-primary"
@@ -591,8 +693,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-light)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success-muted)" />)}
+                <span style={{ fontSize: '0.8rem', color: saving ? 'var(--warning)' : (hasUnsavedChanges ? 'var(--accent)' : 'var(--success-text)'), display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving ? <RefreshCw size={14} className="animate-spin" /> : (hasUnsavedChanges ? <AlertTriangle size={14} /> : <CheckCircle size={14} color="var(--success)" />)}
                     {saving ? 'Saving...' : (hasUnsavedChanges ? 'Unsaved' : 'Saved')}
                 </span>
             </div>
@@ -971,7 +1073,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                       borderRadius: '8px',
                       background: isSelectedCharLines ? `${char?.color || '#94a3b8'}15` : (isHovered ? 'var(--surface-light)' : 'transparent'),
                       borderLeft: `4px solid ${char ? char.color : 'var(--text-muted)'}`,
-                      cursor: selectedCharacterId ? 'copy' : 'pointer',
+                      cursor: (selectedCharacterId && selectedCharacterId !== 'CLEAR_ASSIGNMENT') ? 'copy' : (selectedCharacterId === 'CLEAR_ASSIGNMENT' ? 'crosshair' : 'pointer'),
                       transition: 'all 0.1s ease',
                       gap: '2rem',
                       boxShadow: isHovered ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
@@ -987,12 +1089,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em',
                         display: 'flex',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
+                        gap: '2px'
                     }}>
-                        {char?.name || 'NARRATOR'}
-                        <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.6 }}>
-                            {char?.speaker_profile_name || 'Chapter Default'}
-                        </span>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {char?.name || 'NARRATOR'}
+                        </div>
+                        {group.segments[0].speaker_profile_name && (
+                            <div style={{ 
+                                fontSize: '0.6rem', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                width: 'fit-content',
+                                opacity: 0.8,
+                                fontWeight: 600,
+                                textTransform: 'none',
+                                letterSpacing: 'normal'
+                            }}>
+                                {group.segments[0].speaker_profile_name}
+                            </div>
+                        )}
                     </div>
 
                     {/* Text column */}
@@ -1059,61 +1176,133 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }}>
                         <button 
-                            onClick={() => setSelectedCharacterId(null)}
+                            onClick={() => {
+                                if (selectedCharacterId === 'CLEAR_ASSIGNMENT') {
+                                    setSelectedCharacterId(null);
+                                } else {
+                                    setSelectedCharacterId('CLEAR_ASSIGNMENT');
+                                    setSelectedProfileName(null);
+                                }
+                            }}
                             style={{ 
                                 padding: '0.75rem', 
                                 borderRadius: '8px', 
-                                border: '1px solid var(--border)',
-                                background: selectedCharacterId === null ? 'var(--surface-light)' : 'transparent',
+                                border: `1px solid ${selectedCharacterId === 'CLEAR_ASSIGNMENT' ? 'var(--accent)' : 'var(--border)'}`,
+                                background: selectedCharacterId === 'CLEAR_ASSIGNMENT' ? 'var(--surface-light)' : 'transparent',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.75rem',
                                 color: 'var(--text-primary)',
                                 textAlign: 'left',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                position: 'relative'
                             }}
                         >
                             <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--text-muted)' }} />
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>None / Default</div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Stop bulk assignment</div>
+                                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>{selectedCharacterId === 'CLEAR_ASSIGNMENT' ? 'Click lines to clear' : 'Normal selection mode'}</div>
                             </div>
+                            {selectedCharacterId === 'CLEAR_ASSIGNMENT' && (
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', position: 'absolute', top: '8px', right: '8px' }} />
+                            )}
                         </button>
 
-                        {characters.map(char => (
-                            <div 
-                                key={char.id}
-                                onClick={() => setSelectedCharacterId(char.id)}
-                                style={{ 
-                                    padding: '0.75rem', 
-                                    borderRadius: '8px', 
-                                    border: selectedCharacterId === char.id ? `2px solid ${char.color}` : '1px solid var(--border)',
-                                    background: selectedCharacterId === char.id ? `${char.color}15` : 'transparent',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.75rem',
-                                    color: 'var(--text-primary)',
-                                    textAlign: 'left',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    // Add hover effect since it's now a div
-                                    outline: 'none'
-                                }}
-                                onMouseEnter={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                                onMouseLeave={(e) => { if (selectedCharacterId !== char.id) e.currentTarget.style.background = 'transparent'; }}
-                            >
-                                <ColorSwatchPicker 
-                                    value={char.color || '#94a3b8'} 
-                                    onChange={(color) => handleUpdateCharacterColor(char.id, color)} 
-                                    size="sm" 
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{char.name}</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{char.speaker_profile_name || 'No voice'}</div>
-                                </div>
-                            </div>
-                        ))}
+                        {characters.map(char => {
+                            const speakerMatch = (speakers || []).find(s => s.name === char.speaker_profile_name);
+                            const variants = speakerMatch ? (speakerProfiles || []).filter(p => p.speaker_id === speakerMatch.id) : [];
+                            const isExpanded = expandedCharacterId === char.id;
+                            const isSpeakerSelected = selectedCharacterId === char.id && !selectedProfileName;
+
+                            return (
+                                <React.Fragment key={char.id}>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        {/* Expansion arrow toggle */}
+                                        {variants.length > 1 ? (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleCharacterExpansion(char.id);
+                                                }}
+                                                className="btn-ghost"
+                                                style={{ 
+                                                    width: '28px', minWidth: '28px', height: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                    padding: 0, opacity: 0.6, borderRadius: '4px'
+                                                }}
+                                            >
+                                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            </button>
+                                        ) : (
+                                            <div style={{ width: '28px', minWidth: '28px' }} />
+                                        )}
+
+                                        <div 
+                                            onClick={() => {
+                                                setSelectedCharacterId(char.id);
+                                                setSelectedProfileName(null);
+                                            }}
+                                            style={{ 
+                                                flex: 1, padding: '0.75rem', borderRadius: '8px', 
+                                                border: `1px solid ${isSpeakerSelected ? char.color : 'var(--border)'}`,
+                                                background: isSpeakerSelected ? `${char.color}15` : 'transparent',
+                                                display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                                color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s',
+                                                minWidth: 0
+                                            }}
+                                        >
+                                            <ColorSwatchPicker 
+                                                value={char.color || '#94a3b8'} 
+                                                onChange={(color) => handleUpdateCharacterColor(char.id, color)} 
+                                                size="sm" 
+                                            />
+                                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{char.name}</div>
+                                                <div style={{ fontSize: '0.7rem', opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{char.speaker_profile_name || 'No voice'}</div>
+                                            </div>
+                                            {variants.length > 1 && (
+                                                <div style={{ fontSize: '0.65rem', background: 'var(--surface-light)', padding: '2px 6px', borderRadius: '10px', opacity: 0.8, fontWeight: 700, flexShrink: 0 }}>
+                                                    {variants.length}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Variants list (nested) */}
+                                    {isExpanded && variants.map(variant => {
+                                        const isVariantSelected = selectedCharacterId === char.id && selectedProfileName === variant.name;
+                                        return (
+                                            <button 
+                                                key={variant.name}
+                                                onClick={() => {
+                                                    setSelectedCharacterId(char.id);
+                                                    setSelectedProfileName(variant.name);
+                                                }}
+                                                style={{ 
+                                                    marginLeft: '36px', padding: '0.5rem 0.75rem', borderRadius: '6px', 
+                                                    border: `1px solid ${isVariantSelected ? char.color : 'transparent'}`,
+                                                    background: isVariantSelected ? `${char.color}10` : 'transparent',
+                                                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                                    color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s',
+                                                    opacity: isVariantSelected ? 1 : 0.7,
+                                                    minWidth: 0
+                                                }}
+                                            >
+                                                <div style={{ 
+                                                    width: '8px', height: '8px', borderRadius: '50%', 
+                                                    border: `1.5px solid ${char.color}`, 
+                                                    background: isVariantSelected ? char.color : 'transparent',
+                                                    flexShrink: 0
+                                                }} />
+                                                <div style={{ flex: 1, fontSize: '0.8rem', fontWeight: isVariantSelected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {variant.variant_name || 'Standard'}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
 
                     <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -1138,6 +1327,19 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
             </div>
           </div>
         )}
+
+        <ConfirmModal
+          isOpen={!!confirmConfig}
+          title={confirmConfig?.title || ''}
+          message={confirmConfig?.message || ''}
+          onConfirm={() => {
+            confirmConfig?.onConfirm();
+            setConfirmConfig(null);
+          }}
+          onCancel={() => setConfirmConfig(null)}
+          isDestructive={confirmConfig?.isDestructive}
+          confirmText={confirmConfig?.confirmText}
+        />
       </div>
     </div>
   </div>

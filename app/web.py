@@ -6,10 +6,10 @@ import os
 import sys
 from typing import Optional, List
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample
+from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample, convert_to_wav
 from dataclasses import asdict
 from .jobs import set_paused
 from .config import (
@@ -387,7 +387,9 @@ def api_delete_project(project_id: str):
 # --- Chapters API ---
 @app.get("/api/projects/{project_id}/chapters")
 def api_list_project_chapters(project_id: str):
-    return JSONResponse(db_list_chapters(project_id))
+    from .db import list_chapters, reconcile_project_audio
+    reconcile_project_audio(project_id)
+    return JSONResponse(list_chapters(project_id))
 
 @app.post("/api/projects/{project_id}/chapters")
 async def api_create_chapter(
@@ -397,7 +399,7 @@ async def api_create_chapter(
     sort_order: int = Form(0),
     file: Optional[UploadFile] = File(None)
 ):
-    actual_text = text_content or ""
+    actual_text = (text_content or "").replace('\r\n', '\n')
     if file:
         content = await file.read()
         try:
@@ -432,6 +434,7 @@ async def api_update_chapter_details(
         updates["title"] = title
 
     if text_content is not None: 
+        text_content = text_content.replace('\r\n', '\n')
         updates["text_content"] = text_content
         char_count, word_count, pred_seconds = compute_chapter_metrics(text_content)
         updates["char_count"] = char_count
@@ -518,17 +521,23 @@ def api_generate_segments(segment_ids: List[str] = Form(...)):
     return JSONResponse({"status": "success", "job_id": job.id})
 
 @app.put("/api/segments/{segment_id}")
-def api_update_segment(
+async def api_update_segment(
+    request: Request,
     segment_id: str,
     character_id: Optional[str] = Form(None),
+    speaker_profile_name: Optional[str] = Form(None),
     audio_status: Optional[str] = Form(None)
 ):
+    form = await request.form()
     updates = {}
-    if character_id is not None:
-        # allow clearing character
-        updates["character_id"] = character_id if character_id != "" else None
-    if audio_status is not None:
-        updates["audio_status"] = audio_status
+
+    # We use Form() for documentation/validation, but check form presence for clearing
+    if "character_id" in form:
+        updates["character_id"] = form["character_id"] if form["character_id"] != "" else None
+    if "speaker_profile_name" in form:
+        updates["speaker_profile_name"] = form["speaker_profile_name"] if form["speaker_profile_name"] != "" else None
+    if "audio_status" in form:
+        updates["audio_status"] = form["audio_status"]
 
     if updates:
         from .db import update_segment
@@ -538,10 +547,13 @@ def api_update_segment(
 
 @app.put("/api/segments")
 async def api_update_segments_bulk(
+    request: Request,
     segment_ids: List[str] = Form(...),
     character_id: Optional[str] = Form(None),
+    speaker_profile_name: Optional[str] = Form(None),
     audio_status: Optional[str] = Form(None)
 ):
+    form = await request.form()
     # Handle both ["id1,id2"] and ["id1", "id2"]
     actual_ids = []
     for item in segment_ids:
@@ -551,10 +563,12 @@ async def api_update_segments_bulk(
             actual_ids.append(item.strip())
 
     updates = {}
-    if character_id is not None:
-        updates["character_id"] = character_id if character_id != "" else None
-    if audio_status is not None:
-        updates["audio_status"] = audio_status
+    if "character_id" in form:
+        updates["character_id"] = form["character_id"] if form["character_id"] != "" else None
+    if "speaker_profile_name" in form:
+        updates["speaker_profile_name"] = form["speaker_profile_name"] if form["speaker_profile_name"] != "" else None
+    if "audio_status" in form:
+        updates["audio_status"] = form["audio_status"]
 
     if updates and actual_ids:
         from .db import update_segments_bulk
@@ -783,13 +797,17 @@ async def api_analyze_chapter(chapter_id: str):
     })
 # --------------------
 
+
 @app.get("/")
 def api_welcome():
-    """Welcome endpoint for the API."""
+    """Serve the frontend index if it exists, otherwise return welcome JSON."""
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     return {
         "name": "Audiobook Studio API",
         "status": "online",
-        "frontend": "Please use the React frontend (usually on port 5173 in dev or served on this port in production if built).",
+        "frontend": "Please build the frontend (npm run build) to serve it from this port.",
         "endpoints": {
             "home": "/api/home",
             "jobs": "/api/jobs",
@@ -805,6 +823,8 @@ def api_home():
 
     # 1. Get profiles first (this auto-sets default_speaker_profile if needed)
     profiles = list_speaker_profiles()
+    from .db import list_speakers
+    speakers = list_speakers()
 
     # 2. Re-fetch settings so they include the potential new default
     settings = get_settings()
@@ -833,6 +853,7 @@ def api_home():
         "xtts_wav_only": xtts_wav_only,
         "audiobooks": list_audiobooks(),
         "speaker_profiles": profiles,
+        "speakers": speakers,
     }
 
 @app.post("/settings")
@@ -1149,25 +1170,207 @@ def list_speaker_profiles():
 
     profiles = []
     for d in dirs:
-        wav_count = len(list(d.glob("*.wav")))
+        raw_wavs = sorted([f.name for f in d.glob("*.wav") if f.name != "sample.wav"])
 
         # Load metadata if exists
         from .jobs import get_speaker_settings
         spk_settings = get_speaker_settings(d.name)
-        speed = spk_settings["speed"]
-        test_text = spk_settings["test_text"]
+        built_samples = spk_settings.get("built_samples", [])
+
+        # Identify new samples (on disk but not in built_samples)
+        samples = []
+        is_rebuild_required = False
+        for w in raw_wavs:
+            is_new = w not in built_samples
+            samples.append({"name": w, "is_new": is_new})
+            if is_new: is_rebuild_required = True
+
+        # If built_samples has more than raw_wavs (some were deleted), still needs rebuild
+        if len([b for b in built_samples if (d / b).exists()]) < len(built_samples):
+             is_rebuild_required = True
 
         test_wav = VOICES_DIR / d.name / "sample.wav"
+        if not test_wav.exists() and len(raw_wavs) > 0:
+            is_rebuild_required = True
 
         profiles.append({
             "name": d.name,
             "is_default": d.name == default_speaker,
-            "wav_count": wav_count,
-            "speed": speed,
-            "test_text": test_text,
+            "wav_count": len(raw_wavs),
+            "samples_detailed": samples,
+            "samples": raw_wavs,
+            "is_rebuild_required": is_rebuild_required,
+            "speed": spk_settings["speed"],
+            "test_text": spk_settings["test_text"],
+            "speaker_id": spk_settings.get("speaker_id"),
+            "variant_name": spk_settings.get("variant_name"),
             "preview_url": f"/out/voices/{d.name}/sample.wav" if test_wav.exists() else None
         })
     return profiles
+
+# --- Speakers API ---
+@app.get("/api/speakers")
+def api_list_speakers():
+    from .db import list_speakers
+    return list_speakers()
+
+@app.post("/api/speaker-profiles")
+def api_create_speaker_profile(
+    speaker_id: str = Form(...),
+    variant_name: str = Form(...)
+):
+    from .db import get_speaker
+    speaker = get_speaker(speaker_id)
+    if not speaker:
+        return JSONResponse({"status": "error", "message": "Speaker not found"}, status_code=404)
+
+    # Generate a unique profile directory name
+    # Base it on speaker name + variant name
+    clean_v = "".join(x for x in variant_name if x.isalnum() or x in " -_").strip()
+    profile_name = f"{speaker['name']} - {clean_v}" if clean_v != "Default" else speaker['name']
+
+    # Ensure profile name is unique if directory exists
+    counter = 1
+    base_profile_name = profile_name
+    while (VOICES_DIR / profile_name).exists():
+        profile_name = f"{base_profile_name}_{counter}"
+        counter += 1
+
+    profile_dir = VOICES_DIR / profile_name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write profile.json
+    import json
+    meta_path = profile_dir / "profile.json"
+    meta = {
+        "speaker_id": speaker_id,
+        "variant_name": variant_name,
+        "speed": 1.0,
+        "test_text": "Greetings, let's test this voice."
+    }
+    meta_path.write_text(json.dumps(meta, indent=2))
+
+    return {"status": "success", "profile_name": profile_name}
+
+@app.post("/api/speakers")
+def api_create_or_update_speaker(
+    id: Optional[str] = Form(None),
+    name: str = Form(...),
+    default_profile_name: Optional[str] = Form(None)
+):
+    from .db import create_speaker, update_speaker
+    if id:
+        from .db import get_speaker
+        old_speaker = get_speaker(id)
+        old_name = old_speaker["name"] if old_speaker else None
+
+        success = update_speaker(id, name=name, default_profile_name=default_profile_name)
+
+        # Cascade rename to all profiles if speaker name changed
+        if success and old_name and old_name != name:
+            profiles = list_speaker_profiles()
+            for p in profiles:
+                if p["speaker_id"] == id:
+                    v_name = p.get("variant_name") or "Default"
+                    new_profile_name = f"{name} - {v_name}"
+                    rename_speaker_profile_internal(p["name"], new_profile_name)
+
+        return {"status": "success" if success else "error", "id": id}
+    else:
+        speaker_id = create_speaker(name, default_profile_name)
+
+        # Auto-create or link a profile directory to prevent "synthesized/duplicate" issues
+        base_profile_name = name
+        profile_name = base_profile_name
+        profile_dir = VOICES_DIR / profile_name
+
+        import json
+        from .jobs import get_speaker_settings
+
+        # If directory exists, check if it's already assigned. If not, link it.
+        if profile_dir.exists():
+            try:
+                meta = get_speaker_settings(profile_name)
+                # If unassigned, link it and we're done
+                if not meta.get("speaker_id"):
+                    meta["speaker_id"] = speaker_id
+                    meta["variant_name"] = meta.get("variant_name") or "Default"
+                    (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+                else:
+                    # If already assigned to someone else, we need a unique name for our new profile
+                    counter = 1
+                    while (VOICES_DIR / profile_name).exists():
+                        profile_name = f"{base_profile_name}_{counter}"
+                        counter += 1
+
+                    profile_dir = VOICES_DIR / profile_name
+                    profile_dir.mkdir(parents=True, exist_ok=True)
+                    meta = {
+                        "speaker_id": speaker_id,
+                        "variant_name": "Default",
+                        "speed": 1.0,
+                        "test_text": "Greetings, let's test this voice."
+                    }
+                    (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+            except Exception as e:
+                print(f"Warning: Failed to handle existing profile directory: {e}")
+        else:
+            # Simple creation
+            try:
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                meta = {
+                    "speaker_id": speaker_id,
+                    "variant_name": "Default",
+                    "speed": 1.0,
+                    "test_text": "Greetings, let's test this voice."
+                }
+                (profile_dir / "profile.json").write_text(json.dumps(meta, indent=2))
+            except Exception as e:
+                print(f"Warning: Failed to create initial profile directory: {e}")
+
+        return {"status": "success", "id": speaker_id}
+
+@app.delete("/api/speakers/{speaker_id}")
+def api_delete_speaker(speaker_id: str):
+    from .db import delete_speaker
+    # Cascade deletion to all variant profiles on disk
+    try:
+        profiles = list_speaker_profiles()
+        for p in profiles:
+            if p.get("speaker_id") == speaker_id:
+                delete_speaker_profile(p["name"])
+    except Exception as e:
+        print(f"Warning: Cascade deletion of profiles failed: {e}")
+
+    success = delete_speaker(speaker_id)
+    return {"status": "success" if success else "error"}
+
+@app.post("/api/speaker-profiles/{name}/assign")
+def api_assign_profile_to_speaker(
+    name: str,
+    speaker_id: Optional[str] = Form(None),
+    variant_name: Optional[str] = Form(None)
+):
+    from .jobs import update_speaker_settings
+    from .db import get_speaker
+
+    current_name = name
+    if speaker_id:
+        spk = get_speaker(speaker_id)
+        if spk:
+            v_label = variant_name if variant_name else "Default"
+            new_profile_name = f"{spk['name']} - {v_label}"
+            success, result = rename_speaker_profile_internal(name, new_profile_name)
+            if success:
+                current_name = result
+
+    updates = {
+        "speaker_id": speaker_id if speaker_id else None,
+        "variant_name": variant_name if variant_name else None
+    }
+    success = update_speaker_settings(current_name, **updates)
+    return {"status": "success" if success else "error", "new_name": current_name}
+# --------------------
 
 @app.post("/api/speaker-profiles/{name}/test-text")
 def update_speaker_test_text(name: str, text: str = Form(...)):
@@ -1228,7 +1431,9 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
 @app.post("/api/speaker-profiles/build")
 async def build_speaker_profile(
     name: str = Form(...),
-    files: List[UploadFile] = File(...)
+    speaker_id: Optional[str] = Form(None),
+    variant_name: Optional[str] = Form(None),
+    files: List[UploadFile] = File(default=[])
 ):
     try:
         if not name or not name.strip():
@@ -1241,42 +1446,125 @@ async def build_speaker_profile(
         if not str(profile_dir.resolve()).startswith(str(VOICES_DIR.resolve())):
              return JSONResponse({"status": "error", "message": "Invalid profile name (path traversal)"}, status_code=400)
 
+        # Always clear the latent cache on rebuild to ensure a fresh generation
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists():
+                    lp.unlink()
+                    print(f"Cleared latent cache for rebuild: {lp}")
+        except Exception as e:
+            print(f"Warning: Failed to clear latent cache: {e}")
+
+        # Preserve old meta if it exists
+        old_meta = {}
         if profile_dir.exists():
-            # Try to cleanup cached latents before deleting the old profile
-            try:
-                from .jobs import get_speaker_wavs
-                from .engines import get_speaker_latent_path
-                sw = get_speaker_wavs(name)
-                if sw:
-                    lp = get_speaker_latent_path(sw)
-                    if lp and lp.exists():
-                        lp.unlink()
-            except:
-                pass
+            import json
+            meta_path = profile_dir / "profile.json"
+            alt_meta = profile_dir / "meta.json"
+            if meta_path.exists():
+                try: old_meta = json.loads(meta_path.read_text())
+                except: pass
+            elif alt_meta.exists():
+                try: old_meta = json.loads(alt_meta.read_text())
+                except: pass
 
-            import shutil
-            if profile_dir.is_dir():
-                shutil.rmtree(profile_dir)
-            else:
-                profile_dir.unlink()
-        profile_dir.mkdir()
+        # If we have new files, we replace the existing profile directory
+        if files and any(f.filename for f in files):
+            if profile_dir.exists():
+                import shutil
+                if profile_dir.is_dir():
+                    shutil.rmtree(profile_dir)
+                else:
+                    profile_dir.unlink()
 
-        saved_count = 0
-        for f in files:
-            if not f.filename or not f.filename.lower().endswith(".wav"):
-                continue
+            profile_dir.mkdir()
 
-            # Use only the basename to prevent sub-directory creation/traversal
-            basename = os.path.basename(f.filename)
-            dest = profile_dir / basename
-            content = await f.read()
-            dest.write_bytes(content)
-            saved_count += 1
+            import tempfile
+            saved_count = 0
+            converted_count = 0
+            errors = []
 
-        if saved_count == 0:
-            return JSONResponse({"status": "error", "message": "No valid .wav files were uploaded"}, status_code=400)
+            for f in files:
+                if not f.filename:
+                    continue
 
-        return {"status": "success", "profile": name, "files_saved": saved_count}
+                ext = f.filename.lower().suffix if hasattr(f.filename, 'suffix') else os.path.splitext(f.filename)[1].lower()
+                basename = os.path.basename(f.filename)
+                stem = os.path.splitext(basename)[0]
+
+                content = await f.read()
+
+                if ext == ".wav":
+                    dest = profile_dir / basename
+                    dest.write_bytes(content)
+                    saved_count += 1
+                elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+                    # Convert to WAV
+                    from .audio import convert_to_wav
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                        tmp.write(content)
+                        tmp_path = Path(tmp.name)
+
+                    dest_wav = profile_dir / f"{stem}.wav"
+                    rc = convert_to_wav(tmp_path, dest_wav)
+                    tmp_path.unlink()
+
+                    if rc == 0:
+                        converted_count += 1
+                    else:
+                        errors.append(f"Failed to convert {basename}")
+                else:
+                    errors.append(f"Unsupported format: {basename} ({ext})")
+
+            total_valid = saved_count + converted_count
+
+            # Save or restore profile.json
+            if speaker_id is not None: old_meta["speaker_id"] = speaker_id
+            if variant_name is not None: old_meta["variant_name"] = variant_name
+
+            # Sync built_samples
+            current_wavs = sorted([f.name for f in profile_dir.glob("*.wav") if f.name != "sample.wav"])
+            old_meta["built_samples"] = current_wavs
+
+            if old_meta:
+                import json
+                (profile_dir / "profile.json").write_text(json.dumps(old_meta, indent=2))
+
+            if total_valid == 0:
+                msg = "No valid audio files were found"
+                if errors: msg += f": {', '.join(errors[:2])}"
+                return JSONResponse({"status": "error", "message": msg}, status_code=400)
+
+            return {
+                "status": "success", 
+                "profile": name, 
+                "files_saved": saved_count,
+                "files_converted": converted_count,
+                "total_files": total_valid,
+                "errors": errors
+            }
+
+        # If no new files, we just confirm success after clearing the latent
+        # Sync built_samples
+        current_wavs = sorted([f.name for f in profile_dir.glob("*.wav") if f.name != "sample.wav"])
+        old_meta["built_samples"] = current_wavs
+
+        # Update meta if new fields provided
+        if speaker_id is not None: old_meta["speaker_id"] = speaker_id
+        if variant_name is not None: old_meta["variant_name"] = variant_name
+        if old_meta and profile_dir.exists():
+            import json
+            (profile_dir / "profile.json").write_text(json.dumps(old_meta, indent=2))
+
+        return {
+            "status": "success",
+            "profile": name,
+            "message": "Model refreshed from existing samples"
+        }
     except Exception as e:
         import traceback
         error_msg = f"Build failed: {str(e)}"
@@ -1284,43 +1572,124 @@ async def build_speaker_profile(
         traceback.print_exc()
         return JSONResponse({"status": "error", "message": error_msg, "traceback": traceback.format_exc()}, status_code=500)
 
-@app.post("/api/speaker-profiles/{name}/rename")
-def rename_speaker_profile(name: str, new_name: str = Form(...)):
+@app.post("/api/speaker-profiles/{name}/samples/upload")
+async def api_upload_speaker_samples(name: str, files: List[UploadFile] = File(...)):
+    try:
+        profile_dir = VOICES_DIR / name
+        if not profile_dir.exists():
+             return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+        import tempfile
+        import os
+        saved_count = 0
+        converted_count = 0
+        errors = []
+
+        for f in files:
+            if not f.filename: continue
+
+            ext = os.path.splitext(f.filename)[1].lower()
+            basename = os.path.basename(f.filename)
+            stem = os.path.splitext(basename)[0]
+            content = await f.read()
+
+            if ext == ".wav":
+                dest = profile_dir / basename
+                dest.write_bytes(content)
+                saved_count += 1
+            elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+                from .audio import convert_to_wav
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(content)
+                    tmp_path = Path(tmp.name)
+
+                dest_wav = profile_dir / f"{stem}.wav"
+                rc = convert_to_wav(tmp_path, dest_wav)
+                tmp_path.unlink()
+                if rc == 0: converted_count += 1
+                else: errors.append(f"Failed to convert {basename}")
+            else:
+                errors.append(f"Unsupported format: {basename}")
+
+        return {
+            "status": "success",
+            "saved": saved_count,
+            "converted": converted_count,
+            "errors": errors
+        }
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+def rename_speaker_profile_internal(name: str, new_name: str):
+    """Internal helper to rename a voice profile and update all references."""
     from .jobs import get_speaker_wavs
     from .engines import get_speaker_latent_path
+    from .db import update_voice_profile_references
     import shutil
+
+    if not name or not new_name or name == new_name:
+        return True, name
 
     old_dir = VOICES_DIR / name
     new_dir = VOICES_DIR / new_name
 
     if not old_dir.exists():
-        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
-    if new_dir.exists():
-        return JSONResponse({"status": "error", "message": f"Profile '{new_name}' already exists"}, status_code=400)
+        return False, "Profile not found"
+    if new_dir.exists() and name.lower() != new_name.lower():
+        return False, f"Profile '{new_name}' already exists"
 
-    # 1. Cleanup old latent cache for the old path
+    # 1. Cleanup old latent cache
     try:
         sw = get_speaker_wavs(name)
         if sw:
             lp = get_speaker_latent_path(sw)
             if lp and lp.exists():
-                print(f"Cleanup latent cache for renamed narrator: {name}")
                 lp.unlink()
-    except Exception as e:
-        print(f"Warning: Failed to cleanup latent cache for {name}: {e}")
+    except: pass
 
     # 2. Rename directory
     try:
-        shutil.move(str(old_dir), str(new_dir))
+        if old_dir.exists():
+            shutil.move(str(old_dir), str(new_dir))
     except Exception as e:
-        return JSONResponse({"status": "error", "message": f"Move failed: {str(e)}"}, status_code=500)
+        return False, str(e)
 
-    # 3. Update global settings if this was the default
+    # 3. Update global settings
     settings = get_settings()
     if settings.get("default_speaker_profile") == name:
         update_settings(default_speaker_profile=new_name)
 
-    return {"status": "success", "new_name": new_name}
+    # 4. Update JSON metadata
+    try:
+        meta_path = new_dir / "profile.json"
+        if meta_path.exists():
+            import json
+            meta = json.loads(meta_path.read_text())
+
+            # If the new name follows "Speaker - Variant" pattern, update variant_name in JSON
+            if " - " in new_name:
+                parts = new_name.split(" - ", 1)
+                meta["variant_name"] = parts[1]
+            elif meta.get("speaker_id") and meta.get("variant_name"):
+                # If it's a variant but renamed to a simple name, update variant_name to that name
+                meta["variant_name"] = new_name
+
+            meta_path.write_text(json.dumps(meta, indent=2))
+    except Exception as e:
+        print(f"Warning: Failed to update profile.json during rename: {e}")
+
+    # 5. Update DB references
+    update_voice_profile_references(name, new_name)
+
+    return True, new_name
+
+@app.post("/api/speaker-profiles/{name}/rename")
+def rename_speaker_profile(name: str, new_name: str = Form(...)):
+    success, result = rename_speaker_profile_internal(name, new_name)
+    if not success:
+        return JSONResponse({"status": "error", "message": result}, status_code=400)
+    return {"status": "success", "new_name": result}
 
 @app.delete("/api/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):
@@ -1345,6 +1714,92 @@ def delete_speaker_profile(name: str):
         shutil.rmtree(profile_dir)
         return {"status": "success"}
     return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+@app.delete("/api/speaker-profiles/{name}/samples/{filename}")
+def delete_speaker_sample(name: str, filename: str):
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+    sample_path = profile_dir / filename
+    if sample_path.exists() and sample_path.is_file():
+        sample_path.unlink()
+
+        # Cleanup cached latents since samples changed
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists(): lp.unlink()
+        except: pass
+
+        return {"status": "success"}
+    return JSONResponse({"status": "error", "message": "Sample not found"}, status_code=404)
+
+@app.post("/api/speaker-profiles/{name}/samples")
+async def add_speaker_samples(name: str, files: List[UploadFile] = File(...)):
+    profile_dir = VOICES_DIR / name
+    if not profile_dir.exists():
+        return JSONResponse({"status": "error", "message": "Profile not found"}, status_code=404)
+
+    import tempfile
+    saved_count = 0
+    converted_count = 0
+    errors = []
+
+    for f in files:
+        if not f.filename:
+            continue
+
+        # Prevent overwriting sample.wav
+        if f.filename.lower() == "sample.wav":
+            continue
+
+        ext = os.path.splitext(f.filename)[1].lower()
+        basename = os.path.basename(f.filename)
+        stem = os.path.splitext(basename)[0]
+        content = await f.read()
+
+        if ext == ".wav":
+            dest = profile_dir / basename
+            dest.write_bytes(content)
+            saved_count += 1
+        elif ext in [".mp3", ".m4a", ".ogg", ".flac", ".aac"]:
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = Path(tmp.name)
+
+            dest_wav = profile_dir / f"{stem}.wav"
+            rc = convert_to_wav(tmp_path, dest_wav)
+            tmp_path.unlink()
+
+            if rc == 0:
+                converted_count += 1
+            else:
+                errors.append(f"Failed to convert {basename}")
+        else:
+            errors.append(f"Unsupported format: {basename}")
+
+    total_added = saved_count + converted_count
+    if total_added > 0:
+        # Cleanup cached latents
+        try:
+            from .jobs import get_speaker_wavs
+            from .engines import get_speaker_latent_path
+            sw = get_speaker_wavs(name)
+            if sw:
+                lp = get_speaker_latent_path(sw)
+                if lp and lp.exists(): lp.unlink()
+        except: pass
+
+    return {
+        "status": "success", 
+        "files_added": total_added,
+        "files_converted": converted_count,
+        "errors": errors
+    }
 
 @app.post("/api/speaker-profiles/test")
 def test_speaker_profile(name: str = Form(...)):
@@ -1953,6 +2408,12 @@ def api_reorder_queue(queue_ids: str = Form(...)): # expects comma separated IDs
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
+@app.delete("/api/processing_queue")
+def api_clear_queue():
+    count = db_clear_queue()
+    broadcast_queue_update()
+    return JSONResponse({"status": "success", "cleared": count})
+
 @app.delete("/api/processing_queue/{queue_id}")
 def api_remove_from_queue(queue_id: str):
     success = remove_from_queue(queue_id)
@@ -1961,19 +2422,42 @@ def api_remove_from_queue(queue_id: str):
         return JSONResponse({"status": "success"})
     return JSONResponse({"status": "error", "message": "Item not found"}, status_code=404)
 
-@app.delete("/api/processing_queue")
-def api_clear_queue():
-    count = db_clear_queue()
+@app.post("/api/processing_queue/clear_completed")
+def api_clear_completed_queue():
+    from .db import clear_completed_queue
+    count = clear_completed_queue()
     broadcast_queue_update()
     return JSONResponse({"status": "success", "cleared": count})
-# -----------------------------
 
 @app.post("/queue/clear")
 def clear_history():
     """Wipe job history, empty the in-memory queue, and stop processes."""
+    from .db import get_queue
+    # 1. Identify which chapters should be reset (not 'done')
+    q_items = get_queue()
+    c_ids_to_reset = [item['chapter_id'] for item in q_items if item['status'] != 'done']
+
     terminate_all_subprocesses()
     clear_job_queue()
-    clear_all_jobs()
+    clear_all_jobs() # state.json wipe
+
+    # 2. Manual reset in DB for chapters that were queued/running
+    if c_ids_to_reset:
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join(["?"] * len(c_ids_to_reset))
+            cursor.execute(f"UPDATE chapters SET audio_status = 'unprocessed' WHERE id IN ({placeholders})", c_ids_to_reset)
+            cursor.execute("DELETE FROM processing_queue")
+            conn.commit()
+    else:
+        # Just wipe queue table if nothing to reset
+        from .db import get_connection
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM processing_queue")
+            conn.commit()
+
     return JSONResponse({"status": "ok", "message": "History cleared and processes stopped"})
 
 
@@ -2076,3 +2560,17 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     update_job(jid, status="queued") # Trigger SSE broadcast immediately
 
     return JSONResponse({"status": "success", "job_id": jid})
+
+# Catch-all for React Router frontend routes
+@app.get("/{full_path:path}")
+def catch_all(full_path: str):
+    # This route is defined at the end so it only catches what wasn't matched above.
+    # We avoid serving index.html for API calls or files (paths with dots).
+    if full_path.startswith("api/") or "." in full_path.split("/")[-1]:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+
+    return JSONResponse({"detail": "Not Found"}, status_code=404)

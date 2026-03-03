@@ -25,7 +25,23 @@ export default defineConfig({
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },
-      '/queue': {
+      '/queue/clear': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/queue/pause': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/queue/resume': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/queue/start_xtts': {
+        target: 'http://127.0.0.1:8123',
+        changeOrigin: true,
+      },
+      '/queue/backfill': {
         target: 'http://127.0.0.1:8123',
         changeOrigin: true,
       },

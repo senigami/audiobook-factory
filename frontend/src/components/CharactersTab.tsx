@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import type { Character, SpeakerProfile } from '../types';
+import type { Character } from '../types';
 import { api } from '../api';
 import { Plus, Trash2, User as UserIcon } from 'lucide-react';
 import { ColorSwatchPicker } from './ColorSwatchPicker';
+import { ConfirmModal } from './ConfirmModal';
 
 interface CharactersTabProps {
   projectId: string;
-  speakerProfiles: SpeakerProfile[];
+  speakers: import('../types').Speaker[];
+  speakerProfiles: import('../types').SpeakerProfile[];
 }
 
-export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speakerProfiles }) => {
+export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speakers, speakerProfiles }) => {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -17,6 +19,14 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   const [newName, setNewName] = useState('');
   const [newVoice, setNewVoice] = useState('');
   const [newColor, setNewColor] = useState('#8b5cf6');
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+    confirmText?: string;
+  } | null>(null);
 
   const loadCharacters = async () => {
     setLoading(true);
@@ -33,6 +43,15 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
   useEffect(() => {
     loadCharacters();
   }, [projectId]);
+
+  // Compute merged voices groupings
+  const availableVoices = React.useMemo(() => {
+    const list = (speakers || []).map(s => ({ id: s.id, name: s.name, is_speaker: true }));
+    const orphans = (speakerProfiles || [])
+      .filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
+      .map(p => ({ id: `unassigned-${p.name}`, name: p.name, is_speaker: false }));
+    return [...list, ...orphans];
+  }, [speakers, speakerProfiles]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,14 +98,20 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this character? All assigned sentences will revert to the default narrator.")) return;
-    try {
-      await api.deleteCharacter(id);
-      setCharacters(prev => prev.filter(c => c.id !== id));
-    } catch (e) {
-      console.error("Failed to delete character", e);
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setConfirmConfig({
+      title: 'Delete Character',
+      message: `Delete character "${name}"? All assigned sentences will revert to the default speaker.`,
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.deleteCharacter(id);
+          setCharacters(prev => prev.filter(c => c.id !== id));
+        } catch (e) {
+          console.error("Failed to delete character", e);
+        }
+      }
+    });
   };
 
   return (
@@ -98,7 +123,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
             Characters & Voices
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Map character names to specific voice profiles. You can then assign sentences to these characters in the Production editor.
+            Map character names to specific speakers. You can then assign sentences to these characters in the Production editor.
           </p>
         </div>
       </div>
@@ -128,7 +153,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
           </div>
           <div style={{ flex: 1 }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Voice Profile
+              SPEAKER
             </label>
             <div className="select-wrapper">
               <select
@@ -137,9 +162,9 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                 onChange={e => setNewVoice(e.target.value)}
                 style={{ width: '100%' }}
               >
-                <option value="">Unassigned (Default Narrator)</option>
-                {speakerProfiles.map(p => (
-                  <option key={p.name} value={p.name}>{p.name}</option>
+                <option value="">Unassigned (Default Speaker)</option>
+                {availableVoices.map(v => (
+                  <option key={v.id} value={v.name}>{v.name}</option>
                 ))}
               </select>
             </div>
@@ -157,7 +182,7 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
         <div style={{ textAlign: 'center', padding: '3rem', background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', borderStyle: 'dashed' }}>
           <UserIcon size={32} color="var(--text-muted)" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
           <p style={{ color: 'var(--text-muted)' }}>No characters created yet.</p>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', opacity: 0.8, marginTop: '0.5rem' }}>Add characters to quickly assign specific voices to lines of dialog.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', opacity: 0.8, marginTop: '0.5rem' }}>Add characters to quickly assign specific speakers to lines of dialog.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '0.8rem' }}>
@@ -183,17 +208,25 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
                   onChange={e => handleUpdateVoice(char.id, e.target.value)}
                   style={{ width: '100%' }}
                 >
-                  <option value="">Default Narrator</option>
-                  {speakerProfiles.map(p => (
-                    <option key={p.name} value={p.name}>{p.name}</option>
-                  ))}
+                  <option value="">Default Speaker</option>
+                          {availableVoices.map(v => (
+                            <option key={v.id} value={v.name}>{v.name}</option>
+                          ))}
                 </select>
               </div>
 
               <button 
-                onClick={() => handleDelete(char.id)}
-                className="btn-danger"
-                style={{ padding: '0.4rem', opacity: 0.6 }}
+                onClick={() => handleDelete(char.id, char.name)}
+                className="btn-ghost"
+                style={{ padding: '0.4rem', color: 'var(--text-muted)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--error)';
+                  e.currentTarget.style.background = 'var(--error-glow)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                  e.currentTarget.style.background = 'transparent';
+                }}
                 title="Delete Character"
               >
                 <Trash2 size={16} />
@@ -202,6 +235,19 @@ export const CharactersTab: React.FC<CharactersTabProps> = ({ projectId, speaker
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmConfig}
+        title={confirmConfig?.title || ''}
+        message={confirmConfig?.message || ''}
+        onConfirm={() => {
+          confirmConfig?.onConfirm();
+          setConfirmConfig(null);
+        }}
+        onCancel={() => setConfirmConfig(null)}
+        isDestructive={confirmConfig?.isDestructive}
+        confirmText={confirmConfig?.confirmText}
+      />
     </div>
   );
 };

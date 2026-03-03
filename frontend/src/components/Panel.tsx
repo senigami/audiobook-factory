@@ -100,7 +100,7 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, progress, s
             </div>
 
             {(status === 'running' || status === 'queued') && (
-                <div style={{ height: '2px', background: 'rgba(255,255,255,0.05)', width: '100%', overflow: 'hidden' }}>
+                <div style={{ height: '2px', background: 'rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden' }}>
                     <div
                         className="progress-bar-animated"
                         style={{
@@ -123,7 +123,7 @@ export const Panel: React.FC<PanelProps> = ({ title, logs, subtitle, progress, s
                     overflowY: 'auto',
                     whiteSpace: 'pre-wrap',
                     color: 'var(--text-secondary)',
-                    background: 'rgba(0,0,0,0.2)',
+                    background: 'var(--surface-alt)',
                     lineHeight: '1.5'
                 }}
             >

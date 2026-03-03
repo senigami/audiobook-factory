@@ -135,6 +135,42 @@ def test_rename_profile(clean_voices):
     # Verify settings updated
     assert get_settings()["default_speaker_profile"] == new_name
 
+def test_rename_variant_profile(clean_voices):
+    # 1. Setup a speaker and a variant profile
+    speaker_id = "spk-123"
+    speaker_name = "Sally"
+    variant_label = "Happy"
+    profile_name = f"{speaker_name} - {variant_label}"
+
+    profile_dir = clean_voices / profile_name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+
+    meta = {
+        "speaker_id": speaker_id,
+        "variant_name": variant_label,
+        "speed": 1.0
+    }
+    meta_path = profile_dir / "profile.json"
+    meta_path.write_text(json.dumps(meta))
+
+    # 2. Rename to a new variant
+    new_variant_label = "Excited"
+    new_profile_name = f"{speaker_name} - {new_variant_label}"
+
+    response = client.post(f"/api/speaker-profiles/{profile_name}/rename", data={"new_name": new_profile_name})
+    assert response.status_code == 200
+
+    # 3. Verify folder renamed
+    assert not (clean_voices / profile_name).exists()
+    assert (clean_voices / new_profile_name).exists()
+
+    # 4. Verify profile.json updated with new variant_name
+    new_meta_path = clean_voices / new_profile_name / "profile.json"
+    assert new_meta_path.exists()
+    new_meta = json.loads(new_meta_path.read_text())
+    assert new_meta["variant_name"] == new_variant_label
+    assert new_meta["speaker_id"] == speaker_id
+
 def test_get_speaker_settings(clean_voices):
     from app.jobs import get_speaker_settings
     from app.state import update_settings

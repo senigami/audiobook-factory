@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ProjectLibrary } from './ProjectLibrary'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 describe('ProjectLibrary', () => {
@@ -36,16 +37,26 @@ describe('ProjectLibrary', () => {
         }) as any
     })
 
-    it('renders project library and fetches projects', async () => {
-        render(<ProjectLibrary onSelectProject={vi.fn()} />)
+    it('renders project library and hero section', async () => {
+        render(
+            <MemoryRouter>
+                <ProjectLibrary onSelectProject={vi.fn()} />
+            </MemoryRouter>
+        )
         
+        expect(await screen.findByText(/Natural AI Audio Lab/i)).toBeTruthy()
+
         await waitFor(() => {
             expect(screen.getByText('Test Project')).toBeTruthy()
         })
     })
 
     it('opens create modal', async () => {
-        render(<ProjectLibrary onSelectProject={vi.fn()} />)
+        render(
+            <MemoryRouter>
+                <ProjectLibrary onSelectProject={vi.fn()} />
+            </MemoryRouter>
+        )
         const createBtn = await screen.findByText(/New Project/i)
         fireEvent.click(createBtn)
 
