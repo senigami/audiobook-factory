@@ -1433,10 +1433,18 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
             
             if (resp.ok) {
                 // Also handle name change if different
-                const currentName = editingProfile.variant_name || editingProfile.name;
-                if (variantName && variantName !== currentName) {
+                const currentVariantDisplay = editingProfile.variant_name || editingProfile.name;
+                if (variantName && variantName !== currentVariantDisplay) {
+                    let newFullName = variantName;
+                    if (editingProfile.speaker_id) {
+                        const speaker = speakers.find(s => s.id === editingProfile.speaker_id);
+                        if (speaker) {
+                            newFullName = (variantName === 'Default' || variantName === speaker.name) ? speaker.name : `${speaker.name} - ${variantName}`;
+                        }
+                    }
+
                     const renameForm = new URLSearchParams();
-                    renameForm.append('new_name', variantName);
+                    renameForm.append('new_name', newFullName);
                     await fetch(`/api/speaker-profiles/${encodeURIComponent(editingProfile.name)}/rename`, {
                         method: 'POST',
                         body: renameForm

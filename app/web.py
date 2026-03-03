@@ -6,7 +6,7 @@ import os
 import sys
 from typing import Optional, List
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample, convert_to_wav
@@ -521,20 +521,23 @@ def api_generate_segments(segment_ids: List[str] = Form(...)):
     return JSONResponse({"status": "success", "job_id": job.id})
 
 @app.put("/api/segments/{segment_id}")
-def api_update_segment(
+async def api_update_segment(
+    request: Request,
     segment_id: str,
     character_id: Optional[str] = Form(None),
     speaker_profile_name: Optional[str] = Form(None),
     audio_status: Optional[str] = Form(None)
 ):
+    form = await request.form()
     updates = {}
-    if character_id is not None:
-        # allow clearing character
-        updates["character_id"] = character_id if character_id != "" else None
-    if speaker_profile_name is not None:
-        updates["speaker_profile_name"] = speaker_profile_name if speaker_profile_name != "" else None
-    if audio_status is not None:
-        updates["audio_status"] = audio_status
+
+    # We use Form() for documentation/validation, but check form presence for clearing
+    if "character_id" in form:
+        updates["character_id"] = form["character_id"] if form["character_id"] != "" else None
+    if "speaker_profile_name" in form:
+        updates["speaker_profile_name"] = form["speaker_profile_name"] if form["speaker_profile_name"] != "" else None
+    if "audio_status" in form:
+        updates["audio_status"] = form["audio_status"]
 
     if updates:
         from .db import update_segment
@@ -544,11 +547,13 @@ def api_update_segment(
 
 @app.put("/api/segments")
 async def api_update_segments_bulk(
+    request: Request,
     segment_ids: List[str] = Form(...),
     character_id: Optional[str] = Form(None),
     speaker_profile_name: Optional[str] = Form(None),
     audio_status: Optional[str] = Form(None)
 ):
+    form = await request.form()
     # Handle both ["id1,id2"] and ["id1", "id2"]
     actual_ids = []
     for item in segment_ids:
@@ -558,12 +563,12 @@ async def api_update_segments_bulk(
             actual_ids.append(item.strip())
 
     updates = {}
-    if character_id is not None:
-        updates["character_id"] = character_id if character_id != "" else None
-    if speaker_profile_name is not None:
-        updates["speaker_profile_name"] = speaker_profile_name if speaker_profile_name != "" else None
-    if audio_status is not None:
-        updates["audio_status"] = audio_status
+    if "character_id" in form:
+        updates["character_id"] = form["character_id"] if form["character_id"] != "" else None
+    if "speaker_profile_name" in form:
+        updates["speaker_profile_name"] = form["speaker_profile_name"] if form["speaker_profile_name"] != "" else None
+    if "audio_status" in form:
+        updates["audio_status"] = form["audio_status"]
 
     if updates and actual_ids:
         from .db import update_segments_bulk
@@ -1655,7 +1660,26 @@ def rename_speaker_profile_internal(name: str, new_name: str):
     if settings.get("default_speaker_profile") == name:
         update_settings(default_speaker_profile=new_name)
 
-    # 4. Update DB references
+    # 4. Update JSON metadata
+    try:
+        meta_path = new_dir / "profile.json"
+        if meta_path.exists():
+            import json
+            meta = json.loads(meta_path.read_text())
+
+            # If the new name follows "Speaker - Variant" pattern, update variant_name in JSON
+            if " - " in new_name:
+                parts = new_name.split(" - ", 1)
+                meta["variant_name"] = parts[1]
+            elif meta.get("speaker_id") and meta.get("variant_name"):
+                # If it's a variant but renamed to a simple name, update variant_name to that name
+                meta["variant_name"] = new_name
+
+            meta_path.write_text(json.dumps(meta, indent=2))
+    except Exception as e:
+        print(f"Warning: Failed to update profile.json during rename: {e}")
+
+    # 5. Update DB references
     update_voice_profile_references(name, new_name)
 
     return True, new_name

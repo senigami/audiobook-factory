@@ -195,3 +195,4 @@ audiobook_factory.db
 /voices
 audiobook_studio.db
 /samples
+debug_output.txt
