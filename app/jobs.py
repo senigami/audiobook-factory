@@ -235,8 +235,10 @@ def get_speaker_wavs(profile_name_or_id: str) -> Optional[str]:
     """Returns a comma-separated string of absolute paths for the given profile or speaker ID."""
     from .db import get_speaker
 
-    # Resolve speaker ID to profile name if necessary
-    target_profile = profile_name_or_id if profile_name_or_id else "Dark Fantasy"
+    target_profile = profile_name_or_id
+    if not target_profile:
+        from .state import get_settings
+        target_profile = get_settings().get("default_speaker_profile") or "Dark Fantasy"
 
     # Heuristic: if it looks like a UUID, check if it's a speaker ID
     if len(target_profile) == 36 and "-" in target_profile:
@@ -263,17 +265,20 @@ def get_speaker_wavs(profile_name_or_id: str) -> Optional[str]:
 
 def get_speaker_settings(profile_name_or_id: str) -> dict:
     """Returns metadata (like speed and test text) for a profile or speaker ID, falling back to global settings."""
-    from .db import get_speaker
-    target_profile = profile_name_or_id if profile_name_or_id else "Dark Fantasy"
+    defaults = get_settings()
+
+    target_profile = profile_name_or_id
+    if not target_profile:
+        target_profile = defaults.get("default_speaker_profile") or "Dark Fantasy"
 
     # Resolve speaker ID to profile name if necessary
     if len(target_profile) == 36 and "-" in target_profile:
+        from .db import get_speaker
         spk = get_speaker(target_profile)
         if spk and spk["default_profile_name"]:
             target_profile = spk["default_profile_name"]
     p = VOICES_DIR / target_profile
 
-    defaults = get_settings()
     default_test_text = (
         "The mysterious traveler, bathed in the soft glow of the azure twilight, "
         "whispered of ancient treasures buried beneath the jagged mountains. "
