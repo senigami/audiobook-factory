@@ -418,9 +418,11 @@ def worker_loop(q: "queue.Queue[str]"):
                 ]
 
             # Trigger immediate UI update with status, ETA, and Log Header
+            initial_status = "running" if j.engine == "audiobook" else "preparing"
+            initial_start = time.time() if j.engine == "audiobook" else None
             update_job(jid,
-                       status="running",
-                       started_at=time.time(),
+                       status=initial_status,
+                       started_at=initial_start,
                        finished_at=None,
                        progress=0.0,
                        error=None,
@@ -429,13 +431,13 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # CRITICAL: Synchronize the local 'j' object properties so the on_output
             # closure uses the fresh start state instead of stale data from a previous session.
-            j.status = "running"
+            j.status = initial_status
             j.progress = 0.0
             j.finished_at = None
             j.log = "".join(header)
             j.error = None
             j.eta_seconds = eta
-            j.started_at = time.time()
+            j.started_at = initial_start
             j._last_broadcast_p = 0.0 # Track what we just sent in update_job above
 
             # --- Safety Checks ---
@@ -463,7 +465,13 @@ def worker_loop(q: "queue.Queue[str]"):
                 if not s:
                     # Heartbeat: only update prediction if it's a meaningful change (>1% or >5s since last)
                     current_p = getattr(j, 'progress', 0.0)
-                    prog = min(0.98, max(current_p, elapsed / max(1, eta)))
+
+                    if not getattr(j, 'synthesis_started_at', None) and j.engine != "audiobook":
+                        prog = min(0.01, current_p + 0.001)
+                    else:
+                        effective_start = j.synthesis_started_at or start
+                        actual_elapsed = now - effective_start
+                        prog = min(0.98, max(current_p, actual_elapsed / max(1, eta)))
 
                     last_b = getattr(j, '_last_broadcast_time', 0)
                     last_p = getattr(j, '_last_broadcast_p', 0.0)
@@ -480,8 +488,12 @@ def worker_loop(q: "queue.Queue[str]"):
                 # 0. Filter out noisy lines provided by XTTS
                 if "[START_SYNTHESIS]" in s:
                     j.synthesis_started_at = now
+                    j.started_at = now
+                    j.status = "running"
                     new_progress = 0.01
                     on_output("Model prepared. Starting synthesis...\n")
+                    # Explicitly broadcast status and started_at
+                    update_job(jid, status="running", started_at=now, progress=0.01)
                     return
                 if s.startswith("> Text"): return
                 if s.startswith("> Processing sentence:"): return
@@ -501,7 +513,7 @@ def worker_loop(q: "queue.Queue[str]"):
                 # 2. Extract Progress from tqdm if present
                 progress_match = re.search(r'(\d+)%', s)
                 is_progress_line = progress_match and "|" in s
-                if is_progress_line:
+                if is_progress_line and getattr(j, 'synthesis_started_at', None):
                     try:
                         p_val = round(int(progress_match.group(1)) / 100.0, 2)
                         current_p = getattr(j, 'progress', 0.0)

@@ -832,20 +832,29 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', flex: '2 1 0', minWidth: 0 }}>
                   {(() => {
-                    const job = Object.values(jobs).find(j => 
+                    const relevantJobs = Object.values(jobs).filter(j => 
                         j.project_id === projectId && 
-                        j.chapter_file && j.chapter_file.startsWith(chap.id)
+                        (j.chapter_id === chap.id || (j.chapter_file && j.chapter_file.startsWith(chap.id)))
                     );
+
+                    const job = relevantJobs.length > 0 ? relevantJobs.sort((a, b) => {
+                        const statusOrder: Record<string, number> = { 'running': 0, 'preparing': 1, 'queued': 2 };
+                        const orderA = statusOrder[a.status] ?? 99;
+                        const orderB = statusOrder[b.status] ?? 99;
+                        if (orderA !== orderB) return orderA - orderB;
+                        return (b.created_at || 0) - (a.created_at || 0);
+                    })[0] : undefined;
                     
                     if (chap.audio_status === 'processing' && job) {
                         const isRunning = job.status === 'running';
+                        const isPreparing = job.status === 'preparing';
                         return (
                             <div style={{ width: '100%', maxWidth: '600px' }}>
                                 <PredictiveProgressBar 
                                     progress={job.progress || 0}
                                     startedAt={job.started_at}
                                     etaSeconds={job.eta_seconds}
-                                    label={isRunning ? "Synthesizing..." : "Queued"}
+                                    label={isRunning ? "Synthesizing..." : (isPreparing ? "Preparing..." : "Queued")}
                                 />
                             </div>
                         );

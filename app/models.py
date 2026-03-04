@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, Literal, List
 
 Engine = Literal["xtts", "audiobook"]
-Status = Literal["queued", "running", "done", "failed", "cancelled"]
+Status = Literal["queued", "preparing", "running", "finalizing", "done", "failed", "cancelled"]
 
 @dataclass
 class Job:
