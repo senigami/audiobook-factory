@@ -50,14 +50,26 @@ from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
 # merges short sentences with ";" which naturally becomes a pause in the audio.
 
 CHAPTER_RE = re.compile(r"^(Chapter\s+(\d+)\s*:\s*.+)$", re.MULTILINE)
-SENT_SPLIT_RE = re.compile(r'(.+?[.!?]["\'”’]*)(\s+|$)', re.DOTALL)
+SENT_SPLIT_RE = re.compile(r'(.+?(?:[.!?]["\'”’]*|[\n\r]))(\s+|$)', re.DOTALL)
 
 def normalize_newlines(text: str) -> str:
-    """Reduces 2+ newlines to 1, and trims whitespace."""
+    """
+    Standardizes newlines for the production tab and splitting.
+    1. 3+ newlines -> ';\\n' (A pause followed by a split)
+    2. 2 newlines -> '\\n' (Standard paragraph splitting)
+    """
     if not text:
         return ""
-    # Reduce consecutive newlines to maximum of 1
+
+    # Standardize to only LF (\n)
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    # First, handle 3 or more newlines as a deliberate pause
+    text = re.sub(r'\n{3,}', ';\n', text)
+
+    # Then collapse remaining 2+ newlines to a single newline
     text = re.sub(r'\n{2,}', '\n', text)
+
     return text.strip()
 
 def preprocess_text(text: str) -> str:

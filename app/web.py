@@ -762,7 +762,7 @@ async def api_analyze_chapter(chapter_id: str):
                 current_batch.append(curr_seg)
             else:
                 # Commit previous batch
-                combined = "".join([s['text_content'] for s in current_batch])
+                combined = " ".join([s['text_content'] for s in current_batch])
                 # Clean/Split as the engine does
                 final_text = sanitize_for_xtts(combined)
                 final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
@@ -778,7 +778,7 @@ async def api_analyze_chapter(chapter_id: str):
 
         # Final batch in group
         if current_batch:
-            combined = "".join([s['text_content'] for s in current_batch])
+            combined = " ".join([s['text_content'] for s in current_batch])
             final_text = sanitize_for_xtts(combined)
             final_text = safe_split_long_sentences(final_text, target=SENT_CHAR_LIMIT)
 

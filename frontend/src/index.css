@@ -175,6 +175,35 @@ button {
   cursor: not-allowed;
 }
 
+/* Home / Hero Buttons */
+.btn-home {
+  background: var(--surface) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-home:hover:not(:disabled) {
+  background: var(--accent-glow) !important;
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-home:active:not(:disabled) {
+  background: var(--accent-active) !important;
+  color: #ffffff !important;
+  border-color: var(--accent-active) !important;
+  transform: translateY(0);
+}
+
+.btn-home.primary {
+  border: 2px solid var(--accent) !important;
+  color: var(--accent) !important;
+}
+
 .btn-danger {
   background: transparent;
   color: var(--error-text);
@@ -208,7 +237,9 @@ button {
 
 .kebab-trigger:focus-visible,
 .action-menu-item:focus-visible {
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--accent);
   z-index: 10;
 }
 
