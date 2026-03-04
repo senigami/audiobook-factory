@@ -505,7 +505,9 @@ def api_generate_segments(segment_ids: List[str] = Form(...)):
 
     from .jobs import enqueue
     from .models import Job
+    from .state import get_settings
     import uuid
+    settings = get_settings()
 
     job = Job(
         id=str(uuid.uuid4()),
@@ -515,7 +517,8 @@ def api_generate_segments(segment_ids: List[str] = Form(...)):
         created_at=time.time(),
         project_id=project_id,
         chapter_id=chapter_id,
-        segment_ids=sids
+        segment_ids=sids,
+        speaker_profile=settings.get("default_speaker_profile")
     )
     put_job(job)
     enqueue(job)
@@ -594,7 +597,9 @@ def api_bake_chapter(chapter_id: str):
 
     from .jobs import enqueue
     from .models import Job
+    from .state import get_settings
     import uuid
+    settings = get_settings()
 
     job = Job(
         id=str(uuid.uuid4()),
@@ -604,7 +609,8 @@ def api_bake_chapter(chapter_id: str):
         created_at=time.time(),
         project_id=project_id,
         chapter_id=chapter_id,
-        is_bake=True
+        is_bake=True,
+        speaker_profile=settings.get("default_speaker_profile")
     )
     put_job(job)
     enqueue(job)
