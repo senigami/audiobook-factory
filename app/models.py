@@ -16,6 +16,7 @@ class Job:
     chapter_id: Optional[str] = None
 
     started_at: Optional[float] = None
+    synthesis_started_at: Optional[float] = None
     finished_at: Optional[float] = None
 
     safe_mode: bool = True

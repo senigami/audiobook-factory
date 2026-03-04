@@ -106,6 +106,7 @@ def main():
             speaker_latents[sw] = None
 
     print(f"Synthesizing {len(script)} segments to {args.out_path}...", file=sys.stderr)
+    print("[START_SYNTHESIS]", file=sys.stderr, flush=True)
 
     try:
         from tqdm import tqdm

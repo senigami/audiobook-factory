@@ -477,7 +477,12 @@ def worker_loop(q: "queue.Queue[str]"):
                         update_job(jid, progress=prog)
                     return
 
-                # 1. Filter out noisy lines provided by XTTS
+                # 0. Filter out noisy lines provided by XTTS
+                if "[START_SYNTHESIS]" in s:
+                    j.synthesis_started_at = now
+                    new_progress = 0.01
+                    on_output("Model prepared. Starting synthesis...\n")
+                    return
                 if s.startswith("> Text"): return
                 if s.startswith("> Processing sentence:"): return
                 if s.startswith("['") or s.startswith('["'): return
@@ -536,7 +541,16 @@ def worker_loop(q: "queue.Queue[str]"):
                 # Update calculation for prediction (prediction floor)
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
-                    new_val = min(0.98, max(current_p, elapsed / max(1, eta)))
+
+                    # If synthesis hasn't started yet, cap progress at 0.01 (Preparing)
+                    if not getattr(j, 'synthesis_started_at', None) and j.engine != "audiobook":
+                        new_val = min(0.01, current_p + 0.001)
+                    else:
+                        # Use synthesis_started_at for a more accurate elapsed time if available
+                        effective_start = j.synthesis_started_at or start
+                        actual_elapsed = now - effective_start
+                        new_val = min(0.98, max(current_p, actual_elapsed / max(1, eta)))
+
                     new_progress = round(new_val, 2)
 
                 # Check threshold against last broadcast
@@ -996,7 +1010,9 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # --- Auto-tuning feedback (TTS) ---
             if rc == 0 and out_wav.exists() and chars > 0 and not getattr(j, 'is_bake', False):
-                actual_dur = time.time() - start
+                # Use synthesis_started_at for much more accurate CPS calculation
+                effective_start = getattr(j, 'synthesis_started_at', start)
+                actual_dur = time.time() - effective_start
                 if actual_dur > 0:
                     new_cps = chars / actual_dur
                     field = "xtts_cps"
