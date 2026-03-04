@@ -119,7 +119,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
     }
   };
 
-  const activeJobs = queue.filter(q => q.status === 'running' || q.status === 'preparing');
+  const activeJobs = queue.filter(q => q.status === 'running' || q.status === 'preparing' || q.status === 'finalizing');
   const pendingJobs = queue.filter(q => q.status === 'queued');
   const pastJobs = queue.filter(q => q.status === 'done' || q.status === 'failed' || q.status === 'cancelled');
 
@@ -319,7 +319,7 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                                     progress={prog}
                                     startedAt={started}
                                     etaSeconds={eta}
-                                    label={job.status === 'preparing' ? "Preparing..." : "Processing..."}
+                                    label={job.status === 'preparing' ? "Preparing..." : (job.status === 'finalizing' ? "Finalizing..." : "Processing...")}
                                   />
                               </div>
                           </div>

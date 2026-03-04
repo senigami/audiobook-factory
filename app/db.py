@@ -616,7 +616,7 @@ def get_queue() -> List[Dict[str, Any]]:
                 JOIN chapters c ON q.chapter_id = c.id
                 JOIN projects p ON q.project_id = p.id
                 ORDER BY 
-                    CASE WHEN q.status = 'running' THEN 0 ELSE 1 END,
+                    CASE WHEN q.status IN ('running', 'preparing', 'finalizing') THEN 0 ELSE 1 END,
                     q.created_at ASC
             """)
             return [dict(row) for row in cursor.fetchall()]
@@ -683,7 +683,7 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
                         "UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_generated_at = ?, audio_length_seconds = ? WHERE id = ?", 
                         (audio_path, now, audio_length_seconds, chapter_id)
                     )
-                elif status == 'running' or status == 'queued':
+                elif status in ('running', 'preparing', 'finalizing', 'queued'):
                     cursor.execute("UPDATE chapters SET audio_status = 'processing', audio_generated_at = NULL WHERE id = ?", (chapter_id,))
                 elif status == 'cancelled' or status == 'failed' or status == 'error':
                     cursor.execute("UPDATE chapters SET audio_status = ?, audio_generated_at = NULL WHERE id = ?", ('unprocessed' if status == 'cancelled' else 'error', chapter_id))

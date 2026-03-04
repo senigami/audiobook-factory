@@ -554,14 +554,17 @@ def worker_loop(q: "queue.Queue[str]"):
                 if new_progress is None:
                     current_p = getattr(j, 'progress', 0.0)
 
-                    # If synthesis hasn't started yet, cap progress at 0.01 (Preparing)
+                    # If synthesis hasn't started yet, cap progress at 0.05 (Preparing)
                     if not getattr(j, 'synthesis_started_at', None) and j.engine != "audiobook":
-                        new_val = min(0.01, current_p + 0.001)
+                        new_val = min(0.05, current_p + 0.005)
+                    elif getattr(j, 'status', None) == 'finalizing':
+                        # Stop predicting during finalization; only use the manually set progress
+                        new_val = current_p
                     else:
                         # Use synthesis_started_at for a more accurate elapsed time if available
-                        effective_start = j.synthesis_started_at or start
+                        effective_start = getattr(j, 'synthesis_started_at', start)
                         actual_elapsed = now - effective_start
-                        new_val = min(0.98, max(current_p, actual_elapsed / max(1, eta)))
+                        new_val = min(0.85, max(current_p, actual_elapsed / max(1, eta)))
 
                     new_progress = round(new_val, 2)
 
@@ -766,6 +769,8 @@ def worker_loop(q: "queue.Queue[str]"):
                     # 3. Final Stitch
                     if cancel_check(): continue
 
+                    j.status = "finalizing"
+                    update_job(jid, status="finalizing", progress=0.91, log="".join(logs)[-20000:])
                     on_output("Stitching all segments into final chapter file...\n")
                     # Refresh segment statuses
                     fresh_segs = get_chapter_segments(j.chapter_id)
@@ -1033,6 +1038,10 @@ def worker_loop(q: "queue.Queue[str]"):
                     updated_cps = (old_cps * 0.8) + (new_cps * 0.2)
                     update_performance_metrics(**{field: updated_cps})
 
+            if rc == 0 and out_wav.exists() and not getattr(j, 'status', None) == 'finalizing':
+                j.status = "finalizing"
+                update_job(jid, status="finalizing", progress=0.88, log="".join(logs)[-20000:])
+
             if rc != 0 or not out_wav.exists():
                 update_job(
                     jid,
@@ -1046,7 +1055,8 @@ def worker_loop(q: "queue.Queue[str]"):
 
             # --- Convert to MP3 if enabled ---
             if j.make_mp3:
-                update_job(jid, progress=0.99, log="".join(logs)[-20000:])
+                j.status = "finalizing"
+                update_job(jid, status="finalizing", progress=0.99, log="".join(logs)[-20000:])
                 frc = wav_to_mp3(out_wav, out_mp3, on_output=on_output, cancel_check=cancel_check)
                 logs.append(f"\n[ffmpeg] rc={frc}\n")
                 if frc == 0 and out_mp3.exists():

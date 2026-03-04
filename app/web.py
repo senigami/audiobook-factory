@@ -156,7 +156,7 @@ def startup_event():
     existing = get_jobs()
     to_delete = []
     for jid, j in existing.items():
-        if j.status == "queued" or j.status == "running":
+        if j.status in ("queued", "preparing", "running", "finalizing"):
             to_delete.append(jid)
 
     if to_delete:

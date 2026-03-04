@@ -12,7 +12,7 @@ export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, 
     try {
       const data = await api.fetchJobs();
       const jobMap = data.reduce((acc, job) => {
-        acc[job.chapter_file] = job;
+        acc[job.id] = job;
         return acc;
       }, {} as Record<string, Job>);
 
@@ -30,16 +30,15 @@ export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, 
     if (data.type === 'job_updated') {
       const { job_id, updates } = data;
       setJobs(prev => {
-        const filename = Object.keys(prev).find(f => prev[f].id === job_id);
-        if (!filename) {
-          refreshJobs();
+        if (!prev[job_id]) {
+          refreshJobs(); // Fetch all and hope the new one is there
           return prev;
         }
 
-        const oldJob = prev[filename];
+        const oldJob = prev[job_id];
         const newJob = { ...oldJob, ...updates };
 
-        return { ...prev, [filename]: newJob };
+        return { ...prev, [job_id]: newJob };
       });
     } else if (data.type === 'queue_updated') {
         if (onQueueUpdate) onQueueUpdate();
@@ -59,7 +58,7 @@ export const useJobs = (onJobComplete?: () => void, onQueueUpdate?: () => void, 
   useEffect(() => {
     const hasNewCompletion = Object.values(jobs).some(j => {
       // Find this job in a ref of previous jobs to see if it just finished
-      const wasDone = prevJobsRef.current[j.chapter_file]?.status === 'done';
+      const wasDone = prevJobsRef.current[j.id]?.status === 'done';
       return !wasDone && j.status === 'done';
     });
 
