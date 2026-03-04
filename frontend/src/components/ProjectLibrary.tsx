@@ -177,19 +177,16 @@ export const ProjectLibrary: React.FC<ProjectLibraryProps> = ({ onSelectProject 
                     <div style={{ display: 'flex', gap: '12px' }}>
                         <button 
                             onClick={() => setShowModal(true)}
-                            className="btn-primary" 
-                            style={{ padding: '0.85rem 2.5rem', fontSize: '1rem', borderRadius: 'var(--radius-button)' }}
+                            className="btn-home primary" 
+                            style={{ padding: '0.85rem 2.5rem', fontSize: '1rem' }}
                         >
                             <Plus size={20} strokeWidth={2.5} /> New Project
                         </button>
                         <button 
-                            className="btn-ghost" 
+                            className="btn-home" 
                             style={{ 
                                 padding: '0.85rem 2rem', 
                                 fontSize: '1rem', 
-                                borderRadius: 'var(--radius-button)',
-                                border: '1px solid var(--border)',
-                                background: 'var(--surface)'
                             }}
                             onClick={() => window.open('/docs', '_blank')}
                         >

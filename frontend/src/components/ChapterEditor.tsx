@@ -84,9 +84,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     segments.forEach(seg => {
         const lastGroup = groups[groups.length - 1];
         if (lastGroup && lastGroup.characterId === seg.character_id) {
-            const currentBatchText = lastGroup.segments.map(s => s.text_content).join('');
+            const currentBatchText = lastGroup.segments.map(s => s.text_content).join(' ');
             
-            if (currentBatchText.length + seg.text_content.length <= limit) {
+            if (currentBatchText.length + seg.text_content.length + 1 <= limit) {
                 lastGroup.segments.push(seg);
                 return;
             }
@@ -103,7 +103,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
     segments.forEach(seg => {
         const lastGroup = groups[groups.length - 1];
         const lastSeg = lastGroup?.segments[lastGroup.segments.length - 1];
-        const isNewParagraph = lastSeg && (lastSeg.text_content.includes('\n\n') || lastSeg.text_content.includes('\r\n\r\n'));
+        const isNewParagraph = lastSeg && (lastSeg.text_content.includes('\n') || lastSeg.text_content.includes('\r'));
 
         // For Production tab, we only group if they are in the same paragraph AND same character (if already assigned)
         // Actually, if we want to assign a voice to a paragraph, they might have different characters initially (assigned vs not).
@@ -891,7 +891,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapterId, project
                                                     whiteSpace: 'pre-wrap'
                                                 }}
                                             >
-                                                {group.segments.map(s => s.sanitized_text || s.text_content).join('')}
+                                                {group.segments.map(s => s.sanitized_text || s.text_content).join(' ')}
 
                                                 {anyProcessing && (
                                                     <span style={{ 
