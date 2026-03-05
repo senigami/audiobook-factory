@@ -8,7 +8,7 @@ import { ChapterEditor } from './ChapterEditor';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { CharactersTab } from './CharactersTab';
 import { ConfirmModal } from './ConfirmModal';
-import { ActionMenu } from './ActionMenu';
+import { ActionMenu, type ActionMenuItem } from './ActionMenu';
 import { StatusOrb } from './StatusOrb';
 
 interface ProjectViewProps {
@@ -888,29 +888,37 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                     </div>
 
                     {!isAssemblyMode && (
-                        <ActionMenu 
-                            trigger={
-                                <StatusOrb 
-                                    chap={chap} 
-                                    activeJob={activeJob} 
-                                    doneSegments={chap.done_segments_count} 
-                                    totalSegments={chap.total_segments_count} 
-                                />
+                        (() => {
+                            const isStale = !!(chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at));
+                            const isProcessing = chap.audio_status === 'processing' || !!activeJob;
+                            const isComplete = chap.audio_status === 'done' && chap.has_wav;
+                            const isPartial = !isStale && !isProcessing && (chap.done_segments_count || 0) > 0 && (chap.done_segments_count || 0) < (chap.total_segments_count || 0) && !chap.has_wav;
+                            
+                            let orbItems: ActionMenuItem[] = [];
+                            if (isStale) {
+                                orbItems = [{ label: 'Queue rebuild for this chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
+                            } else if (isPartial) {
+                                orbItems = [{ label: 'Queue remaining', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
+                            } else if (!isProcessing && !isComplete) {
+                                // Grey 0% or Error
+                                orbItems = [{ label: 'Queue chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
                             }
-                            items={[
-                                { 
-                                    label: 'Rebuild Chapter', 
-                                    icon: RefreshCw, 
-                                    disabled: chap.audio_status === 'processing',
-                                    onClick: () => handleQueueChapter(chap) 
-                                },
-                                { 
-                                    label: 'View Queue', 
-                                    icon: Clock, 
-                                    onClick: () => navigate('/queue') 
-                                }
-                            ]}
-                        />
+
+                            return (
+                                <ActionMenu 
+                                    disabled={orbItems.length === 0}
+                                    trigger={
+                                        <StatusOrb 
+                                            chap={chap} 
+                                            activeJob={activeJob} 
+                                            doneSegments={chap.done_segments_count} 
+                                            totalSegments={chap.total_segments_count} 
+                                        />
+                                    }
+                                    items={orbItems}
+                                />
+                            );
+                        })()
                     )}
                 </div>
 

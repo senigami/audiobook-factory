@@ -595,6 +595,7 @@ def api_generate_segments(segment_ids: List[str] = Form(...)):
         project_id=project_id,
         chapter_id=chapter_id,
         segment_ids=sids,
+        make_mp3=bool(settings.get("make_mp3", False)),
         speaker_profile=settings.get("default_speaker_profile")
     )
     put_job(job)
@@ -689,6 +690,7 @@ def api_bake_chapter(chapter_id: str):
         project_id=project_id,
         chapter_id=chapter_id,
         is_bake=True,
+        make_mp3=bool(settings.get("make_mp3", False)),
         speaker_profile=settings.get("default_speaker_profile")
     )
     put_job(job)
@@ -1115,7 +1117,7 @@ def start_xtts_queue(speaker_profile: Optional[str] = Form(None)):
             status="queued",
             created_at=time.time(),
             safe_mode=bool(settings.get("safe_mode", True)),
-            make_mp3=True,
+            make_mp3=bool(settings.get("make_mp3", False)),
             custom_title=existing_title,
             speaker_profile=speaker_profile
         )
@@ -2088,7 +2090,7 @@ def enqueue_single(
         status="queued",
         created_at=time.time(),
         safe_mode=bool(settings.get("safe_mode", True)),
-        make_mp3=True,
+        make_mp3=bool(settings.get("make_mp3", False)),
         bypass_pause=True,
         custom_title=existing_title
     )
@@ -2488,7 +2490,7 @@ def api_add_to_queue(
                 status="queued",
                 created_at=time.time(),
                 safe_mode=bool(settings.get("safe_mode", True)),
-                make_mp3=True,
+                make_mp3=bool(settings.get("make_mp3", False)),
                 bypass_pause=False,
                 custom_title=title, # Ensures frontend shows the chapter title globally
                 speaker_profile=speaker_profile or get_settings().get("default_speaker_profile"),

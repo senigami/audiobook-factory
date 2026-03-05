@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-interface ActionMenuItem {
+export interface ActionMenuItem {
     label?: string;
     icon?: LucideIcon;
     onClick?: () => void;
@@ -17,9 +17,10 @@ interface ActionMenuProps {
     items?: ActionMenuItem[];
     onDelete?: () => void; // Maintain backward compatibility for now
     trigger?: React.ReactNode;
+    disabled?: boolean;
 }
 
-export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger }) => {
+export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -38,7 +39,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger
 
 
         const top = rect.bottom + window.scrollY;
-        let left = rect.right + window.scrollX - menuWidth;
+        let left = rect.left + (rect.width / 2) + window.scrollX + 8; // Align left edge of menu with center of trigger
         const above = false;
 
         // Flip logic removed to keep menu below the trigger as requested
@@ -58,7 +59,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger
     };
 
     useLayoutEffect(() => {
-        if (isOpen) {
+        if (isOpen && !disabled) {
             updatePosition();
             window.addEventListener('scroll', updatePosition, true);
             window.addEventListener('resize', updatePosition);
@@ -67,7 +68,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger
             window.removeEventListener('scroll', updatePosition, true);
             window.removeEventListener('resize', updatePosition);
         };
-    }, [isOpen]);
+    }, [isOpen, disabled]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -98,16 +99,16 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger
                 ref={triggerRef}
                 onClick={(e) => {
                     e.stopPropagation();
-                    setIsOpen(!isOpen);
+                    if (!disabled) setIsOpen(!isOpen);
                 }}
                 aria-label="More actions"
-                whileHover={trigger ? { scale: 1.05 } : { backgroundColor: 'rgba(15, 23, 42, 0.08)', color: 'var(--accent)' }}
-                whileTap={{ scale: 0.92 }}
+                whileHover={disabled ? {} : (trigger ? { scale: 1.05 } : { backgroundColor: 'rgba(15, 23, 42, 0.08)', color: 'var(--accent)' })}
+                whileTap={disabled ? {} : { scale: 0.92 }}
                 style={trigger ? {
                     background: 'none',
                     border: 'none',
                     padding: 0,
-                    cursor: 'pointer',
+                    cursor: disabled ? 'default' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -122,11 +123,13 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ items, onDelete, trigger
                     backdropFilter: 'blur(4px)',
                     border: '1px solid var(--border)',
                     color: 'var(--text-muted)',
-                    cursor: 'pointer',
+                    cursor: disabled ? 'default' : 'pointer',
                     padding: 0,
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    opacity: disabled ? 0.6 : 1
                 }}
                 className={trigger ? "" : "kebab-trigger"}
+                disabled={disabled}
             >
                 {trigger ? trigger : <MoreVertical size={18} style={{ width: '18px', height: '18px', flexShrink: 0 }} />}
             </motion.button>
