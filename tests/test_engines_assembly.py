@@ -24,7 +24,8 @@ def test_assemble_audiobook_ffmpeg_command_structure(tmp_path):
          patch('app.engines.run_cmd_stream', return_value=0) as mock_run:
 
         on_output = MagicMock()
-        cancel_check = lambda: False
+        def cancel_check():
+            return False
 
         rc = assemble_audiobook(
             input_folder, book_title, output_m4b, on_output, cancel_check,
@@ -52,7 +53,8 @@ def test_assemble_audiobook_ffmpeg_no_cover(tmp_path):
          patch('app.engines.run_cmd_stream', return_value=0) as mock_run:
 
         on_output = MagicMock()
-        cancel_check = lambda: False
+        def cancel_check():
+            return False
 
         # No cover_path provided
         rc = assemble_audiobook(
