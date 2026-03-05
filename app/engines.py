@@ -245,9 +245,31 @@ def assemble_audiobook(
         with open(list_file, 'w') as lf:
             for f in files:
                 file_path = input_folder / f
-                duration = get_audio_duration(file_path)
 
-                lf.write(f"file '{file_path}'\n")
+                # Check for cached m4a
+                m4a_path = input_folder / f"{Path(f).stem}.m4a"
+                needs_encode = True
+
+                if m4a_path.exists():
+                    try:
+                        source_mtime = file_path.stat().st_mtime
+                        m4a_mtime = m4a_path.stat().st_mtime
+                        if m4a_mtime >= source_mtime:
+                            needs_encode = False
+                    except OSError:
+                        pass
+
+                if needs_encode:
+                    on_output(f"Pre-encoding {f} to AAC...\n")
+                    encode_cmd = f"ffmpeg -y -i {shlex.quote(str(file_path))} -c:a aac -b:a {shlex.quote(AUDIOBOOK_BITRATE)} -ac 1 -vn {shlex.quote(str(m4a_path))}"
+                    encode_rc = run_cmd_stream(encode_cmd, on_output, cancel_check)
+                    if encode_rc != 0:
+                        on_output(f"Failed to encode {f}\n")
+                        return encode_rc
+
+                duration = get_audio_duration(m4a_path)
+
+                lf.write(f"file '{m4a_path}'\n")
 
                 start_ms = int(current_offset * 1000)
                 end_ms = int((current_offset + duration) * 1000)
@@ -288,7 +310,7 @@ def assemble_audiobook(
             f"ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_file))} "
             f"-i {shlex.quote(str(metadata_file))} {cover_input} "
             f"-map 0:a {cover_map} -map_metadata 1 "
-            f"-c:a aac -b:a {shlex.quote(AUDIOBOOK_BITRATE)} -ac 1 -movflags +faststart {shlex.quote(str(output_m4b))}"
+            f"-c:a copy -movflags +faststart {shlex.quote(str(output_m4b))}"
         )
 
         rc = run_cmd_stream(cmd, on_output, cancel_check)

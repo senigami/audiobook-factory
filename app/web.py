@@ -1985,7 +1985,7 @@ def reset_chapter(chapter_file: str = Form(...)):
     # 2. Delete files on disk
     count = 0
     for d in [XTTS_OUT_DIR]:
-        for ext in [".wav", ".mp3"]:
+        for ext in [".wav", ".mp3", ".m4a"]:
             f = d / f"{stem}{ext}"
             if f.exists():
                 f.unlink()
