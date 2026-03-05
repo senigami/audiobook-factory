@@ -8,6 +8,7 @@ import { ChapterEditor } from './ChapterEditor';
 import { PredictiveProgressBar } from './PredictiveProgressBar';
 import { CharactersTab } from './CharactersTab';
 import { ConfirmModal } from './ConfirmModal';
+import { ActionMenu } from './ActionMenu';
 
 interface ProjectViewProps {
   jobs: Record<string, Job>;
@@ -385,11 +386,44 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
       await handleReorder(sorted);
   };
 
+  const handleSelectAll = () => {
+    const allDoneIds = chapters.filter(c => c.audio_status === 'done').map(c => c.id);
+    if (selectedChapters.size === allDoneIds.length) {
+      setSelectedChapters(new Set());
+    } else {
+      setSelectedChapters(new Set(allDoneIds));
+    }
+  };
+
+  const handleDeleteAudiobook = async (filename: string) => {
+    setConfirmConfig({
+      title: 'Delete Audiobook',
+      message: `Are you sure you want to delete "${filename}"?`,
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          await api.deleteAudiobook(filename);
+          loadData();
+        } catch (e) {
+          console.error("Delete failed", e);
+        }
+      }
+    });
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading project...</div>;
   if (!project) return <div style={{ padding: '2rem' }}>Project not found.</div>;
 
-  const activeAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'running');
-  const finishedAssemblyJob = Object.values(jobs).find(j => j.engine === 'audiobook' && j.chapter_file === project.name && j.status === 'done');
+  const activeAssemblyJob = Object.values(jobs).find(j => 
+    j.engine === 'audiobook' && 
+    j.project_id === projectId && 
+    ['running', 'preparing', 'finalizing', 'queued'].includes(j.status)
+  );
+  const finishedAssemblyJob = Object.values(jobs).find(j => 
+    j.engine === 'audiobook' && 
+    j.project_id === projectId && 
+    j.status === 'done'
+  );
 
   if (editingChapterId) {
       const activeIdx = chapters.findIndex(c => c.id === editingChapterId);
@@ -534,37 +568,54 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                                 alignItems: 'center',
                                 gap: '1rem'
                             }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                    <span style={{ 
-                                        fontSize: '0.8rem', 
-                                        fontWeight: 600, 
-                                        color: 'var(--text-primary)',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                    }}>
-                                        {a.title || a.filename}
-                                    </span>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                        <span>{formatRelativeTime(a.created_at)}</span>
-                                        {a.size_bytes && <span>• {formatFileSize(a.size_bytes)}</span>}
-                                    </div>
-                                </div>
-                                <a 
-                                    href={a.url || `/out/audiobook/${a.filename}`} 
-                                    download 
-                                    title="Download this version"
-                                    style={{ 
-                                        color: i === 0 ? 'var(--accent)' : 'var(--text-secondary)',
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0, flex: 1 }}>
+                                    {/* Thumbnail */}
+                                    <div style={{ 
+                                        width: '40px', 
+                                        height: '40px', 
+                                        borderRadius: '4px', 
+                                        overflow: 'hidden', 
+                                        background: 'rgba(0,0,0,0.05)',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        transition: 'transform 0.1s'
-                                    }}
-                                    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                                    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                >
-                                    <Download size={16} />
-                                </a>
+                                        justifyContent: 'center',
+                                        flexShrink: 0,
+                                        border: '1px solid var(--border)'
+                                    }}>
+                                        {a.cover_url ? (
+                                            <img src={a.cover_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                                        ) : (
+                                            <ImageIcon size={16} style={{ opacity: 0.3 }} />
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                        <span style={{ 
+                                            fontSize: '0.8rem', 
+                                            fontWeight: 600, 
+                                            color: 'var(--text-primary)',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis'
+                                        }}>
+                                            {a.title || a.filename}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                            <span>{formatRelativeTime(a.created_at)}</span>
+                                            {a.size_bytes && <span>• {formatFileSize(a.size_bytes)}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <ActionMenu 
+                                    items={[
+                                        { label: 'Download', icon: Download, onClick: () => {
+                                            const link = document.createElement('a');
+                                            link.href = a.url || `/out/audiobook/${a.filename}`;
+                                            link.download = a.filename;
+                                            link.click();
+                                        }},
+                                        { label: 'Delete', icon: Trash2, isDestructive: true, onClick: () => handleDeleteAudiobook(a.filename) }
+                                    ]}
+                                />
                             </div>
                         ))}
                     </div>
@@ -669,9 +720,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
           <>
       {/* Chapters List */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-              {isAssemblyMode ? 'Select Chapters for Assembly' : 'Chapters'}
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                  {isAssemblyMode ? 'Select Chapters for Assembly' : 'Chapters'}
+              </h3>
+          </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               {isAssemblyMode ? (
                   <>
@@ -729,7 +782,45 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
           </div>
       </div>
 
-      <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+      <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+        {isAssemblyMode && chapters.length > 0 && (
+          <div style={{ 
+            padding: '0.75rem 1.25rem', 
+            borderBottom: '1px solid var(--border)', 
+            background: 'var(--surface-light)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1.25rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '70px' }}>
+              <button 
+                onClick={handleSelectAll}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'var(--accent)', 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0,
+                  transition: 'transform 0.1s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                title={selectedChapters.size === chapters.filter(c => c.audio_status === 'done').length ? "Deselect All" : "Select All"}
+              >
+                {selectedChapters.size === chapters.filter(c => c.audio_status === 'done').length ? (
+                  <CheckSquare size={20} />
+                ) : (
+                  <Square size={20} />
+                )}
+              </button>
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Select All Chapters
+            </span>
+          </div>
+        )}
         {chapters.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem' }}>
             <FileText size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />

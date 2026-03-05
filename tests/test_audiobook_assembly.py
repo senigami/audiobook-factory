@@ -32,9 +32,16 @@ def test_assemble_project_cover_path_resolution(tmp_path):
     assert response.status_code == 200
     job_id = response.json()["job_id"]
 
-    # 4. Verify the job in state has an absolute path for the cover
+    # 4. Verify the job in state has an absolute path for the cover, unique filename, and metadata title
     state = load_state()
     job_data = state["jobs"][job_id]
+
+    # Unique filename check
+    assert project_name in job_data["chapter_file"]
+    assert job_data["chapter_file"] != project_name # should be timestamped
+
+    # Clean title check
+    assert job_data["custom_title"] == project_name
 
     expected_absolute_path = str(COVER_DIR / cover_filename)
     assert job_data["cover_path"] == expected_absolute_path

@@ -605,12 +605,12 @@ def worker_loop(q: "queue.Queue[str]"):
                 from .config import get_project_audio_dir, get_project_m4b_dir
                 if j.project_id:
                     src_dir = get_project_audio_dir(j.project_id)
-                    title = j.chapter_file 
-                    out_file = get_project_m4b_dir(j.project_id) / f"{title}.m4b"
+                    title = j.custom_title or j.chapter_file 
+                    out_file = get_project_m4b_dir(j.project_id) / f"{j.chapter_file}.m4b"
                 else:
                     src_dir = XTTS_OUT_DIR
-                    title = j.chapter_file # We'll repurpose chapter_file to store the book title for audiobook jobs
-                    out_file = AUDIOBOOK_DIR / f"{title}.m4b"
+                    title = j.custom_title or j.chapter_file 
+                    out_file = AUDIOBOOK_DIR / f"{j.chapter_file}.m4b"
 
                 # Collect custom titles from all jobs
                 chapter_titles = {

@@ -1963,6 +1963,10 @@ def delete_audiobook(filename: str):
     path = AUDIOBOOK_DIR / filename
     if path.exists():
         path.unlink()
+        # Also try to delete companion jpg
+        jpg_path = path.with_suffix(".jpg")
+        if jpg_path.exists():
+            jpg_path.unlink()
         return JSONResponse({"status": "ok", "message": f"Deleted {filename}"})
     return JSONResponse({"status": "error", "message": "File not found"}, status_code=404)
 
@@ -2643,6 +2647,8 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
             }, status_code=400)
 
     book_title = project['name']
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    unique_filename = f"{book_title}_{timestamp}"
 
     # Create the job
     import uuid
@@ -2657,7 +2663,8 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
         id=jid,
         project_id=project_id,
         engine="audiobook",
-        chapter_file=book_title, # For audiobook, chapter_file works as the Book Title
+        chapter_file=unique_filename, # Unique filename
+        custom_title=book_title,      # Metadata title
         status="queued",
         created_at=time.time(),
         safe_mode=False,
