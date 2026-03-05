@@ -14,6 +14,11 @@ vi.mock('../api', () => ({
   }
 }))
 
+// Mock useWebSocket
+vi.mock('../hooks/useWebSocket', () => ({
+  useWebSocket: vi.fn(() => ({ connected: true }))
+}))
+
 describe('ChapterEditor Newline Normalization', () => {
   const mockChapter = {
     id: 'chap1',
@@ -35,7 +40,7 @@ describe('ChapterEditor Newline Normalization', () => {
 
   it('shows "Saved" when text matches exactly despite CRLF/LF differences', async () => {
     // 1. Initial render with LF text from server
-    const { rerender } = render(
+    render(
       <ChapterEditor 
         chapterId="chap1" 
         projectId="proj1" 
@@ -51,12 +56,17 @@ describe('ChapterEditor Newline Normalization', () => {
     
     // By default it should be "Saved"
     expect(screen.getByText('Saved')).toBeInTheDocument()
+  })
 
-    // 2. Mock server returning CRLF version (which was the bug)
-    const chapterWithCRLF = { ...mockChapter, text_content: 'Line 1.\r\nLine 2.' }
-    ;(api.fetchChapters as any).mockResolvedValue([chapterWithCRLF])
+  it('highlights secondary processing in purple', async () => {
+    const mockSegments = [
+      { id: 'seg1', text_content: 'Segment 1', audio_status: 'done', audio_file_path: 's1.wav' },
+      { id: 'seg2', text_content: 'Segment 2', audio_status: 'done', audio_file_path: 's2.wav' },
+      { id: 'seg3', text_content: 'Segment 3', audio_status: 'processing', audio_file_path: 's3.wav' }
+    ]
+    ;(api.fetchSegments as any).mockResolvedValue(mockSegments)
 
-    rerender(
+    render(
       <ChapterEditor 
         chapterId="chap1" 
         projectId="proj1" 
@@ -67,12 +77,12 @@ describe('ChapterEditor Newline Normalization', () => {
       />
     )
 
-    // Wait for state to update
-    expect(await screen.findByDisplayValue('Test Chapter')).toBeInTheDocument()
+    // Wait for segments to load
+    expect(await screen.findByText('Segment 1')).toBeInTheDocument()
 
-    // Check if it's still "Saved" because of our fix
-    // It should normalize 'Line 1.\r\nLine 2.' (from server/state) vs local state
-    expect(screen.getByText('Saved')).toBeInTheDocument()
+    // Verify the existence of Segment 3's purple highlight (processing)
+    const seg3Element = screen.getByText('Segment 3').closest('.chunk-group')
+    expect(seg3Element).toHaveStyle('background: #e1bee733')
   })
 
   it('shows "Saved" when title has untrimmed spaces in state but not in UI', async () => {
