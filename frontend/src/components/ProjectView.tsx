@@ -82,9 +82,10 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
       // Load history independently (non-critical)
       try {
         const audiobooksData = await api.fetchProjectAudiobooks(projectId);
-        setAvailableAudiobooks(audiobooksData);
+        setAvailableAudiobooks(audiobooksData || []);
       } catch (err) {
         console.error("Failed to load assembly history", err);
+        setAvailableAudiobooks([]);
       }
     } catch (e) {
       console.error(e);

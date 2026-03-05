@@ -42,3 +42,29 @@ def test_project_audiobook_history_endpoint(tmp_path):
 def test_project_audiobook_history_not_found():
     response = client.get("/api/projects/non-existent-pid/audiobooks")
     assert response.status_code == 404
+
+def test_delete_audiobook(tmp_path):
+    from app.config import AUDIOBOOK_DIR
+    AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
+
+    filename = "to_delete.m4b"
+    jpg_filename = "to_delete.jpg"
+
+    m4b_path = AUDIOBOOK_DIR / filename
+    jpg_path = AUDIOBOOK_DIR / jpg_filename
+
+    m4b_path.write_text("m4b data")
+    jpg_path.write_text("jpg data")
+
+    assert m4b_path.exists()
+    assert jpg_path.exists()
+
+    response = client.delete(f"/api/audiobook/{filename}")
+    assert response.status_code == 200
+
+    assert not m4b_path.exists()
+    assert not jpg_path.exists()
+
+def test_delete_audiobook_not_found():
+    response = client.delete("/api/audiobook/non-existent.m4b")
+    assert response.status_code == 404
