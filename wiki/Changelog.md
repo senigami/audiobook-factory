@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - **Status Orb Context Actions**: The chapter status orb now provides intelligent single-click actions based on its current state (e.g., "Queue rebuild", "Queue remaining").
 - **Chapter Row Highlighting**: Implemented a subtle "row association" highlight (tint + outline) for chapter rows that persists while context menus are open.
+- **Floating Drag Handle**: Replaced the permanent vertical grip with a compact, floating handle that appears on the left edge of the row only during hover, reclaiming horizontal space for titles.
 
 ### Fixed
 

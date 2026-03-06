@@ -294,13 +294,17 @@ def list_audiobooks():
             "size_bytes": st.st_size
         }
 
-        # Try to extract embedded title
+        # Try to extract embedded metadata
         try:
-            probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
-            title_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
-            extracted_title = title_res.stdout.strip()
-            if extracted_title:
-                item["title"] = extracted_title
+            probe_cmd = f"ffprobe -v error -show_entries format=duration:format_tags=title -of json {shlex.quote(str(p))}"
+            probe_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
+            probe_data = json.loads(probe_res.stdout)
+            if "format" in probe_data:
+                fmt = probe_data["format"]
+                if "duration" in fmt:
+                    item["duration_seconds"] = float(fmt["duration"])
+                if "tags" in fmt and "title" in fmt["tags"]:
+                    item["title"] = fmt["tags"]["title"]
         except:
             pass
 
@@ -370,12 +374,19 @@ def api_list_project_audiobooks(project_id: str):
             "size_bytes": st.st_size
         }
 
+        # Try to extract embedded metadata
         try:
-            probe_cmd = f"ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 {shlex.quote(str(p))}"
-            title_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
-            extracted_title = title_res.stdout.strip()
-            if extracted_title: item["title"] = extracted_title
-        except: pass
+            probe_cmd = f"ffprobe -v error -show_entries format=duration:format_tags=title -of json {shlex.quote(str(p))}"
+            probe_res = subprocess.run(shlex.split(probe_cmd), capture_output=True, text=True, check=True, timeout=3)
+            probe_data = json.loads(probe_res.stdout)
+            if "format" in probe_data:
+                fmt = probe_data["format"]
+                if "duration" in fmt:
+                    item["duration_seconds"] = float(fmt["duration"])
+                if "tags" in fmt and "title" in fmt["tags"]:
+                    item["title"] = fmt["tags"]["title"]
+        except:
+            pass
 
         target_jpg = AUDIOBOOK_DIR / f"{p.stem}.jpg"
         if target_jpg.exists() and target_jpg.stat().st_size > 0:

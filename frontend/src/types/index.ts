@@ -132,6 +132,7 @@ export interface Audiobook {
   url?: string;
   created_at?: number;
   size_bytes?: number;
+  duration_seconds?: number;
 }
 
 export interface AssemblyChapter {

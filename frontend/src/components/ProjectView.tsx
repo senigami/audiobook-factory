@@ -222,15 +222,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
     
     if (diffInSeconds < 60) return 'just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    if (diffInSeconds < 259200) return `${Math.floor(diffInSeconds / 3600)}h ago`; // Max 72 hours
     
-    return date.toLocaleDateString(undefined, { 
+    return date.toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: 'numeric'
     });
   };
 
@@ -238,7 +235,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
     if (!bytes) return '';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
   // Use a ref to store pending reorder timeout so we can debounce
@@ -553,11 +551,16 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '220px' }}>
             {availableAudiobooks.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '-0.25rem' }}>
-                        ASSEMBLY HISTORY
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '-0.25rem' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            Assemblies ({availableAudiobooks.length})
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} title="Total storage used by these local exports">
+                            Total: {formatFileSize(availableAudiobooks.reduce((acc, a) => acc + (a.size_bytes || 0), 0))}
+                        </div>
                     </div>
                     <div style={{ 
-                        maxHeight: '160px', 
+                        maxHeight: '240px', 
                         overflowY: 'auto', 
                         display: 'flex', 
                         flexDirection: 'column', 
@@ -566,15 +569,17 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                         scrollbarWidth: 'thin'
                     }}>
                         {availableAudiobooks.map((a, i) => (
-                            <div key={i} style={{ 
-                                background: i === 0 ? 'var(--accent-glow)' : 'var(--surface-light)',
-                                border: `1px solid ${i === 0 ? 'var(--accent)' : 'var(--border)'}`,
+                            <div key={i} className="hover-bg-subtle" style={{ 
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
                                 borderRadius: '8px',
                                 padding: '0.6rem 0.8rem',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
-                                gap: '1rem'
+                                gap: '1rem',
+                                position: 'relative',
+                                transition: 'all 0.2s ease'
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0, flex: 1 }}>
                                     {/* Thumbnail */}
@@ -597,18 +602,34 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                                         )}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                        <span style={{ 
-                                            fontSize: '0.8rem', 
-                                            fontWeight: 600, 
-                                            color: 'var(--text-primary)',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis'
-                                        }}>
-                                            {a.title || a.filename}
-                                        </span>
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span style={{ 
+                                                fontSize: '0.8rem', 
+                                                fontWeight: 600, 
+                                                color: 'var(--text-primary)',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>
+                                                {a.title || a.filename}
+                                            </span>
+                                            {i === 0 && (
+                                                <span style={{ 
+                                                    fontSize: '0.65rem', 
+                                                    fontWeight: 600, 
+                                                    padding: '2px 6px', 
+                                                    borderRadius: '4px', 
+                                                    background: 'var(--surface-light)', 
+                                                    color: 'var(--text-secondary)',
+                                                    border: '1px solid var(--border)'
+                                                }}>
+                                                    Latest
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                                             <span>{formatRelativeTime(a.created_at)}</span>
+                                            {a.duration_seconds && <span>• {formatLength(a.duration_seconds)}</span>}
                                             {a.size_bytes && <span>• {formatFileSize(a.size_bytes)}</span>}
                                         </div>
                                     </div>
@@ -621,7 +642,18 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                                             link.download = a.filename;
                                             link.click();
                                         }},
-                                        { label: 'Delete', icon: Trash2, isDestructive: true, onClick: () => handleDeleteAudiobook(a.filename) }
+                                        { label: 'Delete', icon: Trash2, isDestructive: true, onClick: () => {
+                                            setConfirmConfig({
+                                                title: 'Delete Assembly',
+                                                message: `Delete '${a.title || a.filename}' export from ${a.created_at ? new Date(a.created_at * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unknown Date'}? This cannot be undone.`,
+                                                confirmText: 'Delete',
+                                                isDestructive: true,
+                                                onConfirm: () => {
+                                                    setConfirmConfig(null);
+                                                    handleDeleteAudiobook(a.filename);
+                                                }
+                                            });
+                                        }}
                                     ]}
                                 />
                             </div>
@@ -629,9 +661,21 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                     </div>
                 </div>
             ) : (
-                <button className="btn-primary" disabled style={{ padding: '1rem', opacity: 0.5, cursor: 'not-allowed', width: '100%', borderRadius: '12px' }}>
-                    No Assembly Yet
-                </button>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    padding: '2rem 1rem', 
+                    background: 'var(--surface-light)', 
+                    borderRadius: '12px', 
+                    border: '1px dashed var(--border)',
+                    textAlign: 'center',
+                    gap: '0.5rem'
+                }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>No assemblies yet</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', padding: '0 1rem' }}>Export an audiobook to see it here.</span>
+                </div>
             )}
 
             <button
@@ -848,6 +892,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                   <Reorder.Item 
                 key={chap.id}
                 value={chap}
+                className={`chapter-row ${isMenuOpen ? 'is-menu-open' : ''}`}
                 initial={{ opacity: 0 }}
                 animate={{ 
                     opacity: 1,
@@ -868,7 +913,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                   padding: '0.4rem 1.25rem',
                   borderBottom: idx === chapters.length - 1 ? 'none' : '1px solid var(--border)',
                   display: 'flex',
-                  gap: '1.25rem',
+                  gap: '1rem',
                   alignItems: 'center',
                   cursor: 'grab',
                   position: 'relative',
@@ -885,58 +930,78 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                     }
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '70px', flexShrink: 0 }}>
-                    {isAssemblyMode ? (
+                {!isAssemblyMode && (
+                    <div 
+                        className="drag-handle" 
+                        style={{ 
+                            position: 'absolute', 
+                            left: '-7px', 
+                            top: '50%', 
+                            transform: 'translateY(-50%)', 
+                            cursor: 'grab', 
+                            color: 'var(--text-muted)',
+                            background: 'var(--surface)',
+                            borderRadius: '4px',
+                            padding: '4px 0',
+                            border: '1px solid var(--border)',
+                            boxShadow: 'var(--shadow-sm)',
+                            zIndex: 10
+                        }} 
+                        title="Drag to reorder"
+                    >
+                        <GripVertical size={14} />
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '30px', flexShrink: 0 }}>
+                    {isAssemblyMode && (
                         <div style={{ color: chap.audio_status === 'done' ? 'var(--accent)' : 'var(--border)', cursor: chap.audio_status === 'done' ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center' }}>
                             {selectedChapters.has(chap.id) && chap.audio_status === 'done' ? <CheckSquare size={18} /> : <Square size={18} />}
                         </div>
-                    ) : (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ cursor: 'grab', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }} title="Drag to reorder">
-                            <GripVertical size={14} />
-                        </div>
                     )}
                     <div style={{
-                        width: '20px', height: '20px', borderRadius: '50%', background: 'var(--surface-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.7rem', color: 'var(--text-muted)'
+                        width: '24px', height: '24px', borderRadius: '50%', background: 'var(--surface-light)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.75rem', color: 'var(--text-muted)',
+                        border: '1px solid var(--border)'
                     }}>
                         {idx + 1}
                     </div>
-
-                    {!isAssemblyMode && (
-                        (() => {
-                            const isStale = !!(chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at));
-                            const isProcessing = chap.audio_status === 'processing' || !!activeJob;
-                            const isComplete = chap.audio_status === 'done' && chap.has_wav;
-                            const isPartial = !isStale && !isProcessing && (chap.done_segments_count || 0) > 0 && (chap.done_segments_count || 0) < (chap.total_segments_count || 0) && !chap.has_wav;
-                            
-                            let orbItems: ActionMenuItem[] = [];
-                            if (isStale) {
-                                orbItems = [{ label: 'Queue rebuild for this chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
-                            } else if (isPartial) {
-                                orbItems = [{ label: 'Queue remaining', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
-                            } else if (!isProcessing && !isComplete) {
-                                // Grey 0% or Error
-                                orbItems = [{ label: 'Queue chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
-                            }
-
-                            return (
-                                <ActionMenu 
-                                    disabled={orbItems.length === 0}
-                                    onOpenChange={(open) => setOpenMenuRowId(open ? chap.id : null)}
-                                    trigger={
-                                        <StatusOrb 
-                                            chap={chap} 
-                                            activeJob={activeJob} 
-                                            doneSegments={chap.done_segments_count} 
-                                            totalSegments={chap.total_segments_count} 
-                                        />
-                                    }
-                                    items={orbItems}
-                                />
-                            );
-                        })()
-                    )}
                 </div>
+
+                {!isAssemblyMode && (
+                    (() => {
+                        const isStale = !!(chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at));
+                        const isProcessing = chap.audio_status === 'processing' || !!activeJob;
+                        const isComplete = chap.audio_status === 'done' && chap.has_wav;
+                        const isPartial = !isStale && !isProcessing && (chap.done_segments_count || 0) > 0 && (chap.done_segments_count || 0) < (chap.total_segments_count || 0) && !chap.has_wav;
+                        
+                        let orbItems: ActionMenuItem[] = [];
+                        if (isStale) {
+                            orbItems = [{ label: 'Queue rebuild for this chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
+                        } else if (isPartial) {
+                            orbItems = [{ label: 'Queue remaining', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
+                        } else if (!isProcessing && !isComplete) {
+                            // Grey 0% or Error
+                            orbItems = [{ label: 'Queue chapter', icon: RefreshCw, onClick: () => handleQueueChapter(chap) }];
+                        }
+
+                        return (
+                            <ActionMenu 
+                                disabled={orbItems.length === 0}
+                                onOpenChange={(open) => setOpenMenuRowId(open ? chap.id : null)}
+                                trigger={
+                                    <StatusOrb 
+                                        chap={chap} 
+                                        activeJob={activeJob} 
+                                        doneSegments={chap.done_segments_count} 
+                                        totalSegments={chap.total_segments_count} 
+                                    />
+                                }
+                                items={orbItems}
+                            />
+                        );
+                    })()
+                )}
 
                 <div 
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: isAssemblyMode && chap.audio_status !== 'done' ? 0.4 : 1, cursor: isAssemblyMode ? 'default' : 'pointer', minWidth: '150px', flex: '1 1 0' }}
