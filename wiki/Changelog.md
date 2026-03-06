@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-06
+
+### Added
+
+- **Integrated Status Orbs**: Replaced satellite dots with a cohesive, integrated outer ring for M4A and MP3 status.
+- **Assembly History Redesign**: Overhauled the export list into a neutral "receipt" style timeline with per-item duration and storage totals.
+- **M4B Duration Extraction**: Now extracts duration and title metadata using `ffprobe` for precise assembly information.
+- **Safe Deletions**: Implemented descriptive confirmation modals for audiobook exports that include filename and creation date.
+
+### Fixed
+
+- **Pixel-Perfect Orbs**: Stabilized interior orb icons (Refresh, Alert, Error) with absolute centering to prevent "jumping" on hover.
+
 ## [1.2.0] - 2026-03-05
 
 ### Added

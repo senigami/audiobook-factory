@@ -23,12 +23,13 @@ This is where you manage the structure of your book.
 
 #### Status Indicators (Status Orb)
 
-Each chapter features a **Status Orb** that provides instant visual feedback and common actions:
+Each chapter features a **Status Orb** that provides instant visual feedback and common actions. The orb is now a cohesive widget with integrated indicators:
 
-- **Green**: Synthesis complete and in sync with the script.
-- **Yellow Triangle**: "Out of Sync" — changes have been made to the script or voice assignments since the last render.
-- **Empty / Grey Arc**: Shows percentage completion for chapters that have only been partially rendered.
-- **Spinner**: Indicates a job is currently in progress.
+- **Central Fill**: Shows the state of the master WAV (Green = Success, Orange = Out of Sync, Spinner = Rendering).
+- **Integrated Arcs**: Two subtle arcs on the outer ring show the availability of distribution formats:
+  - **Top-Left Arc**: M4A availability.
+  - **Top-Right Arc**: MP3 availability.
+- **Opacity States**: Present formats are bold; missing formats appear as light grey placeholders.
 
 **Pro Tip**: Click any non-rendering Orb to access a contextual action menu (e.g., "Queue rebuild", "Queue remaining").
 
@@ -54,10 +55,23 @@ Clicking a chapter opens the **Chapter Editor**, which has four primary workflow
 
 ![Chapter Editor showing the Performance tab and audio segments](images/chapter-editor.jpg)
 
-## 🖼️ Covers and Metadata
+## 📦 Export and Assembly
 
-- **Cover Art**: Recommended resolution is 1000x1000 pixels.
-- **Author/Series**: Used during the final **Assembly** phase to tag the `.m4b` file.
+Located at the top-right of the Project View, the **Assemble** hub is where you compile your final audiobook.
+
+### 1. Assembly History
+
+The right-hand panel provides a clean, "receipt-style" timeline of all previous exports:
+
+- **Relative Time**: Displays how long ago the export was generated (staying in hours for up to 72 hours).
+- **Metadata**: Shows file duration (e.g., `3h 32m`) and precise file size.
+- **Latest Badge**: Automatically marks the most recent export for quick identification.
+
+### 2. M4B Production
+
+When you assemble a book, the engine uses **Incremental Concatenation**. It stitches together existing M4A chapter encodes losslessly, making subsequent assemblies nearly instantaneous.
+
+## 🖼️ Covers and Metadata
 
 ---
 
