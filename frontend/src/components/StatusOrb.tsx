@@ -32,18 +32,24 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
   let tooltip = '';
   let showArc = false;
   let percent = 0;
+  let orbRadius = 8;
+  let orbStroke = 'var(--border)';
+  let orbStrokeWidth = 1;
 
   if (isError) {
     fill = 'var(--error)';
-    content = <span style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>!</span>;
+    content = <span style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold', lineHeight: '1' }}>!</span>;
     tooltip = 'Render failed. View Queue for details.';
   } else if (isStale) {
     fill = 'var(--warning)';
-    content = <AlertTriangle size={8} color="#000" strokeWidth={3} />;
+    orbRadius = 8.5; // Slightly larger
+    orbStroke = 'var(--warning-text)'; // Orange border
+    orbStrokeWidth = 1.2;
+    content = <AlertTriangle size={10} color="#000" strokeWidth={3} style={{ display: 'block' }} />;
     tooltip = 'Needs rebuild: script or voice assignment changed since last render';
   } else if (isProcessing) {
     fill = 'var(--surface-light)'; // Neutral/subtle blue or grey
-    content = <RefreshCw size={10} color="var(--accent)" className="animate-spin" />;
+    content = <RefreshCw size={10} color="var(--accent)" className="animate-spin" style={{ display: 'block' }} />;
     tooltip = 'Rendering... (see Queue for progress)';
   } else if (isComplete) {
     fill = 'var(--success)';
@@ -60,15 +66,30 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
     tooltip = 'No audio yet';
   }
 
-  // Calculate arc parameters
-  const radius = 8;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = showArc ? circumference - (percent / 100) * circumference : circumference;
+  // Main tooltip base
+  const baseTooltip = tooltip;
+  const statusTooltip = `\nM4A cached: ${hasM4a ? 'yes' : 'no'}\nMP3 available: ${hasMp3 ? 'yes' : 'no'}`;
+  const combinedTooltip = baseTooltip + statusTooltip;
+
+  // Calculate arc parameters for integrated ring
+  // We'll use a radius of 9.2 (just outside the orb)
+  const ringRadius = 10.2; // Shifted out slightly to accommodate larger orb
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  
+  // Arcs: M4A (left), MP3 (right). 
+  // Each arc segment will be slightly less than half to leave a gap.
+  // We'll use stroke-dasharray for the segments.
+  const segmentLength = (ringCircumference / 2) - 3; // Approx 180deg minus gap
+
+  // Partial Arc progress parameters
+  const progressRadius = orbRadius;
+  const progressCircumference = 2 * Math.PI * progressRadius;
+  const strokeDashoffset = showArc ? progressCircumference - (percent / 100) * progressCircumference : progressCircumference;
 
   return (
     <div
-      title={tooltip}
-      aria-label={tooltip}
+      title={combinedTooltip}
+      aria-label={combinedTooltip}
       style={{
         width: '24px',
         height: '24px',
@@ -76,46 +97,65 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
+        flexShrink: 0,
       }}
     >
-      <div style={{ position: 'relative', width: '20px', height: '20px' }}>
-        <svg width="20" height="20" viewBox="0 0 20 20" style={{ position: 'absolute', top: 0, left: 0 }}>
+      <div style={{ position: 'relative', width: '24px', height: '24px', willChange: 'transform' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" style={{ position: 'absolute', top: 0, left: 0 }}>
+          {/* Integrated Status Ring (Option A: Split Arcs) */}
+          {/* M4A Arc (Top-Left) */}
+          <circle
+            cx="12" cy="12" r={ringRadius}
+            fill="none"
+            stroke={hasM4a ? 'var(--accent)' : 'var(--border)'}
+            strokeWidth="1.2"
+            strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
+            strokeDashoffset={segmentLength + 1.5} // Position on left
+            strokeLinecap="round"
+            style={{ opacity: hasM4a ? 0.8 : 0.3, transition: 'all 0.3s' }}
+          />
+
+          {/* MP3 Arc (Top-Right) */}
+          <circle
+            cx="12" cy="12" r={ringRadius}
+            fill="none"
+            stroke={hasMp3 ? 'var(--text-secondary)' : 'var(--border)'}
+            strokeWidth="1.2"
+            strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
+            strokeDashoffset={-1.5} // Position on right
+            strokeLinecap="round"
+            style={{ opacity: hasMp3 ? 0.8 : 0.3, transition: 'all 0.3s' }}
+          />
+
           {/* Base Orb */}
-          <circle cx="10" cy="10" r="8" fill={fill} stroke="var(--border)" strokeWidth="1" />
+          <circle cx="12" cy="12" r={orbRadius} fill={fill} stroke={orbStroke} strokeWidth={orbStrokeWidth} />
           
-          {/* Partial Arc */}
+          {/* Partial Arc (Progress) */}
           {showArc && (
             <circle
-              cx="10" cy="10" r="8"
+              cx="12" cy="12" r={orbRadius}
               fill="none"
               stroke="var(--accent)"
               strokeWidth="2.5"
-              strokeDasharray={circumference}
+              strokeDasharray={progressCircumference}
               strokeDashoffset={strokeDashoffset}
-              transform="rotate(-90 10 10)"
+              transform="rotate(-90 12 12)"
               style={{ transition: 'stroke-dashoffset 0.5s ease' }}
             />
           )}
-
-          {/* M4A Ornament (10 o'clock) */}
-          {hasM4a && (
-             <circle cx="3" cy="7" r="1.8" fill="var(--accent)" />
-          )}
-
-          {/* MP3 Ornament (2 o'clock) */}
-          {hasMp3 && (
-             <circle cx="17" cy="7" r="1.8" fill="var(--text-secondary)" />
-          )}
         </svg>
 
-        {/* Center Content */}
+        {/* Center Content - using absolute centering for maximum precision */}
         <div style={{
           position: 'absolute',
-          inset: 0,
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          pointerEvents: 'none'
+          pointerEvents: 'none',
+          lineHeight: 0,
         }}>
           {content}
         </div>
