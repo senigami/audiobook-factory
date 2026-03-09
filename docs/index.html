@@ -54,7 +54,7 @@
       }
 
       .container {
-        max-width: 1100px;
+        max-width: 1240px;
         margin: 0 auto;
         padding: 2rem;
         position: relative;
@@ -196,8 +196,8 @@
 
       .tour-item {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5rem;
+        grid-template-columns: 1fr 1.5fr;
+        gap: 6rem;
         align-items: center;
       }
 
@@ -282,12 +282,13 @@
       .tour-screenshot {
         width: 100%;
         height: auto;
-        padding: 1.5rem;
+        padding: 0;
         background: var(--surface);
         border-radius: 24px;
         box-shadow: var(--shadow-lg);
         border: 1px solid var(--border);
         transition: transform 0.3s ease;
+        overflow: hidden;
       }
 
       .hero-visual {
@@ -443,14 +444,11 @@
                 <li>Deep metadata tracking</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">📚</div>
-              <div class="placeholder-label">Project Library View</div>
-              <div class="placeholder-desc">
-                Screenshot of the project library showing multiple book cards
-                with cover art and word count tags.
-              </div>
-            </div>
+            <img
+              src="assets/library.jpg"
+              alt="Project Library showing book cards and production status"
+              class="tour-screenshot"
+            />
           </div>
 
           <!-- Step 2: Narrator Studio -->
@@ -468,14 +466,11 @@
                 <li>Managed speaker profiles</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">🎙️</div>
-              <div class="placeholder-label">Narrator Studio</div>
-              <div class="placeholder-desc">
-                Screenshot of the Voices page showing several custom profiles
-                and the "Clone New Voice" interface.
-              </div>
-            </div>
+            <img
+              src="assets/narrator.jpg"
+              alt="Narrator Studio showing custom voice profiles and cloning interface"
+              class="tour-screenshot"
+            />
           </div>
 
           <!-- Step 3: Granular Production -->
