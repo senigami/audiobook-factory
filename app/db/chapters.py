@@ -1,0 +1,111 @@
+import time
+from typing import List, Dict, Any, Optional
+from .core import _db_lock, get_connection
+
+def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:
+    import uuid
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            chapter_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO chapters (id, project_id, title, text_content, sort_order, predicted_audio_length, char_count, word_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (chapter_id, project_id, title, text_content, sort_order, predicted_audio_length, char_count, word_count))
+            conn.commit()
+            return chapter_id
+
+def get_chapter(chapter_id: str) -> Optional[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM chapters WHERE id = ?", (chapter_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+def list_chapters(project_id: str) -> List[Dict[str, Any]]:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT c.*, 
+                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id) as segment_count,
+                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id AND audio_status = 'done') as segments_done
+                FROM chapters c 
+                WHERE project_id = ? 
+                ORDER BY sort_order ASC
+            """, (project_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+def update_chapter(chapter_id: str, **updates) -> bool:
+    if not updates: return False
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            fields = []
+            values = []
+            for k, v in updates.items():
+                fields.append(f"{k} = ?")
+                values.append(v)
+            values.append(chapter_id)
+            cursor.execute(f"UPDATE chapters SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+            return cursor.rowcount > 0
+
+def delete_chapter(chapter_id: str) -> bool:
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM chapter_segments WHERE chapter_id = ?", (chapter_id,))
+            cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
+            cursor.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+def reorder_chapters(chapter_ids: List[str]):
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            for idx, cid in enumerate(chapter_ids):
+                cursor.execute("UPDATE chapters SET sort_order = ? WHERE id = ?", (idx, cid))
+            conn.commit()
+
+def reset_chapter_audio(chapter_id: str):
+    """Resets the audio generation status of a chapter and all its segments to unprocessed."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 1. Get project info to find paths
+            cursor.execute("SELECT project_id, audio_file_path FROM chapters WHERE id = ?", (chapter_id,))
+            row = cursor.fetchone()
+            if not row: return False
+            project_id = row['project_id']
+
+            # 2. Cleanup physical files if they exist
+            # (Optional: we could delete them here, but for now we just reset DB)
+
+            # 3. Reset database fields for chapter
+            cursor.execute("""
+                UPDATE chapters 
+                SET audio_status = 'unprocessed', 
+                    audio_file_path = NULL, 
+                    audio_generated_at = NULL, 
+                    audio_length_seconds = NULL 
+                WHERE id = ?
+            """, (chapter_id,))
+
+            # 4. Reset database fields for segments
+            cursor.execute("""
+                UPDATE chapter_segments
+                SET audio_status = 'unprocessed',
+                    audio_file_path = NULL,
+                    audio_generated_at = NULL
+                WHERE chapter_id = ?
+            """, (chapter_id,))
+
+            # 5. Remove from processing_queue if it's there
+            cursor.execute("DELETE FROM processing_queue WHERE chapter_id = ?", (chapter_id,))
+
+            conn.commit()
+            return True

@@ -157,22 +157,25 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
                 }
                 new_p = status_priority.get(v, 0)
                 old_p = status_priority.get(current_status, 0)
-                if new_p < old_p:
-                    # Allow regression only if explicitly resetting (e.g. back to queued)
+                if not force_broadcast and new_p < old_p:
+                    # Allow regression only if explicitly resetting (e.g. back to queued from a terminal state)
                     # But if we're in the middle of a run, don't let a stray 'queued' msg win.
-                    if not (v == "queued" and current_status in ("preparing", "running", "finalizing")):
-                         print(f"DEBUG: Allowing status regression for {job_id}: {current_status} -> {v}")
-                    else:
+                    is_reset = v == "queued" and current_status in ("done", "failed", "cancelled")
+                    if not is_reset and (v == "queued" and current_status in ("preparing", "running", "finalizing")):
+                        print(f"DEBUG: Preventing status regression for {job_id}: {current_status} -> {v}")
+                        continue
+                    elif not is_reset:
                         print(f"DEBUG: Preventing status regression for {job_id}: {current_status} -> {v}")
                         continue
 
             # 2. Progress regression protection
             if k == "progress":
-                current_status = j.get("status")
-                if current_status not in ("queued", "preparing"):
-                    if v < (j.get("progress") or 0.0):
-                        print(f"DEBUG: Skipping progress regression for {job_id}: {j.get('progress')} -> {v}")
-                        continue
+                if not force_broadcast:
+                    current_status = j.get("status")
+                    if current_status not in ("queued", "preparing"):
+                        if v < (j.get("progress") or 0.0):
+                            print(f"DEBUG: Skipping progress regression for {job_id}: {j.get('progress')} -> {v}")
+                            continue
 
             if j.get(k) != v:
                 j[k] = v
@@ -259,3 +262,15 @@ def clear_all_jobs() -> None:
         state = _load_state_no_lock()
         state["jobs"] = {}
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+
+def purge_jobs_for_chapter(chapter_id: str) -> None:
+    """Removes all existing jobs for a specific chapter from the state."""
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        jobs = state.get("jobs", {})
+        to_delete = [jid for jid, jdata in jobs.items() if jdata.get("chapter_id") == chapter_id]
+        if to_delete:
+            for jid in to_delete:
+                del jobs[jid]
+            _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+            print(f"DEBUG: Purged {len(to_delete)} stale jobs for chapter {chapter_id}")

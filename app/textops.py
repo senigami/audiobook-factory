@@ -480,3 +480,19 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
         packed.append(current_chunk)
 
     return '\n'.join(packed)
+
+def compute_chapter_metrics(text: str) -> dict:
+    """Computes word, character, and sentence counts for a given text."""
+    if not text:
+        return {"char_count": 0, "word_count": 0, "predicted_audio_length": 0.0}
+
+    char_count = len(text)
+    word_count = len(text.split())
+    # Simple sentence count approximation
+    # In jobs.py it uses CPS for prediction
+    # We'll return the raw counts for the DB
+    return {
+        "char_count": char_count,
+        "word_count": word_count,
+        "predicted_audio_length": char_count / 16.7 # Using baseline CPS
+    }

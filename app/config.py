@@ -13,6 +13,7 @@ COVER_DIR = Path(os.getenv("COVER_DIR", str(UPLOAD_DIR / "covers")))
 SAMPLES_DIR = Path(os.getenv("SAMPLES_DIR", str(BASE_DIR / "samples")))
 ASSETS_DIR = Path(os.getenv("ASSETS_DIR", str(BASE_DIR / "assets")))
 PROJECTS_DIR = Path(os.getenv("PROJECTS_DIR", str(BASE_DIR / "projects")))
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
 def get_project_dir(project_id: str) -> Path:
     d = PROJECTS_DIR / project_id
