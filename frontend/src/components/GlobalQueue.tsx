@@ -67,6 +67,8 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
 
   useEffect(() => {
     fetchQueue();
+    const interval = setInterval(fetchQueue, 3000);
+    return () => clearInterval(interval);
   }, [refreshTrigger]);
 
   // Re-fetch queue from server whenever live job data changes,
@@ -109,6 +111,18 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
 
   const handleRemove = async (id: string) => {
     try {
+        // Find the job so we know if it's actively running
+        const job = queue.find(q => q.id === id);
+        
+        // If the job is active, call the chapter cancel endpoint first so the worker stops
+        if (job?.chapter_id && job.status !== 'done' && job.status !== 'failed' && job.status !== 'cancelled') {
+            try {
+                await fetch(`/api/chapters/${job.chapter_id}/cancel`, { method: 'POST' });
+            } catch (e) {
+                console.warn('Could not cancel chapter job, removing from queue anyway', e);
+            }
+        }
+        
         await api.removeProcessingQueue(id);
         fetchQueue();
     } catch (e) {
@@ -128,6 +142,14 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
   const activeJobs = queue.filter(q => q.status === 'running' || q.status === 'preparing' || q.status === 'finalizing');
   const pendingJobs = queue.filter(q => q.status === 'queued');
   const pastJobs = queue.filter(q => q.status === 'done' || q.status === 'failed' || q.status === 'cancelled');
+
+  const formatJobTitle = (job: any) => {
+    const base = job.chapter_title || job.custom_title || "System Task";
+    if (job.engine === 'audiobook') {
+        return `Assembling m4b for: ${base}`;
+    }
+    return base;
+  };
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading Queue...</div>;
 
@@ -297,9 +319,15 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                               <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                       <div style={{ minWidth: 0 }}>
-                                          <h4 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.chapter_title}</h4>
+                                          <h4 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                              {formatJobTitle(job)}
+                                          </h4>
                                           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                              <span>{job.project_name} • Part {job.split_part + 1}</span>
+                                              {job.project_name ? (
+                                                  <span>{job.project_name} • Part {job.split_part + 1}</span>
+                                              ) : (
+                                                  <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Internal Process</span>
+                                              )}
                                               {started && (
                                                   <>
                                                       <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--text-muted)' }} />
@@ -381,8 +409,12 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                             </div>
                             
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <h4 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.chapter_title}</h4>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{job.project_name} • Part {job.split_part + 1}</div>
+                                <h4 style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {formatJobTitle(job)}
+                                </h4>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                    {job.project_name ? `${job.project_name} • Part ${job.split_part + 1}` : "Internal Process"}
+                                </div>
                             </div>
 
                             <button 
@@ -484,10 +516,12 @@ export const GlobalQueue: React.FC<GlobalQueueProps> = ({ paused = false, jobs =
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap'
                                             }}>
-                                                {job.chapter_title}
+                                                {formatJobTitle(job)}
                                             </h4>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>{job.project_name}</span>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                                    {job.project_name || "Internal Process"}
+                                                </span>
                                                 {job.started_at && (
                                                     <>
                                                         <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--text-muted)' }} />
