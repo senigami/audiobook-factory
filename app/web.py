@@ -4,9 +4,10 @@ import uuid
 import re
 import os
 import sys
+import threading
 from typing import Optional, List
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from .engines import wav_to_mp3, terminate_all_subprocesses, xtts_generate, get_audio_duration, generate_video_sample, convert_to_wav
@@ -1200,6 +1201,7 @@ async def create_audiobook(
         id=jid,
         engine="audiobook",
         chapter_file=title, # use this field for the title
+        custom_title=title,
         status="queued",
         created_at=time.time(),
         safe_mode=False,
@@ -1972,15 +1974,45 @@ def cancel(job_id: str = Form(...)):
     return JSONResponse({"status": "ok", "message": f"Job {job_id} cancelled"})
 
 @app.delete("/api/audiobook/{filename}")
-def delete_audiobook(filename: str):
-    path = AUDIOBOOK_DIR / filename
-    if path.exists():
+def delete_audiobook(filename: str, project_id: Optional[str] = Query(None)):
+    from .config import get_project_m4b_dir
+    print(f"DEBUG: delete_audiobook called for {filename}, project_id={project_id}")
+
+    path = None
+    # 1. Try project-specific path if ID provided
+    if project_id:
+        p_path = get_project_m4b_dir(project_id) / filename
+        print(f"DEBUG: Checking project path: {p_path}")
+        if p_path.exists():
+            path = p_path
+
+    # 2. Try global legacy path
+    if not path:
+        l_path = AUDIOBOOK_DIR / filename
+        print(f"DEBUG: Checking global path: {l_path}")
+        if l_path.exists():
+            path = l_path
+
+    # 3. Last ditch: If filename is unique across project folders, we can find it
+    if not path and not project_id:
+        from .config import PROJECTS_DIR
+        for p_dir in PROJECTS_DIR.iterdir():
+            if p_dir.is_dir():
+                possible = p_dir / "m4b" / filename
+                if possible.exists():
+                    path = possible
+                    break
+
+    if path and path.exists():
+        print(f"DEBUG: Found path: {path}. Deleting...")
         path.unlink()
-        # Also try to delete companion jpg
+        # Also try to delete companion jpg in same dir
         jpg_path = path.with_suffix(".jpg")
         if jpg_path.exists():
             jpg_path.unlink()
         return JSONResponse({"status": "ok", "message": f"Deleted {filename}"})
+
+    print(f"DEBUG: File not found for deletion: {filename}")
     return JSONResponse({"status": "error", "message": "File not found"}, status_code=404)
 
 @app.post("/api/chapter/reset")
@@ -2180,67 +2212,117 @@ def _run_analysis(chapter_file: str):
 
 @app.post("/queue/backfill_mp3")
 def backfill_mp3_queue():
-    """Converts missing MP3s from existing WAVs and reconciles missing records."""
+    """Converts missing MP3s from existing WAVs and reconciles missing records asynchronously."""
     from .jobs import cleanup_and_reconcile, requeue
     from .engines import wav_to_mp3
-    from .state import update_job, get_jobs
+    from .state import update_job, get_jobs, put_job
+    from .db import get_connection
 
-    print("DEBUG: Starting backfill_mp3_queue")
-    # 1. Reconcile state
-    reset_ids = cleanup_and_reconcile()
-    print(f"DEBUG: cleanup_and_reconcile reset {len(reset_ids)} jobs: {reset_ids}")
+    print("DEBUG: Starting backfill_mp3_queue runner")
 
-    converted = 0
-    failed = 0
+    bj_id = "mp3-backfill-task"
+    bj = Job(
+        id=bj_id,
+        engine="xtts",
+        chapter_file="Global MP3 Backfill",
+        status="preparing",
+        created_at=time.time(),
+        started_at=time.time(),
+        progress=0.01,
+        custom_title="Generating missing MP3s...",
+        log="Step 1: Reconciling database and pruning stale jobs...\n"
+    )
+    put_job(bj)
 
-    # 2. Identify orphaned WAVs and convert surgically
-    all_jobs = get_jobs()
-    for d_path in [XTTS_OUT_DIR]:
-        d_path.mkdir(parents=True, exist_ok=True)
-        for wav in d_path.glob("*.wav"):
-            mp3 = wav.with_suffix(".mp3")
-            if mp3.exists():
-                continue
+    # Insert into processing_queue so it shows up globally
+    try:
+        from .db import upsert_queue_row
+        upsert_queue_row(job_id=bj_id, status='preparing', custom_title=bj.custom_title, engine=bj.engine)
+    except Exception as e:
+        print(f"Warning: Failed to insert backfill record to DB: {e}")
 
-            # Found a WAV without an MP3
+    broadcast_queue_update()
+
+    def run_backfill(bj_id, initial_log):
+        print("DEBUG: Backfill thread started")
+        # 1. Reconcile state (fixes broken player markers)
+        reset_ids = cleanup_and_reconcile()
+
+        log_txt = initial_log + f"Step 1: Reconciling database Complete.\nFound {len(reset_ids)} chapters needing complete rebuild.\n"
+        update_job(bj_id, log=log_txt)
+
+        # 3. Identify orphaned WAVs across ALL directories
+        audio_dirs = [XTTS_OUT_DIR]
+        if PROJECTS_DIR.exists():
+            for pdir in PROJECTS_DIR.iterdir():
+                if pdir.is_dir():
+                    adir = pdir / "audio"
+                    if adir.exists(): audio_dirs.append(adir)
+
+        candidates = []
+        for d in audio_dirs:
+            for wav in d.glob("*.wav"):
+                mp3 = wav.with_suffix(".mp3")
+                if not mp3.exists():
+                    candidates.append((wav, mp3))
+
+        total = len(candidates)
+        log_txt += f"Step 2: Found {total} individual WAVs needing MP3 conversion.\n"
+        update_job(bj_id, log=log_txt, status="running")
+        broadcast_queue_update()
+
+        converted = 0
+        failed = 0
+        all_jobs = get_jobs()
+
+        print(f"DEBUG: Found {total} orphans to convert.")
+
+        for i, (wav, mp3) in enumerate(candidates):
             stem = wav.stem
-            print(f"DEBUG: Found orphaned WAV: {wav} (stem: {stem})")
-
+            # Attempt to find the job associated with this file to update its specific status too
             jid = None
-            job_obj = None
             for _jid, _j in all_jobs.items():
                 if Path(_j.chapter_file).stem == stem:
                     jid = _jid
-                    job_obj = _j
                     break
 
-            if job_obj:
-                print(f"DEBUG: Matching job found: {jid} for {job_obj.chapter_file}. make_mp3={job_obj.make_mp3}")
-                if job_obj.make_mp3:
-                    print(f"DEBUG: Converting {wav} to {mp3}")
-                    rc = wav_to_mp3(wav, mp3)
-                    if rc == 0 and mp3.exists():
-                        print(f"DEBUG: Conversion success: {mp3}")
-                        converted += 1
-                        update_job(jid, status="done", output_mp3=mp3.name, output_wav=wav.name, progress=1.0)
-                        if jid in reset_ids:
-                            print(f"DEBUG: Removing {jid} from reset_ids to prevent requeue")
-                            reset_ids.remove(jid)
-                    else:
-                        print(f"DEBUG: Conversion failed (rc={rc}): {wav}")
-                        failed += 1
-            else:
-                print(f"DEBUG: No matching job for stem {stem}")
+            log_txt += f"Converting {wav.name}...\n"
+            prog = 0.05 + (i / max(1, total)) * 0.9
+            update_job(bj_id, log=log_txt[-5000:], progress=prog)
 
-    print(f"DEBUG: Requeueing remaining {len(reset_ids)} missing jobs: {reset_ids}")
-    for rid in reset_ids:
-        requeue(rid)
+            rc = wav_to_mp3(wav, mp3)
+
+            if rc == 0 and mp3.exists():
+                converted += 1
+                if jid:
+                    update_job(jid, status="done", output_mp3=mp3.name, output_wav=wav.name, progress=1.0)
+                    if jid in reset_ids:
+                        reset_ids.remove(jid) # No longer needs rebuild
+            else:
+                failed += 1
+
+        # 4. Final Requeue for anything still missing (actual generation tasks)
+        log_txt += f"Step 3: Requeueing {len(reset_ids)} rebuild tasks.\n"
+        log_txt += f"Backfill complete: {converted} converted, {failed} failed.\n"
+        update_job(bj_id, log=log_txt, status="done", progress=1.0, finished_at=time.time())
+
+        for rid in reset_ids:
+            requeue(rid)
+
+        # Sync the done status to the DB row so it appears in history
+        try:
+            from .db import update_queue_item
+            update_queue_item(bj_id, "done")
+        except Exception as e:
+            print(f"Warning: Failed to mark backfill as done in DB: {e}")
+        broadcast_queue_update()
+
+    # Start the thread
+    threading.Thread(target=run_backfill, args=(bj_id, bj.log), daemon=True).start()
 
     return JSONResponse({
         "status": "success",
-        "converted": converted,
-        "failed": failed,
-        "reconciled_and_requeued": len(reset_ids)
+        "message": "Backfill process started in background. Check queue for progress."
     })
 
 @app.post("/queue/backfill_mp3_xtts")
@@ -2434,11 +2516,13 @@ def api_get_queue():
             item['started_at'] = job.started_at
             item['completed_at'] = job.finished_at
             item['log'] = job.log
+            item['custom_title'] = job.custom_title
+            item['engine'] = job.engine
             # Re-sync status if DB is stale but job is running
             if job.status == 'running' and item['status'] != 'running':
                 item['status'] = 'running'
 
-    return JSONResponse(queue_items)
+    return JSONResponse(queue_items, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.post("/api/migration/import_legacy")
 def api_import_legacy():

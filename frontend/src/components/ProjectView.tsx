@@ -402,19 +402,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
   };
 
   const handleDeleteAudiobook = async (filename: string) => {
-    setConfirmConfig({
-      title: 'Delete Audiobook',
-      message: `Are you sure you want to delete "${filename}"?`,
-      isDestructive: true,
-      onConfirm: async () => {
-        try {
-          await api.deleteAudiobook(filename);
-          loadData();
-        } catch (e) {
-          console.error("Delete failed", e);
-        }
-      }
-    });
+    try {
+      await api.deleteAudiobook(filename, projectId);
+      loadData();
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
   };
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading project...</div>;
@@ -1127,25 +1120,30 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                         );
                     }
                     
-                    if (chap.audio_status === 'done' && chap.audio_file_path && !isAssemblyMode) {
-                        const audioPath = chap.audio_file_path;
-                        const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
-                        const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                    if (chap.audio_status === 'done' && (chap.has_wav || chap.has_mp3) && !isAssemblyMode) {
+                        const audioPath = chap.audio_file_path || `${chap.id}.wav`;
+                        const stem = audioPath.replace(/\.[^.]+$/, '');
+                        const mp3Path = `${stem}.mp3`;
+                        const wavPath = `${stem}.wav`;
                         
                         return (
                             <audio 
                                 controls 
                                 key={chap.id}
-                                style={{ height: '30px', width: '100%', maxWidth: '600px' }}
+                                style={{ height: '36px', width: '100%', maxWidth: '600px', borderRadius: '18px' }}
                                 onClick={e => e.stopPropagation()}
                                 onPointerDown={e => e.stopPropagation()} 
+                                preload="metadata"
                             >
-                                <source src={`/projects/${projectId}/audio/${audioPath}`} />
-                                {audioPath !== wavPath && <source src={`/projects/${projectId}/audio/${wavPath}`} />}
-                                {audioPath !== mp3Path && <source src={`/projects/${projectId}/audio/${mp3Path}`} />}
-                                <source src={`/out/xtts/${audioPath}`} />
-                                {audioPath !== wavPath && <source src={`/out/xtts/${wavPath}`} />}
-                                {audioPath !== mp3Path && <source src={`/out/xtts/${mp3Path}`} />}
+                                {/* Priority 1: Project-specific MP3 */}
+                                <source src={`/projects/${projectId}/audio/${mp3Path}`} type="audio/mpeg" />
+                                {/* Priority 2: Project-specific WAV */}
+                                <source src={`/projects/${projectId}/audio/${wavPath}`} type="audio/wav" />
+                                {/* Priority 3: Legacy XTTS MP3 */}
+                                <source src={`/out/xtts/${mp3Path}`} type="audio/mpeg" />
+                                {/* Priority 4: Legacy XTTS WAV */}
+                                <source src={`/out/xtts/${wavPath}`} type="audio/wav" />
+                                Your browser does not support the audio element.
                             </audio>
                         );
                     }

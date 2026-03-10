@@ -54,7 +54,7 @@
       }
 
       .container {
-        max-width: 1100px;
+        max-width: 1240px;
         margin: 0 auto;
         padding: 2rem;
         position: relative;
@@ -116,7 +116,7 @@
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 40px;
-        padding: 4rem;
+        padding: 5rem 4rem 4rem 4rem;
         box-shadow: var(--shadow-lg);
         margin-bottom: 6rem;
         background: linear-gradient(
@@ -124,27 +124,30 @@
           var(--info-tint) 0%,
           var(--surface) 100%
         );
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4rem;
+        display: flex;
+        flex-direction: column;
         align-items: center;
+        text-align: center;
+        gap: 5rem;
+        overflow: hidden;
       }
 
       .hero-content {
-        text-align: left;
+        max-width: 800px;
       }
 
       .hero-h2 {
-        font-size: 2.5rem;
+        font-size: 3rem;
         font-weight: 800;
         margin-bottom: 1.5rem;
-        line-height: 1.2;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
       }
 
       .hero-p {
-        font-size: 1.15rem;
+        font-size: 1.25rem;
         color: var(--text-secondary);
-        margin-bottom: 2.5rem;
+        margin-bottom: 3rem;
       }
 
       .audio-demo {
@@ -193,8 +196,8 @@
 
       .tour-item {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5rem;
+        grid-template-columns: 1fr 1.5fr;
+        gap: 6rem;
         align-items: center;
       }
 
@@ -274,6 +277,41 @@
 
       .placeholder-desc {
         font-size: 0.9rem;
+      }
+
+      .tour-screenshot {
+        width: 100%;
+        height: auto;
+        padding: 0;
+        background: var(--surface);
+        border-radius: 24px;
+        box-shadow: var(--shadow-lg);
+        border: 1px solid var(--border);
+        transition: transform 0.3s ease;
+        overflow: hidden;
+      }
+
+      .hero-visual {
+        width: 100%;
+        max-width: 1000px;
+      }
+
+      .hero-visual img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-lg);
+        transition: transform 0.5s ease;
+      }
+
+      .hero-pod:hover .hero-visual img {
+        transform: translateY(-5px);
+      }
+
+      .tour-screenshot:hover {
+        transform: translateY(-5px);
       }
 
       /* CTA */
@@ -367,22 +405,16 @@
               >Production Preview: "The Soul of the Machine"</span
             >
             <audio controls>
-              <source src="assets/Overview.mp3" type="audio/mpeg" />
+              <source src="assets/overview.mp3" type="audio/mpeg" />
               Your browser does not support the audio element.
             </audio>
           </div>
         </div>
         <div class="hero-visual">
-          <!-- Screenshot Placeholder: Hero Dashboard -->
-          <div class="placeholder">
-            <div class="placeholder-icon">🖥️</div>
-            <div class="placeholder-label">The Central Dashboard</div>
-            <div class="placeholder-desc">
-              Show the new Hero Section with the blue wash background, the
-              "Create Natural-Sounding..." headline, and the book mockup on the
-              right.
-            </div>
-          </div>
+          <img
+            src="assets/home.png"
+            alt="Audiobook Studio Central Dashboard showing the Hero Section and book mockup"
+          />
         </div>
       </section>
 
@@ -412,14 +444,11 @@
                 <li>Deep metadata tracking</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">📚</div>
-              <div class="placeholder-label">Project Library View</div>
-              <div class="placeholder-desc">
-                Screenshot of the project library showing multiple book cards
-                with cover art and word count tags.
-              </div>
-            </div>
+            <img
+              src="assets/library.jpg"
+              alt="Project Library showing book cards and production status"
+              class="tour-screenshot"
+            />
           </div>
 
           <!-- Step 2: Narrator Studio -->
@@ -437,14 +466,11 @@
                 <li>Managed speaker profiles</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">🎙️</div>
-              <div class="placeholder-label">Narrator Studio</div>
-              <div class="placeholder-desc">
-                Screenshot of the Voices page showing several custom profiles
-                and the "Clone New Voice" interface.
-              </div>
-            </div>
+            <img
+              src="assets/narrator.jpg"
+              alt="Narrator Studio showing custom voice profiles and cloning interface"
+              class="tour-screenshot"
+            />
           </div>
 
           <!-- Step 3: Granular Production -->
@@ -462,14 +488,11 @@
                 <li>Text normalization preview</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">🎛️</div>
-              <div class="placeholder-label">Production Workspace</div>
-              <div class="placeholder-desc">
-                Screenshot of the Chapter Editor in 'Performance' mode, showing
-                segments with character tags and 'Listen/Regenerate' buttons.
-              </div>
-            </div>
+            <img
+              src="assets/voices.jpg"
+              alt="Production Workspace showing granular character assignment and segment control"
+              class="tour-screenshot"
+            />
           </div>
 
           <!-- Step 4: Auto-Tuning Pipeline -->
@@ -487,39 +510,35 @@
                 <li>Integrated system console</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">📊</div>
-              <div class="placeholder-label">Smart Queue</div>
-              <div class="placeholder-desc">
-                Screenshot of the Processing Queue showing active progress bars,
-                "Finishing..." labels, and the log console.
-              </div>
-            </div>
+            <img
+              src="assets/queue.jpg"
+              alt="Smart Queue showing processing progress and hardware-aware ETAs"
+              class="tour-screenshot"
+            />
           </div>
 
-          <!-- Step 5: Smart Assembly -->
+          <!-- Step 5: Privacy & Local-First -->
           <div class="tour-item">
             <div class="tour-text">
-              <h3>05. Zero-Re-Encode Assembly</h3>
+              <h3>05. Privacy & Local-First</h3>
               <p>
-                Once narrations are perfect, stitch them into a professional M4B
-                file. Our engine uses an incremental M4A cache to make
-                compilation nearly instantaneous.
+                Stay in control of your intellectual property. Your manuscripts,
+                voice clones, and finished audio never leave your hardware. No
+                subscriptions, no cloud APIs, and total creative ownership of
+                every byte you produce.
               </p>
               <ul class="tour-list">
-                <li>Receipt-style assembly timeline</li>
-                <li>Lossless M4B containerization</li>
-                <li>Duration & size metadata extraction</li>
+                <li>100% Offline Processing</li>
+                <li>No Cloud Data Harvesting</li>
+                <li>Zero-Subscription Model</li>
               </ul>
             </div>
-            <div class="placeholder">
-              <div class="placeholder-icon">📦</div>
-              <div class="placeholder-label">Assembly Timeline</div>
-              <div class="placeholder-desc">
-                Screenshot of the new neutral timeline view showing assembly
-                history with durations and latest badges.
-              </div>
-            </div>
+            <img
+              src="assets/narrator_studio_visual.jpg"
+              alt="Professional microphone in a moody studio setting"
+              class="tour-screenshot"
+              style="width: auto; height: 500px; aspect-ratio: 1/1; object-fit: cover; object-position: center -90px; margin: 0 auto"
+            />
           </div>
         </div>
       </section>

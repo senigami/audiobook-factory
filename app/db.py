@@ -127,6 +127,58 @@ def init_db():
                 cursor.execute("ALTER TABLE processing_queue ADD COLUMN started_at REAL")
             except:
                 pass
+            try:
+                cursor.execute("ALTER TABLE processing_queue ADD COLUMN completed_at REAL")
+            except:
+                pass
+            try:
+                cursor.execute("ALTER TABLE processing_queue ADD COLUMN custom_title TEXT")
+            except:
+                pass
+
+            # Migration: Ensure project_id and chapter_id allow NULLs for system tasks
+            try:
+                cursor.execute("PRAGMA table_info(processing_queue)")
+                columns = cursor.fetchall()
+                needs_migration = False
+                for col in columns:
+                    if col[1] == 'project_id' and col[3] == 1: # col[3] is the NOT NULL flag
+                        needs_migration = True
+                        break
+
+                if needs_migration:
+                    print("Migrating processing_queue to remove NOT NULL constraints...")
+                    cursor.execute("BEGIN TRANSACTION")
+                    cursor.execute("ALTER TABLE processing_queue RENAME TO _processing_queue_old")
+                    cursor.execute("""
+                        CREATE TABLE processing_queue (
+                            id TEXT PRIMARY KEY,
+                            project_id TEXT,
+                            chapter_id TEXT,
+                            split_part INTEGER DEFAULT 0,
+                            status TEXT DEFAULT 'queued',
+                            created_at REAL,
+                            started_at REAL,
+                            completed_at REAL,
+                            custom_title TEXT,
+                            engine TEXT,
+                            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                            FOREIGN KEY (chapter_id) REFERENCES chapters (id) ON DELETE CASCADE
+                        )
+                    """)
+                    cursor.execute("""
+                        INSERT INTO processing_queue (id, project_id, chapter_id, split_part, status, created_at, started_at, completed_at, custom_title, engine)
+                        SELECT id, project_id, chapter_id, split_part, status, created_at, started_at, completed_at, custom_title, NULL
+                        FROM _processing_queue_old
+                    """)
+                    cursor.execute("DROP TABLE _processing_queue_old")
+            except Exception as e:
+                print(f"Failed to migrate processing_queue NULL constraints: {e}")
+
+            try:
+                cursor.execute("ALTER TABLE processing_queue ADD COLUMN engine TEXT")
+            except:
+                pass
 
             conn.commit()
 
@@ -647,6 +699,24 @@ def sync_chapter_segments(chapter_id: str, text_content: str):
                 pass
 
 # --- Processing Queue Functions ---
+
+def upsert_queue_row(job_id: str, project_id: str = None, chapter_id: str = None, 
+                     split_part: int = 0, status: str = 'queued', custom_title: str = None, engine: str = None) -> None:
+    """Insert or update a processing_queue row for any job type.
+    Called by enqueue() so EVERY job appears in the global queue.
+    Uses INSERT OR IGNORE so it won't overwrite a row already created."""
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            now = time.time()
+            cursor.execute("""
+                INSERT OR IGNORE INTO processing_queue 
+                    (id, project_id, chapter_id, split_part, status, created_at, custom_title, engine)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (job_id, project_id, chapter_id, split_part, status, now, custom_title, engine))
+            conn.commit()
+
+
 def add_to_queue(project_id: str, chapter_id: str, split_part: int = 0) -> str:
     with _db_lock:
         with get_connection() as conn:
@@ -681,8 +751,8 @@ def get_queue() -> List[Dict[str, Any]]:
             cursor.execute("""
                 SELECT q.*, c.title AS chapter_title, p.name AS project_name 
                 FROM processing_queue q
-                JOIN chapters c ON q.chapter_id = c.id
-                JOIN projects p ON q.project_id = p.id
+                LEFT JOIN chapters c ON q.chapter_id = c.id
+                LEFT JOIN projects p ON q.project_id = p.id
                 ORDER BY 
                     CASE WHEN q.status IN ('running', 'preparing', 'finalizing') THEN 0 ELSE 1 END,
                     q.created_at ASC
@@ -790,13 +860,50 @@ def reconcile_project_audio(project_id: str):
                 # In this system, 'done' status in chapters usually means the file exists.
                 if status != 'done':
                     # Heuristic: Check for common patterns
-                    # If we don't have the exact filename stored in the chapter yet, 
-                    # we might need to be clever or rely on the fact that most are {cid}.mp3 or similar.
-                    # Let's look at how jobs generate them. they use Path(j.chapter_file).stem
+                    # Most files are named {cid}.wav or {cid}.mp3 in the project audio dir
+                    stem = cid
+                    wav_file = audio_dir / f"{stem}.wav"
+                    mp3_file = audio_dir / f"{stem}.mp3"
 
-                    # Since we don't have the "filename" easily available in the chapter table 
-                    # (it might be in 'title' but sanitized), let's look for files that start with cid or match common patterns.
-                    pass 
+                    found_path = None
+                    if mp3_file.exists():
+                        found_path = mp3_file.name
+                    elif wav_file.exists():
+                        found_path = wav_file.name
+
+                    if found_path:
+                        # Only calculate length if it's missing or we just found the file
+                        duration = length or 0.0
+                        if duration == 0.0:
+                            try:
+                                import subprocess
+                                result = subprocess.run(
+                                    ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio_dir / found_path)],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,
+                                    text=True,
+                                    timeout=2
+                                )
+                                if result.returncode == 0:
+                                    duration = float(result.stdout.strip())
+                            except: pass
+
+                        cursor.execute(
+                            "UPDATE chapters SET audio_status = 'done', audio_file_path = ?, audio_length_seconds = ? WHERE id = ?", 
+                            (found_path, duration, cid)
+                        )
+                elif status == 'done':
+                    # Audio is marked done but we didn't find the file - Check if it actually exists
+                    stem = cid
+                    wav_file = audio_dir / f"{stem}.wav"
+                    mp3_file = audio_dir / f"{stem}.mp3"
+                    if not wav_file.exists() and not mp3_file.exists():
+                        # Audio is missing but status is 'done' - Reset it!
+                        cursor.execute(
+                            "UPDATE chapters SET audio_status = 'unprocessed', audio_file_path = NULL, audio_length_seconds = NULL WHERE id = ?", 
+                            (cid,)
+                        )
+            conn.commit()
 
             # Revised approach: Scan the directory and map files to chapters
             if not audio_dir.exists():

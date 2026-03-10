@@ -184,8 +184,10 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
             jobs[job_id] = j
             _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
-        # Sync with SQLite DB if this job corresponds to a processing_queue item
-        if "status" in changed_fields:
+        # Sync with SQLite DB when status or timestamps change, or when explicitly broadcast
+        # Note: force_broadcast=True is used right after enqueue() to register the initial status.
+        if "status" in changed_fields or "started_at" in changed_fields or force_broadcast:
+
             try:
                 from .db import update_queue_item
                 from .config import XTTS_OUT_DIR
@@ -193,10 +195,9 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
 
                 audio_length = 0.0
                 output_file = None
-                if updates["status"] == "done":
+                new_status = updates.get("status", j.get("status"))
+                if new_status == "done":
                     # Try to extract the true duration using ffprobe for the synchronized database record
-                    # We need the filename, which is usually constructed in DB as sqlite_{job_id}_{part}.mp3
-                    # But jobs.py usually tells us output_mp3 if it set it in updates, else we check the job itself
                     output_file = updates.get("output_mp3", j.get("output_mp3"))
                     if not output_file:
                         output_file = updates.get("output_wav", j.get("output_wav"))
@@ -223,9 +224,7 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
                             except Exception as e:
                                 print(f"Warning: Could not get duration for {output_file}: {e}")
 
-                result_code = update_queue_item(job_id, updates["status"], audio_length_seconds=audio_length, force_chapter_id=j.get("chapter_id"), output_file=output_file)
-
-                # print(f"DEBUG: SQLite sync for {job_id}: status={updates['status']}, len={audio_length}, result={result_code}")
+                update_queue_item(job_id, new_status, audio_length_seconds=audio_length, force_chapter_id=j.get("chapter_id"), output_file=output_file)
 
                 try:
                     from .web import broadcast_queue_update
@@ -235,6 +234,7 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
 
             except Exception as e:
                 print(f"Warning: Failed to sync job status to SQLite for {job_id}: {e}")
+
 
         # Notify listeners
         for callback in _JOB_LISTENERS:

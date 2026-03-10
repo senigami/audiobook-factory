@@ -25,6 +25,21 @@ BASELINE_XTTS_CPS = 16.7
 def enqueue(job: Job):
     put_job(job)
     cancel_flags[job.id] = threading.Event()
+    # Insert a row into the SQLite processing_queue so this job is visible in the Global Queue.
+    # This is the KEY fix: previously, enqueue() never wrote to the DB, so the queue was always empty.
+    try:
+        from .db import upsert_queue_row
+        upsert_queue_row(
+            job_id=job.id,
+            project_id=job.project_id,
+            chapter_id=job.chapter_id,
+            status='queued',
+            custom_title=job.custom_title,
+            engine=job.engine
+        )
+    except Exception as e:
+        print(f"Warning: Failed to upsert queue row for job {job.id}: {e}")
+
     if job.engine == "audiobook":
         assembly_queue.put(job.id)
     else:
@@ -162,6 +177,8 @@ def cleanup_and_reconcile():
                 text_path = CHAPTER_DIR / j.chapter_file
 
             if not text_path.exists():
+                if j.id == "mp3-backfill-task" or "Backfill" in j.chapter_file:
+                    continue
                 print(f"DEBUG: Pruning stale job {jid} - text file missing at project dir and legacy {CHAPTER_DIR}")
                 stale_ids.append(jid)
         else:
@@ -187,7 +204,7 @@ def cleanup_and_reconcile():
     reset_ids = []
     for jid, j in all_jobs.items():
         if j.status == "done":
-            if j.engine == "audiobook":
+            if j.engine == "audiobook" or j.id == "mp3-backfill-task" or "Backfill" in j.chapter_file:
                 continue
 
             # Segment jobs (from Performance/Listen) don't have a merged output file —
@@ -357,7 +374,8 @@ def worker_loop(q: "queue.Queue[str]"):
         jid = q.get()
         try:
             j = get_jobs().get(jid)
-            if not j:
+            if not j or j.id == "mp3-backfill-task":
+                q.task_done()
                 continue
 
             # pause support (unless bypassed by a single-chapter manual enqueue or it's an audiobook job)

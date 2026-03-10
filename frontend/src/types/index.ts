@@ -69,6 +69,7 @@ export interface ProcessingQueueItem {
   eta_seconds?: number;
   started_at?: number;
   log?: string;
+  custom_title?: string;
 }
 
 export interface SpeakerProfile {
