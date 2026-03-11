@@ -196,3 +196,4 @@ audiobook_factory.db
 audiobook_studio.db
 /samples
 debug_output.txt
+/test_temp
