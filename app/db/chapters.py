@@ -4,7 +4,6 @@ from .core import _db_lock, get_connection
 
 def create_chapter(project_id: str, title: str, text_content: Optional[str] = None, sort_order: int = 0, predicted_audio_length: float = 0.0, char_count: int = 0, word_count: int = 0) -> str:
     import uuid
-    from .segments import split_chapter_into_segments
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
