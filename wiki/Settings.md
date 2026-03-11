@@ -9,7 +9,6 @@ Access settings via the Sidebar menu.
 - **Safe Mode**: Automatically attempts to recover the AI engine if it encounters an error.
 - **Produce MP3**: Toggles generation of MP3 files alongside WAV for better compatibility.
 - **Backfill MP3s**: Scans your library and generates missing MP3 files for existing chapters.
-- **System Console**: Toggle the visibility of real-time server logs.
 
 ![Settings Tray popover showing synthesis preferences](images/settings-tray.jpg)
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional, List, Any
 from fastapi import APIRouter, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse, FileResponse
-from dataclasses import asdict
 from ... import config
 from ...state import get_settings, update_settings, get_jobs, put_job, update_job
 from ...jobs import paused, set_paused, cleanup_and_reconcile, enqueue
