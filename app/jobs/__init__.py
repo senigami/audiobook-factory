@@ -1,0 +1,56 @@
+import threading
+from .core import job_queue, assembly_queue, cancel_flags, pause_flag, paused, toggle_pause, set_paused, _estimate_seconds, calculate_predicted_progress, BASELINE_XTTS_CPS, format_seconds
+from .reconcile import cleanup_and_reconcile, _output_exists
+from .speaker import get_speaker_wavs, get_speaker_settings, update_speaker_settings
+from .worker import worker_loop
+from ..state import put_job, get_jobs, update_job, get_settings, get_performance_metrics, update_performance_metrics
+from ..config import CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, SENT_CHAR_LIMIT
+
+def enqueue(job):
+    put_job(job)
+    cancel_flags[job.id] = threading.Event()
+    try:
+        from ..db import upsert_queue_row
+        upsert_queue_row(
+            job_id=job.id, project_id=job.project_id, chapter_id=job.chapter_id,
+            status='queued', custom_title=job.custom_title, engine=job.engine
+        )
+    except: pass
+
+    if job.engine == "audiobook": assembly_queue.put(job.id)
+    else: job_queue.put(job.id)
+
+def requeue(job_id):
+    j = get_jobs().get(job_id)
+    if not j: return
+    if j.engine == "audiobook": assembly_queue.put(job_id)
+    else: job_queue.put(job_id)
+
+def cancel(job_id):
+    ev = cancel_flags.get(job_id)
+    if ev: ev.set()
+
+def clear_job_queue():
+    for q in [job_queue, assembly_queue]:
+        while not q.empty():
+            try:
+                q.get_nowait()
+                q.task_done()
+            except: break
+
+def start_workers():
+    threading.Thread(target=worker_loop, args=(job_queue,), name="SynthesisWorker", daemon=True).start()
+    threading.Thread(target=worker_loop, args=(assembly_queue,), name="AssemblyWorker", daemon=True).start()
+
+# Start workers
+start_workers()
+
+# Re-exports for public API
+__all__ = [
+    "enqueue", "requeue", "cancel", "clear_job_queue",
+    "paused", "toggle_pause", "set_paused", "cleanup_and_reconcile", "_output_exists",
+    "get_speaker_wavs", "get_speaker_settings", "update_speaker_settings",
+    "get_jobs", "put_job", "update_job", "get_settings", "get_performance_metrics", "update_performance_metrics",
+    "CHAPTER_DIR", "XTTS_OUT_DIR", "AUDIOBOOK_DIR", "VOICES_DIR", "SAMPLES_DIR", "SENT_CHAR_LIMIT",
+    "_estimate_seconds", "calculate_predicted_progress", "BASELINE_XTTS_CPS", "format_seconds"
+]

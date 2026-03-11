@@ -15,18 +15,24 @@ def mock_state(tmp_path, monkeypatch):
     # Fix state file to a temp location
     test_state = tmp_path / "state.json"
     monkeypatch.setattr("app.state.STATE_FILE", test_state)
+    monkeypatch.setattr("app.config.CHAPTER_DIR", tmp_path / "chapters")
+    monkeypatch.setattr("app.config.XTTS_OUT_DIR", tmp_path / "xtts")
+    monkeypatch.setattr("app.config.AUDIOBOOK_DIR", tmp_path / "audiobooks")
+    monkeypatch.setattr("app.config.VOICES_DIR", tmp_path / "voices")
+    monkeypatch.setattr("app.config.SAMPLES_DIR", tmp_path / "samples")
+
     monkeypatch.setattr("app.web.CHAPTER_DIR", tmp_path / "chapters")
     monkeypatch.setattr("app.web.XTTS_OUT_DIR", tmp_path / "xtts")
-    monkeypatch.setattr("app.web.REPORT_DIR", tmp_path / "reports")
     monkeypatch.setattr("app.web.AUDIOBOOK_DIR", tmp_path / "audiobooks")
     monkeypatch.setattr("app.web.VOICES_DIR", tmp_path / "voices")
+    monkeypatch.setattr("app.web.SAMPLES_DIR", tmp_path / "samples")
 
-    # Also patch for app.jobs
-    monkeypatch.setattr("app.jobs.CHAPTER_DIR", tmp_path / "chapters")
-    monkeypatch.setattr("app.jobs.XTTS_OUT_DIR", tmp_path / "xtts")
-    monkeypatch.setattr("app.jobs.AUDIOBOOK_DIR", tmp_path / "audiobooks")
-    monkeypatch.setattr("app.jobs.VOICES_DIR", tmp_path / "voices")
-    monkeypatch.setattr("app.jobs.SAMPLES_DIR", tmp_path / "samples")
+    monkeypatch.setattr("app.jobs.reconcile.CHAPTER_DIR", tmp_path / "chapters")
+    monkeypatch.setattr("app.jobs.reconcile.XTTS_OUT_DIR", tmp_path / "xtts")
+    monkeypatch.setattr("app.jobs.reconcile.AUDIOBOOK_DIR", tmp_path / "audiobooks")
+    monkeypatch.setattr("app.jobs.speaker.VOICES_DIR", tmp_path / "voices")
+    monkeypatch.setattr("app.jobs.worker.CHAPTER_DIR", tmp_path / "chapters")
+    monkeypatch.setattr("app.jobs.worker.XTTS_OUT_DIR", tmp_path / "xtts")
 
     (tmp_path / "chapters").mkdir(parents=True, exist_ok=True)
     (tmp_path / "xtts").mkdir(parents=True, exist_ok=True)
