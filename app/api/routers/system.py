@@ -4,8 +4,8 @@ import time
 import json
 import shutil
 from pathlib import Path
-from typing import Optional, List
-from fastapi import APIRouter, Form, UploadFile, File
+from typing import Optional, List, Any
+from fastapi import APIRouter, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse, FileResponse
 from dataclasses import asdict
 from ... import config
@@ -53,36 +53,48 @@ def api_home():
         "speakers": speakers,
     }
 
-from fastapi import Request
 
 @router.post("/settings")
 async def save_settings(
     request: Request,
-    safe_mode: Optional[bool] = Form(None),
-    make_mp3: Optional[bool] = Form(None)
+    safe_mode: Optional[Any] = Form(None),
+    make_mp3: Optional[Any] = Form(None)
 ):
     updates = {}
 
-    # Try parsing as JSON first (common for React fetch/axios calls)
-    try:
-        body = await request.json()
-        if isinstance(body, dict):
-            for k in ["safe_mode", "make_mp3"]:
-                if k in body:
-                    updates[k] = body[k]
-    except Exception:
-        # Fallback to form data
-        def to_bool(v):
-            if isinstance(v, bool): return v
-            if str(v).lower() == "true": return True
-            if str(v).lower() == "false": return False
-            return v
+    def to_bool(v):
+        if isinstance(v, bool): return v
+        s = str(v).lower()
+        if s in ("true", "1", "on", "yes"): return True
+        if s in ("false", "0", "off", "no"): return False
+        return None
 
-        if safe_mode is not None: updates["safe_mode"] = to_bool(safe_mode)
-        if make_mp3 is not None: updates["make_mp3"] = to_bool(make_mp3)
+    # 1. Try JSON if content-type matches
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                for k in ["safe_mode", "make_mp3"]:
+                    if k in body:
+                        val = to_bool(body[k])
+                        if val is not None:
+                            updates[k] = val
+        except Exception:
+            pass
+
+    # 2. Try Form parameters (either from FastAPI's parsing or manual fallback)
+    if "safe_mode" not in updates and safe_mode is not None:
+        val = to_bool(safe_mode)
+        if val is not None: updates["safe_mode"] = val
+
+    if "make_mp3" not in updates and make_mp3 is not None:
+        val = to_bool(make_mp3)
+        if val is not None: updates["make_mp3"] = val
 
     if updates:
         update_settings(updates)
+
     return JSONResponse({"status": "ok", "settings": get_settings()})
 
 @router.post("/speakers/default")

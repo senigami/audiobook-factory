@@ -1,11 +1,11 @@
 import os
 import tempfile
 import pytest
+import atexit
 from pathlib import Path
 
 # 1. Create a session-wide temp directory for storage isolation
 _temp_dir = tempfile.TemporaryDirectory()
-import atexit
 atexit.register(_temp_dir.cleanup)
 SESSION_TEMP = Path(_temp_dir.name)
 

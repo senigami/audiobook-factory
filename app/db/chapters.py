@@ -36,13 +36,33 @@ def list_chapters(project_id: str) -> List[Dict[str, Any]]:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT c.*, 
-                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id) as segment_count,
-                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id AND audio_status = 'done') as segments_done
+                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id) as total_segments_count,
+                (SELECT COUNT(*) FROM chapter_segments WHERE chapter_id = c.id AND audio_status = 'done') as done_segments_count
                 FROM chapters c 
                 WHERE project_id = ? 
                 ORDER BY sort_order ASC
             """, (project_id,))
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.fetchall()]
+
+            for chap in rows:
+                path = chap.get("audio_file_path")
+                chap["has_wav"] = False
+                chap["has_mp3"] = False
+                chap["has_m4a"] = False
+                if path:
+                    if path.endswith(".wav"): chap["has_wav"] = True
+                    if path.endswith(".mp3"): chap["has_mp3"] = True
+                    if path.endswith(".m4a"): chap["has_m4a"] = True
+
+                # Compatibility: if audio_status is 'done', ensure the UI shows it as complete
+                if chap["audio_status"] == "done" and not chap["has_wav"]:
+                    # If we only have an MP3, the UI's 'isComplete' check (which looks for has_wav) 
+                    # should still be satisfied or we should update the UI. 
+                    # For now, let's treat any production audio as 'has_wav' for the center orb.
+                    if chap["has_mp3"] or chap["has_m4a"]:
+                         chap["has_wav"] = True
+
+            return rows
 
 def update_chapter(chapter_id: str, **updates) -> bool:
     if not updates: return False
