@@ -86,11 +86,14 @@ def get_settings() -> Dict[str, Any]:
         return state.get("settings", {})
 
 
-def update_settings(**updates) -> None:
+def update_settings(updates: dict = None, **kwargs) -> None:
     with _STATE_LOCK:
         state = _load_state_no_lock()
         state.setdefault("settings", {})
-        state["settings"].update(updates)
+        if updates:
+            state["settings"].update(updates)
+        if kwargs:
+            state["settings"].update(kwargs)
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
 

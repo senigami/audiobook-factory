@@ -11,7 +11,7 @@ from ...db import (
     list_speakers, create_speaker, get_speaker, update_speaker, delete_speaker,
     update_voice_profile_references
 )
-from ...config import VOICES_DIR, SAMPLES_DIR, ASSETS_DIR
+from ... import config
 from ...state import get_settings, update_settings
 from ...jobs import get_speaker_settings, update_speaker_settings, enqueue
 from ...models import Job
@@ -21,10 +21,10 @@ router = APIRouter(prefix="/api", tags=["voices"])
 
 @router.get("/speaker-profiles")
 def list_speaker_profiles():
-    if not VOICES_DIR.exists():
+    if not config.VOICES_DIR.exists():
         return []
 
-    dirs = sorted([d for d in VOICES_DIR.iterdir() if d.is_dir()], key=lambda x: x.name)
+    dirs = sorted([d for d in config.VOICES_DIR.iterdir() if d.is_dir()], key=lambda x: x.name)
     settings = get_settings()
     default_speaker = settings.get("default_speaker_profile")
 
@@ -54,7 +54,7 @@ def list_speaker_profiles():
         if len([b for b in built_samples if (d / b).exists()]) < len(built_samples):
              is_rebuild_required = True
 
-        test_wav = VOICES_DIR / d.name / "sample.wav"
+        test_wav = config.VOICES_DIR / d.name / "sample.wav"
         if not test_wav.exists() and len(raw_wavs) > 0:
             is_rebuild_required = True
 
@@ -79,13 +79,13 @@ def api_create_speaker_profile(
     variant_name: str = Form(...)
 ):
     name = f"{speaker_id}_{variant_name}"
-    path = VOICES_DIR / name
+    path = config.VOICES_DIR / name
     if path.exists():
         return JSONResponse({"status": "error", "message": "Profile already exists"}, status_code=400)
 
     path.mkdir(parents=True, exist_ok=True)
     update_speaker_settings(name, speaker_id=speaker_id, variant_name=variant_name)
-    return JSONResponse({"status": "success", "name": name})
+    return JSONResponse({"status": "ok", "name": name})
 
 @router.get("/projects/{project_id}/characters")
 def api_list_characters(project_id: str):
@@ -94,7 +94,7 @@ def api_list_characters(project_id: str):
 @router.post("/projects/{project_id}/characters")
 def api_create_character_route(project_id: str, name: str = Form(...), speaker_profile_name: Optional[str] = Form(None)):
     cid = create_character(project_id, name, speaker_profile_name)
-    return JSONResponse({"status": "success", "character_id": cid})
+    return JSONResponse({"status": "ok", "character_id": cid})
 
 @router.put("/characters/{character_id}")
 def api_update_character_route(character_id: str, name: Optional[str] = Form(None), speaker_profile_name: Optional[str] = Form(None), color: Optional[str] = Form(None)):
@@ -103,12 +103,12 @@ def api_update_character_route(character_id: str, name: Optional[str] = Form(Non
     if speaker_profile_name is not None: updates["speaker_profile_name"] = speaker_profile_name
     if color is not None: updates["color"] = color
     update_character(character_id, **updates)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.delete("/characters/{character_id}")
 def api_delete_character_route(character_id: str):
     delete_character(character_id)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.get("/speakers")
 def api_list_speakers_route():
@@ -117,7 +117,7 @@ def api_list_speakers_route():
 @router.post("/speakers")
 def api_create_speaker_route(name: str = Form(...), default_profile_name: Optional[str] = Form(None)):
     sid = create_speaker(name, default_profile_name)
-    return JSONResponse({"status": "success", "speaker_id": sid})
+    return JSONResponse({"status": "ok", "speaker_id": sid})
 
 @router.put("/speakers/{speaker_id}")
 def api_update_speaker_route(speaker_id: str, name: Optional[str] = Form(None), default_profile_name: Optional[str] = Form(None)):
@@ -125,39 +125,39 @@ def api_update_speaker_route(speaker_id: str, name: Optional[str] = Form(None), 
     if name is not None: updates["name"] = name
     if default_profile_name is not None: updates["default_profile_name"] = default_profile_name
     update_speaker(speaker_id, **updates)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.delete("/speakers/{speaker_id}")
 def api_delete_speaker_route(speaker_id: str):
     delete_speaker(speaker_id)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/voices/rename-profile")
 def api_rename_voice_profile(old_name: str = Form(...), new_name: str = Form(...)):
-    old_dir = VOICES_DIR / old_name
-    new_dir = VOICES_DIR / new_name
+    old_dir = config.VOICES_DIR / old_name
+    new_dir = config.VOICES_DIR / new_name
     if old_dir.exists() and not new_dir.exists():
         os.rename(old_dir, new_dir)
         update_voice_profile_references(old_name, new_name)
-        return JSONResponse({"status": "success", "new_name": new_name})
+        return JSONResponse({"status": "ok", "new_name": new_name})
     return JSONResponse({"status": "error", "message": "Directory rename failed"}, status_code=400)
 
 @router.post("/speaker-profiles/{name}/test-text")
 def update_speaker_test_text(name: str, text: str = Form(...)):
     update_speaker_settings(name, test_text=text)
-    return JSONResponse({"status": "success", "test_text": text})
+    return JSONResponse({"status": "ok", "test_text": text})
 
 @router.post("/speaker-profiles/{name}/speed")
 def update_speaker_speed(name: str, speed: float = Form(...)):
     update_speaker_settings(name, speed=speed)
-    return JSONResponse({"status": "success", "speed": speed})
+    return JSONResponse({"status": "ok", "speed": speed})
 
 @router.post("/speaker-profiles/{name}/build")
 async def build_speaker_profile(
     name: str,
     files: List[UploadFile] = File(default=[])
 ):
-    path = VOICES_DIR / name
+    path = config.VOICES_DIR / name
     path.mkdir(parents=True, exist_ok=True)
 
     saved_files = []
@@ -173,13 +173,19 @@ async def build_speaker_profile(
     j = Job(
         id=jid,
         engine="voice_build",
+        chapter_file="", # Required by model
         status="queued",
         created_at=time.time(),
         speaker_profile=name
     )
     put_job(j)
     enqueue(j)
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})
+
+@router.post("/speaker-profiles/{name}/rename")
+def api_rename_voice_profile_path(name: str, new_name: str = Form(...)):
+    from .voices import api_rename_voice_profile
+    return api_rename_voice_profile(old_name=name, new_name=new_name)
 
 @router.post("/speaker-profiles/build")
 async def legacy_build_speaker_profile(
@@ -194,10 +200,10 @@ def legacy_test_speaker_profile(name: str = Form(...)):
 
 @router.delete("/speaker-profiles/{name}")
 def delete_speaker_profile(name: str):
-    path = VOICES_DIR / name
+    path = config.VOICES_DIR / name
     if path.exists():
         shutil.rmtree(path)
-        return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "ok"})
     return JSONResponse({"status": "error", "message": "Not found"}, status_code=404)
 
 @router.post("/speaker-profiles/{name}/test")
@@ -206,10 +212,11 @@ def test_speaker_profile(name: str):
     j = Job(
         id=jid,
         engine="voice_test",
+        chapter_file="", # Required by model
         status="queued",
         created_at=time.time(),
         speaker_profile=name
     )
     put_job(j)
     enqueue(j)
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})

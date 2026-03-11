@@ -63,17 +63,17 @@ def clear_queue() -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
-            # 1. Reset chapter status for all pending/running jobs
+            # 1. Reset chapter status for all pending/preparing jobs (NOT running)
             cursor.execute("""
                 UPDATE chapters 
                 SET audio_status = 'unprocessed' 
                 WHERE id IN (
                     SELECT chapter_id FROM processing_queue 
-                    WHERE status IN ('queued', 'running', 'preparing')
+                    WHERE status IN ('queued', 'preparing')
                 )
             """)
-            # 2. Delete all pending/running queue items
-            cursor.execute("DELETE FROM processing_queue WHERE status IN ('queued', 'running', 'preparing')")
+            # 2. Delete all pending/preparing queue items
+            cursor.execute("DELETE FROM processing_queue WHERE status IN ('queued', 'preparing')")
             conn.commit()
             return True
 
@@ -87,7 +87,7 @@ def update_queue_item(queue_id: str, status: str, audio_length_seconds: float = 
             params = [status]
 
             if status in ('running', 'preparing'):
-                updates.append("started_at = ?")
+                updates.append("started_at = COALESCE(started_at, ?)")
                 params.append(now)
             elif status in ('done', 'failed', 'cancelled'):
                 updates.append("completed_at = ?")

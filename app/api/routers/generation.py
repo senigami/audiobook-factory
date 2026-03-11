@@ -33,7 +33,7 @@ def api_add_to_queue(
             from ...db import get_queue
             existing = [item for item in get_queue() if item['chapter_id'] == chapter_id and item['status'] not in ('done', 'failed', 'cancelled')]
             if existing:
-                return JSONResponse({"status": "success", "queue_id": existing[0]['id']})
+                return JSONResponse({"status": "ok", "queue_id": existing[0]['id']})
             return JSONResponse({"status": "error", "message": "Chapter already in queue"}, status_code=400)
 
         # Sync with legacy worker
@@ -78,7 +78,7 @@ def api_add_to_queue(
             enqueue(j)
             broadcast_queue_update()
 
-        return JSONResponse({"status": "success", "queue_id": qid})
+        return JSONResponse({"status": "ok", "queue_id": qid})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
@@ -96,22 +96,26 @@ def api_bake_chapter(chapter_id: str):
     put_job(j)
     update_job(jid, force_broadcast=True, status="queued")
     enqueue(j)
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})
 
 @router.post("/generation/pause")
 def pause_queue():
     set_paused(True)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/generation/resume")
 def resume_queue():
     set_paused(False)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/generation/cancel-all")
 def cancel_pending():
+    from ...state import get_jobs, delete_jobs
     clear_job_queue()
-    return JSONResponse({"status": "success"})
+    # Also clear from state.json
+    jobs = get_jobs()
+    delete_jobs(list(jobs.keys()))
+    return JSONResponse({"status": "ok", "message": "processes stopped"})
 
 @router.post("/chapters/{chapter_id}/cancel")
 def cancel_chapter_generation(chapter_id: str):
@@ -119,7 +123,7 @@ def cancel_chapter_generation(chapter_id: str):
     for jid, job in jobs.items():
         if job.get("chapter_id") == chapter_id and job.get("status") in ["queued", "running", "preparing"]:
             cancel_job_worker(jid)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/generation/enqueue-single")
 def enqueue_single(chapter_file: str = Form(...), engine: str = Form("xtts")):
@@ -134,4 +138,4 @@ def enqueue_single(chapter_file: str = Form(...), engine: str = Form("xtts")):
     )
     put_job(j)
     enqueue(j)
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})

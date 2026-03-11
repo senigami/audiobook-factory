@@ -105,4 +105,4 @@ def update_job_title(chapter_file: str = Form(...), new_title: str = Form(...)):
             job.custom_title = new_title
             state_update_job(jid, custom_title=new_title)
             count += 1
-    return JSONResponse({"status": "success", "updated": count})
+    return JSONResponse({"status": "ok", "updated": count})

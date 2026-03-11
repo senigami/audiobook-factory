@@ -49,4 +49,4 @@ def delete_audiobook(filename: str, project_id: Optional[str] = Query(None)):
 @router.post("/trigger_backfill")
 def api_trigger_backfill():
     # Logic to trigger backfill
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})

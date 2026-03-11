@@ -81,16 +81,16 @@ app.include_router(jobs.router)
 # --- Legacy Route Aliases ---
 @app.post("/upload")
 async def legacy_upload(request: Request):
-    from .api.system import upload
+    from .api.routers.system import upload
     return await upload(
-        file=await (await request.form()).get("file"),
+        file=(await request.form()).get("file"),
         mode=(await request.form()).get("mode", "parts"),
         max_chars=(await request.form()).get("max_chars")
     )
 
 @app.post("/create_audiobook")
 async def legacy_create_audiobook(request: Request):
-    from .api.system import create_audiobook
+    from .api.routers.system import create_audiobook
     form = await request.form()
     return await create_audiobook(
         title=form.get("title"),
@@ -117,12 +117,12 @@ async def legacy_clear():
 
 @app.post("/api/processing_queue/clear_completed")
 async def legacy_clear_completed():
-    from .api.queue import api_clear_history
+    from .api.routers.queue import api_clear_history
     return api_clear_history()
 
 @app.post("/api/chapter/reset")
 async def legacy_chapter_reset(request: Request):
-    from .api.chapters import api_delete_chapter_record
+    from .api.routers.chapters import api_delete_chapter_record
     form = await request.form()
     # Note: tests use chapter_file but my new logic uses chapter_id
     # We might need a lookup if tests pass files instead of IDs

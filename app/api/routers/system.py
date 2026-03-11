@@ -67,18 +67,18 @@ def save_settings(
 
     if updates:
         update_settings(updates)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/speakers/default")
 def set_default_speaker(name: str = Form(...)):
     update_settings({"default_speaker_profile": name})
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/system/import-legacy")
 def api_import_legacy():
     from ...db import migrate_state_json_to_db
     migrate_state_json_to_db()
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/upload")
 async def upload(
@@ -93,7 +93,7 @@ async def upload(
 
     # Logic to split file would go here or call a helper
     # For now, just acknowledge upload
-    return JSONResponse({"status": "success", "filename": file.filename})
+    return JSONResponse({"status": "ok", "filename": file.filename})
 
 @router.post("/create_audiobook")
 async def create_audiobook(
@@ -135,10 +135,18 @@ async def create_audiobook(
     put_job(j)
     enqueue(j)
     update_job(jid, force_broadcast=True, status="queued")
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})
 
 @router.get("/audiobook/prepare")
 def api_audiobook_prepare():
     from ..utils import legacy_list_chapters
     chapters = [p.name for p in legacy_list_chapters()]
-    return JSONResponse({"status": "success", "chapters": chapters})
+    return JSONResponse({"status": "ok", "chapters": chapters, "total_duration": 0.0})
+@router.post("/settings/default-speaker")
+def set_default_speaker_settings(name: str = Form(...)):
+    update_settings({"default_speaker_profile": name})
+    return JSONResponse({"status": "ok"})
+
+@router.post("/api/settings/default-speaker")
+def legacy_set_default_speaker(name: str = Form(...)):
+    return set_default_speaker_settings(name)

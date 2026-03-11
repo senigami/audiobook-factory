@@ -94,7 +94,7 @@ async def api_analyze_chapter(chapter_id: str):
     auto_fixed = len(raw_hits) - uncleanable
 
     return JSONResponse({
-        "status": "success",
+        "status": "ok",
         "voice_chunks": voice_chunks,
         "threshold": SENT_CHAR_LIMIT,
         "char_count": char_count,
@@ -124,7 +124,7 @@ async def api_analyze_text(text_content: str = Form(...)):
     auto_fixed = len(raw_hits) - uncleanable
 
     return JSONResponse({
-        "status": "success",
+        "status": "ok",
         "char_count": char_count,
         "word_count": word_count,
         "sent_count": sent_count,

@@ -32,22 +32,27 @@ def api_mass_delete_queue():
     from ...db import get_queue
     count = len([item for item in get_queue() if item['status'] != 'running'])
     clear_queue()
-    return JSONResponse({"status": "success", "cleared": count})
+    return JSONResponse({"status": "ok", "cleared": count})
 
 @router.post("/processing_queue/clear")
 def api_clear_queue_route():
     clear_queue()
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.post("/processing_queue/clear-history")
 def api_clear_history():
+    from ...state import get_jobs, delete_jobs
     count = clear_completed_queue()
-    return JSONResponse({"status": "success", "cleared_count": count})
+    # Also clear from state.json
+    jobs = get_jobs()
+    to_del = [jid for jid, j in jobs.items() if j.status in ('done', 'failed', 'cancelled')]
+    delete_jobs(to_del)
+    return JSONResponse({"status": "ok", "cleared": count})
 
 @router.post("/processing_queue/reorder")
 def api_reorder_queue_route(queue_ids: List[str]):
     reorder_queue(queue_ids)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})
 
 @router.delete("/processing_queue/{queue_id}")
 def api_delete_queue_item(queue_id: str):
@@ -55,4 +60,4 @@ def api_delete_queue_item(queue_id: str):
     cancel_job(queue_id)
     # Remove from DB
     remove_from_queue(queue_id)
-    return JSONResponse({"status": "success"})
+    return JSONResponse({"status": "ok"})

@@ -28,7 +28,7 @@ def api_reorder_chapters_route(project_id: str, chapter_ids: str = Form(...)):
     try:
         ids_list = json.loads(chapter_ids)
         reorder_chapters(ids_list)
-        return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "ok"})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
@@ -57,7 +57,7 @@ async def api_create_project(
         cover_path = f"/out/covers/{cover_filename}"
 
     pid = create_project(name, series, author, cover_path)
-    return JSONResponse({"status": "success", "project_id": pid})
+    return JSONResponse({"status": "ok", "project_id": pid})
 
 @router.put("/{project_id}")
 async def api_update_project(
@@ -88,13 +88,13 @@ async def api_update_project(
     if updates:
         update_project(project_id, **updates)
 
-    return JSONResponse({"status": "success", "project_id": project_id})
+    return JSONResponse({"status": "ok", "project_id": project_id})
 
 @router.delete("/{project_id}")
 def api_delete_project(project_id: str):
     success = delete_project(project_id)
     if success:
-        return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "ok"})
     return JSONResponse({"status": "error", "message": "Project not found"}, status_code=404)
 
 @router.get("/{project_id}/audiobooks")
@@ -222,7 +222,7 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
     put_job(j)
     update_job(jid, force_broadcast=True, status="queued")
     enqueue(j)
-    return JSONResponse({"status": "success", "job_id": jid})
+    return JSONResponse({"status": "ok", "job_id": jid})
 
 @router.get("/audiobook/prepare")
 def prepare_audiobook():

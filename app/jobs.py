@@ -108,6 +108,7 @@ def _output_exists(engine: str, chapter_file: str, project_id: Optional[str] = N
             return (get_project_m4b_dir(project_id) / f"{chapter_file}.m4b").exists()
         return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
 
+    from .config import XTTS_OUT_DIR
     if engine == "xtts":
         if project_id:
             from .config import get_project_audio_dir
@@ -115,7 +116,11 @@ def _output_exists(engine: str, chapter_file: str, project_id: Optional[str] = N
             # If a project is specified, we should ONLY trust the project directory,
             # not a potentially stale shared global directory.
             mp3 = (pdir / f"{stem}.mp3").exists()
+            if not mp3:
+                mp3 = (XTTS_OUT_DIR / f"{stem}.mp3").exists()
             wav = (pdir / f"{stem}.wav").exists()
+            if not wav:
+                wav = (XTTS_OUT_DIR / f"{stem}.wav").exists()
         else:
             pdir = XTTS_OUT_DIR
             mp3 = (pdir / f"{stem}.mp3").exists()
@@ -259,6 +264,11 @@ def cleanup_and_reconcile():
                                 audio_length = float(result.stdout.strip())
                             except Exception: pass
                     update_queue_item(jid, "done", audio_length_seconds=audio_length)
+                    # If this was a project job with a chapter_id, ensure the chapters table is synced
+                    # even if the processing_queue entry was missing.
+                    if j.chapter_id:
+                        from .db import update_chapter
+                        update_chapter(j.chapter_id, audio_status='done', audio_file_path=output_file, audio_generated_at=time.time())
                 except Exception as e:
                     print(f"Warning: Failed to forward-sync job {jid} to SQLite: {e}")
 

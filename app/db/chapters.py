@@ -8,6 +8,8 @@ def create_chapter(project_id: str, title: str, text_content: Optional[str] = No
         with get_connection() as conn:
             cursor = conn.cursor()
             chapter_id = str(uuid.uuid4())
+            if text_content:
+                text_content = text_content.replace("\r\n", "\n")
             cursor.execute("""
                 INSERT INTO chapters (id, project_id, title, text_content, sort_order, predicted_audio_length, char_count, word_count, text_last_modified)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -88,7 +90,19 @@ def reset_chapter_audio(chapter_id: str):
             project_id = row['project_id']
 
             # 2. Cleanup physical files if they exist
-            # (Optional: we could delete them here, but for now we just reset DB)
+            from .. import config
+            pdir = config.get_project_audio_dir(project_id) if project_id else config.XTTS_OUT_DIR
+            audio_file = row['audio_file_path']
+            if audio_file:
+                audio_path = pdir / audio_file
+                if audio_path.exists():
+                    audio_path.unlink()
+
+            # Also check for .wav if audio_file_path was .mp3 and vice versa
+            stem = chapter_id
+            for ext in ['.wav', '.mp3']:
+                p = pdir / f"{stem}{ext}"
+                if p.exists(): p.unlink()
 
             # 3. Reset database fields for chapter
             cursor.execute("""
