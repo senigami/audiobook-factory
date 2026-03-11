@@ -94,7 +94,7 @@ def api_list_characters(project_id: str):
 @router.post("/projects/{project_id}/characters")
 def api_create_character_route(project_id: str, name: str = Form(...), speaker_profile_name: Optional[str] = Form(None)):
     cid = create_character(project_id, name, speaker_profile_name)
-    return JSONResponse({"status": "ok", "character_id": cid})
+    return JSONResponse({"status": "ok", "id": cid, "character_id": cid})
 
 @router.put("/characters/{character_id}")
 def api_update_character_route(character_id: str, name: Optional[str] = Form(None), speaker_profile_name: Optional[str] = Form(None), color: Optional[str] = Form(None)):
@@ -117,7 +117,7 @@ def api_list_speakers_route():
 @router.post("/speakers")
 def api_create_speaker_route(name: str = Form(...), default_profile_name: Optional[str] = Form(None)):
     sid = create_speaker(name, default_profile_name)
-    return JSONResponse({"status": "ok", "speaker_id": sid})
+    return JSONResponse({"status": "ok", "id": sid, "speaker_id": sid})
 
 @router.put("/speakers/{speaker_id}")
 def api_update_speaker_route(speaker_id: str, name: Optional[str] = Form(None), default_profile_name: Optional[str] = Form(None)):

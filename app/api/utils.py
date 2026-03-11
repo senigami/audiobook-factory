@@ -5,10 +5,7 @@ import subprocess
 import shlex
 from pathlib import Path
 from typing import Optional, List
-from ..config import (
-    CHAPTER_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, UPLOAD_DIR, 
-    PART_CHAR_LIMIT, PROJECTS_DIR, get_project_audio_dir
-)
+from .. import config
 from ..textops import split_by_chapter_markers, write_chapters_to_folder, split_into_parts
 
 def read_preview(path: Path, max_chars: int = 8000) -> str:
@@ -24,22 +21,22 @@ def read_preview(path: Path, max_chars: int = 8000) -> str:
 
 def output_exists(engine: str, chapter_file: str):
     if engine == "xtts":
-        return (XTTS_OUT_DIR / f"{chapter_file}.wav").exists() or (XTTS_OUT_DIR / f"{chapter_file}.mp3").exists()
+        return (config.XTTS_OUT_DIR / f"{chapter_file}.wav").exists() or (config.XTTS_OUT_DIR / f"{chapter_file}.mp3").exists()
     elif engine == "audiobook":
-        return (AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
+        return (config.AUDIOBOOK_DIR / f"{chapter_file}.m4b").exists()
     return False
 
 def xtts_outputs_for(chapter_file: str, project_id: Optional[str] = None):
     outputs = []
     # Check global
     for ext in [".wav", ".mp3"]:
-        p = XTTS_OUT_DIR / f"{chapter_file}{ext}"
+        p = config.XTTS_OUT_DIR / f"{chapter_file}{ext}"
         if p.exists():
             outputs.append(f"/out/xtts/{chapter_file}{ext}")
 
     # Check project
     if project_id:
-        proj_audio = get_project_audio_dir(project_id)
+        proj_audio = config.get_project_audio_dir(project_id)
         for ext in [".wav", ".mp3"]:
             p = proj_audio / f"{chapter_file}{ext}"
             if p.exists():
@@ -48,8 +45,8 @@ def xtts_outputs_for(chapter_file: str, project_id: Optional[str] = None):
     return outputs
 
 def legacy_list_chapters():
-    CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted(CHAPTER_DIR.glob("*.txt"))
+    config.CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+    return sorted(config.CHAPTER_DIR.glob("*.txt"))
 
 def is_react_dev_active():
     """Checks if the React dev server is running on 127.0.0.1:5173"""
@@ -65,9 +62,9 @@ def is_react_dev_active():
 def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = None) -> List[Path]:
     """Helper to split a file into chapters/parts in the CHAPTER_DIR."""
     if max_chars is None:
-        max_chars = PART_CHAR_LIMIT
+        max_chars = config.PART_CHAR_LIMIT
 
-    path = UPLOAD_DIR / filename
+    path = config.UPLOAD_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Upload not found: {filename}")
 
@@ -78,22 +75,22 @@ def process_and_split_file(filename: str, mode: str = "parts", max_chars: int = 
         chapters = split_by_chapter_markers(full_text)
         if not chapters:
             raise ValueError("No chapter markers found. Expected: Chapter 1: Title")
-        return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix="chapter", include_heading=True)
+        return write_chapters_to_folder(chapters, config.CHAPTER_DIR, prefix="chapter", include_heading=True)
     else:
         stem = Path(filename).stem
         chapters = split_into_parts(full_text, max_chars, start_index=1)
-        return write_chapters_to_folder(chapters, CHAPTER_DIR, prefix=stem, include_heading=False)
+        return write_chapters_to_folder(chapters, config.CHAPTER_DIR, prefix=stem, include_heading=False)
 
 def list_audiobooks():
     """Lists all audiobooks from legacy and project-specific directories."""
     res = []
     m4b_files = []
-    if AUDIOBOOK_DIR.exists():
-        for p in AUDIOBOOK_DIR.glob("*.m4b"):
+    if config.AUDIOBOOK_DIR.exists():
+        for p in config.AUDIOBOOK_DIR.glob("*.m4b"):
             m4b_files.append((p, f"/out/audiobook/{p.name}"))
 
-    if PROJECTS_DIR.exists():
-        for proj_dir in PROJECTS_DIR.iterdir():
+    if config.PROJECTS_DIR.exists():
+        for proj_dir in config.PROJECTS_DIR.iterdir():
             if proj_dir.is_dir():
                 m4b_dir = proj_dir / "m4b"
                 if m4b_dir.exists():

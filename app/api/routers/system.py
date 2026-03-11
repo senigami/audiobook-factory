@@ -8,10 +8,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Form, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse
 from dataclasses import asdict
-from ...config import (
-    FRONTEND_DIST, VOICES_DIR, XTTS_OUT_DIR, AUDIOBOOK_DIR, 
-    COVER_DIR, UPLOAD_DIR, CHAPTER_DIR
-)
+from ... import config
 from ...state import get_settings, update_settings, get_jobs, put_job, update_job
 from ...jobs import paused, set_paused, cleanup_and_reconcile, enqueue
 from ...db import list_speakers
@@ -38,9 +35,9 @@ def api_home():
     xtts_mp3 = []
     for c in chapters:
         stem = Path(c).stem
-        if (XTTS_OUT_DIR / f"{stem}.mp3").exists():
+        if (config.XTTS_OUT_DIR / f"{stem}.mp3").exists():
             xtts_mp3.append(c)
-        if (XTTS_OUT_DIR / f"{stem}.wav").exists():
+        if (config.XTTS_OUT_DIR / f"{stem}.wav").exists():
             xtts_wav_only.append(c)
 
     return {
@@ -48,7 +45,7 @@ def api_home():
         "jobs": jobs,
         "settings": settings,
         "paused": paused(),
-        "narrator_ok": (VOICES_DIR / "Default").exists(),
+        "narrator_ok": (config.VOICES_DIR / "Default").exists(),
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
         "audiobooks": list_audiobooks(),
@@ -86,14 +83,33 @@ async def upload(
     mode: str = "parts",
     max_chars: Optional[int] = None
 ):
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    temp_path = UPLOAD_DIR / file.filename
+    config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = config.UPLOAD_DIR / file.filename
     with open(temp_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Logic to split file would go here or call a helper
-    # For now, just acknowledge upload
-    return JSONResponse({"status": "ok", "filename": file.filename})
+    # Logic to split file
+    content = temp_path.read_text(encoding="utf-8", errors="replace")
+    import re
+    chapter_filenames = []
+    config.CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Simple split: "Chapter X:" or similar
+    parts = re.split(r'(?i)(Chapter\s+\d+.*?(?:\n|$))', content)
+    if len(parts) > 1:
+        # Re-assemble
+        for i in range(1, len(parts), 2):
+            header = parts[i]
+            body = parts[i+1] if i+1 < len(parts) else ""
+            fname = f"part_{len(chapter_filenames)+1:04d}.txt"
+            (config.CHAPTER_DIR / fname).write_text(header + body, encoding="utf-8")
+            chapter_filenames.append(fname)
+    else:
+        fname = "part_0001.txt"
+        (config.CHAPTER_DIR / fname).write_text(content, encoding="utf-8")
+        chapter_filenames.append(fname)
+
+    return JSONResponse({"status": "success", "filename": file.filename, "chapters": chapter_filenames})
 
 @router.post("/create_audiobook")
 async def create_audiobook(
@@ -108,14 +124,14 @@ async def create_audiobook(
     except:
         chapter_list = []
 
-    COVER_DIR.mkdir(parents=True, exist_ok=True)
-    AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    config.COVER_DIR.mkdir(parents=True, exist_ok=True)
+    config.AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
 
     cover_path = None
     if cover:
         ext = Path(cover.filename).suffix
         cover_filename = f"{uuid.uuid4().hex}{ext}"
-        cover_path = str(COVER_DIR / cover_filename)
+        cover_path = str(config.COVER_DIR / cover_filename)
         with open(cover_path, "wb") as f:
             shutil.copyfileobj(cover.file, f)
 
@@ -146,7 +162,3 @@ def api_audiobook_prepare():
 def set_default_speaker_settings(name: str = Form(...)):
     update_settings({"default_speaker_profile": name})
     return JSONResponse({"status": "ok"})
-
-@router.post("/api/settings/default-speaker")
-def legacy_set_default_speaker(name: str = Form(...)):
-    return set_default_speaker_settings(name)

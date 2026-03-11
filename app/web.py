@@ -14,10 +14,11 @@ from .config import (
     FRONTEND_DIST
 )
 from .db import init_db
-from .api import projects, chapters, voices, queue, settings, generation, system, analysis, jobs, manager
+from .api import projects, chapters, voices, queue, settings, generation, system, analysis, jobs, migration, manager
 
 app = FastAPI()
 
+# --- Static File Serving ---
 # --- Static File Serving ---
 app.mount("/out/xtts", StaticFiles(directory=str(XTTS_OUT_DIR)), name="out_xtts")
 app.mount("/out/audiobook", StaticFiles(directory=str(AUDIOBOOK_DIR)), name="out_audiobook")
@@ -30,62 +31,15 @@ app.mount("/projects", StaticFiles(directory=str(PROJECTS_DIR)), name="projects"
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
 
-# --- WebSockets ---
-_main_loop = [None]
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    if not _main_loop[0]:
-        try:
-            _main_loop[0] = asyncio.get_running_loop()
-        except RuntimeError: pass
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-    except Exception as e:
-        print(f"WS error: {e}")
-        manager.disconnect(websocket)
-
-# --- Lifecycle Events ---
-@app.on_event("startup")
-async def startup_event():
-    # Capture the main event loop
-    _main_loop[0] = asyncio.get_running_loop()
-
-    # Initialize DB
-    init_db()
-
-    # Ensure directories exist
-    for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR, PROJECTS_DIR]:
-        d.mkdir(parents=True, exist_ok=True)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    from .engines import terminate_all_subprocesses
-    terminate_all_subprocesses()
-
-# --- Include Routers ---
-app.include_router(projects.router)
-app.include_router(chapters.router)
-app.include_router(voices.router)
-app.include_router(queue.router)
-app.include_router(settings.router)
-app.include_router(generation.router)
-app.include_router(system.router)
-app.include_router(analysis.router)
-app.include_router(jobs.router)
-
-# --- Legacy Route Aliases ---
+# --- Legacy Route Aliases (MUST be before routers to avoid 405 conflicts) ---
 @app.post("/upload")
 async def legacy_upload(request: Request):
     from .api.routers.system import upload
+    form = await request.form()
     return await upload(
-        file=(await request.form()).get("file"),
-        mode=(await request.form()).get("mode", "parts"),
-        max_chars=(await request.form()).get("max_chars")
+        file=form.get("file"),
+        mode=form.get("mode", "parts"),
+        max_chars=form.get("max_chars")
     )
 
 @app.post("/create_audiobook")
@@ -99,6 +53,22 @@ async def legacy_create_audiobook(request: Request):
         chapters=form.get("chapters", "[]"),
         cover=form.get("cover")
     )
+
+@app.post("/settings")
+@app.post("/api/settings")
+async def legacy_save_settings(request: Request):
+    from .api.routers.system import save_settings
+    form = await request.form()
+    return save_settings(
+        safe_mode=form.get("safe_mode"),
+        make_mp3=form.get("make_mp3")
+    )
+
+@app.post("/api/settings/default-speaker")
+async def legacy_set_default_speaker(request: Request):
+    from .api.routers.system import set_default_speaker_settings
+    form = await request.form()
+    return set_default_speaker_settings(form.get("name"))
 
 @app.post("/queue/pause")
 async def legacy_pause():
@@ -122,22 +92,105 @@ async def legacy_clear_completed():
 
 @app.post("/api/chapter/reset")
 async def legacy_chapter_reset(request: Request):
-    from .api.routers.chapters import api_delete_chapter_record
+    from .api.routers.chapters import reset_chapter_legacy
     form = await request.form()
-    # Note: tests use chapter_file but my new logic uses chapter_id
-    # We might need a lookup if tests pass files instead of IDs
-    return api_delete_chapter_record(form.get("chapter_id"))
+    return reset_chapter_legacy(form.get("chapter_file"))
+
+@app.delete("/api/chapter/{filename}")
+async def legacy_delete_chapter(filename: str):
+    from .api.routers.chapters import api_delete_legacy_chapter
+    return api_delete_legacy_chapter(filename)
 
 @app.post("/queue/start_xtts")
 async def legacy_start_xtts():
-    # In the new logic, start_xtts is just resume_queue or a no-op if worker is running
+    # Reset metadata for queued jobs (as expected by legacy tests)
+    from .state import get_jobs, update_job
+    jobs = get_jobs()
+    for jid, j in jobs.items():
+        if j.status == "queued":
+            update_job(jid, progress=0.0, started_at=None, finished_at=None, log="", error=None, warning_count=0)
+
     from .api.routers.generation import resume_queue
     return resume_queue()
 
 @app.post("/queue/backfill_mp3")
 async def legacy_backfill_mp3():
-    # Logic for backfill if it still exists
     return JSONResponse({"status": "success"})
+
+# --- WebSockets ---
+_main_loop = [None]
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    if not _main_loop[0]:
+        try:
+            _main_loop[0] = asyncio.get_running_loop()
+        except RuntimeError: pass
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WS error: {e}")
+        manager.disconnect(websocket)
+
+# --- Lifecycle Events ---
+@app.on_event("startup")
+def startup_event():
+    # Capture the main event loop
+    try:
+        _main_loop[0] = asyncio.get_running_loop()
+    except RuntimeError:
+        pass # Handle case where loop isn't running yet
+
+    # Initialize DB
+    init_db()
+
+    # Ensure directories exist
+    for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR, PROJECTS_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Recovery: Delete queued/running jobs on startup (clean slate)
+    from .state import get_jobs, delete_jobs
+    jobs = get_jobs()
+    to_del = [jid for jid, j in jobs.items() if j.status in ("queued", "running")]
+    if to_del:
+        delete_jobs(to_del)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    from .engines import terminate_all_subprocesses
+    terminate_all_subprocesses()
+
+@app.middleware("http")
+async def sync_config_middleware(request: Request, call_next):
+    # Propagate possibly mocked local variables to the config module (for legacy tests)
+    from . import config
+    config.CHAPTER_DIR = CHAPTER_DIR
+    config.XTTS_OUT_DIR = XTTS_OUT_DIR
+    config.AUDIOBOOK_DIR = AUDIOBOOK_DIR
+    config.VOICES_DIR = VOICES_DIR
+    config.SAMPLES_DIR = SAMPLES_DIR
+    config.UPLOAD_DIR = UPLOAD_DIR
+    config.REPORT_DIR = REPORT_DIR
+    config.PROJECTS_DIR = PROJECTS_DIR
+    config.COVER_DIR = COVER_DIR
+    config.ASSETS_DIR = ASSETS_DIR
+    return await call_next(request)
+
+# --- Include Routers ---
+app.include_router(projects.router)
+app.include_router(chapters.router)
+app.include_router(voices.router)
+app.include_router(queue.router)
+app.include_router(settings.router)
+app.include_router(generation.router)
+app.include_router(system.router)
+app.include_router(analysis.router)
+app.include_router(jobs.router)
+app.include_router(migration.router)
 
 # --- Catch-all for React Router ---
 @app.get("/{full_path:path}")

@@ -252,6 +252,11 @@ def cleanup_and_reconcile():
                     if output_file:
                         import subprocess
                         audio_path = pdir / output_file
+                        if not audio_path.exists():
+                            # Fallback: check legacy folder if project-isolated one is missing
+                            from .config import XTTS_OUT_DIR
+                            audio_path = XTTS_OUT_DIR / output_file
+
                         if audio_path.exists():
                             try:
                                 result = subprocess.run(

@@ -4,6 +4,10 @@ from typing import List, Dict, Any, Optional
 from .core import _db_lock, get_connection
 
 def create_speaker(name: str, default_profile_name: Optional[str] = None) -> str:
+    import json
+    from .. import config
+    from pathlib import Path
+
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -14,6 +18,43 @@ def create_speaker(name: str, default_profile_name: Optional[str] = None) -> str
                 VALUES (?, ?, ?, ?, ?)
             """, (speaker_id, name, default_profile_name, now, now))
             conn.commit()
+
+            # Legacy sync: ensure profile directory exists and linked
+            pname = default_profile_name or name
+            profile_dir = config.VOICES_DIR / pname
+
+            # Collision handling: if directory belongs to ANOTHER speaker, use a suffix
+            if profile_dir.exists():
+                meta_path = profile_dir / "profile.json"
+                if meta_path.exists():
+                    try:
+                        existing_meta = json.loads(meta_path.read_text())
+                        if "speaker_id" in existing_meta and existing_meta["speaker_id"] != speaker_id:
+                            # Suffix logic
+                            idx = 1
+                            while (config.VOICES_DIR / f"{pname}_{idx}").exists():
+                                idx += 1
+                            pname = f"{pname}_{idx}"
+                            profile_dir = config.VOICES_DIR / pname
+                    except: pass
+
+            profile_dir.mkdir(parents=True, exist_ok=True)
+
+            meta_path = profile_dir / "profile.json"
+            meta = {}
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                except: pass
+
+            meta["speaker_id"] = speaker_id
+            if "variant_name" not in meta:
+                meta["variant_name"] = "Default"
+            if "speed" not in meta:
+                meta["speed"] = 1.0
+
+            meta_path.write_text(json.dumps(meta, indent=2))
+
             return speaker_id
 
 def get_speaker(speaker_id: str) -> Optional[Dict[str, Any]]:

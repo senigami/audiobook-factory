@@ -3,7 +3,7 @@ from pathlib import Path
 
 BASE_DIR = Path(os.getenv("AUDIOBOOK_BASE_DIR", str(Path(__file__).resolve().parents[1])))
 
-CHAPTER_DIR = Path(os.getenv("CHAPTER_DIR", str(BASE_DIR / "chapters_out")))
+CHAPTER_DIR = Path(os.getenv("CHAPTER_DIR", str(BASE_DIR / "chapters" if (BASE_DIR / "chapters").exists() else BASE_DIR / "chapters_out")))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads")))
 REPORT_DIR = Path(os.getenv("REPORT_DIR", str(BASE_DIR / "reports")))
 XTTS_OUT_DIR = Path(os.getenv("XTTS_OUT_DIR", str(BASE_DIR / "xtts_audio")))

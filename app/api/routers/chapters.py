@@ -112,6 +112,14 @@ def api_update_segment_route(segment_id: str, updates: dict):
     success = update_segment(segment_id, **updates)
     return JSONResponse({"status": "ok" if success else "error"})
 
+@router.put("/segments")
+async def api_legacy_bulk_update_segments_put(request: Request):
+    form = await request.form()
+    sids = form.get("segment_ids", "").split(",")
+    updates = {k: v for k, v in form.items() if k != "segment_ids"}
+    update_segments_bulk(sids, **updates)
+    return JSONResponse({"status": "ok"})
+
 @router.post("/chapters/{chapter_id}/segments/bulk-status")
 def api_bulk_update_segment_status(chapter_id: str, segment_ids: List[str], status: str):
     update_segments_status_bulk(segment_ids, chapter_id, status)
