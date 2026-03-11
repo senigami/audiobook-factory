@@ -404,7 +404,6 @@ def worker_loop(q: "queue.Queue[str]"):
         try:
             j = get_jobs().get(jid)
             if not j or j.id == "mp3-backfill-task":
-                q.task_done()
                 continue
 
             # pause support (unless bypassed by a single-chapter manual enqueue or it's an audiobook job)
@@ -1133,6 +1132,14 @@ def worker_loop(q: "queue.Queue[str]"):
                 frc = wav_to_mp3(out_wav, out_mp3, on_output=on_output, cancel_check=cancel_check)
                 logs.append(f"\n[ffmpeg] rc={frc}\n")
                 if frc == 0 and out_mp3.exists():
+                    if j.chapter_id:
+                        from .db import update_segments_status_bulk
+                        with get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT id FROM chapter_segments WHERE chapter_id = ?", (j.chapter_id,))
+                            sids = [r[0] for r in cursor.fetchall()]
+                            update_segments_status_bulk(sids, j.chapter_id, "done")
+
                     update_job(
                         jid,
                         status="done",
@@ -1145,6 +1152,14 @@ def worker_loop(q: "queue.Queue[str]"):
                         log="".join(logs)
                     )
                 else:
+                    if j.chapter_id:
+                        from .db import update_segments_status_bulk
+                        with get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT id FROM chapter_segments WHERE chapter_id = ?", (j.chapter_id,))
+                            sids = [r[0] for r in cursor.fetchall()]
+                            update_segments_status_bulk(sids, j.chapter_id, "done")
+
                     update_job(
                         jid,
                         status="done",
@@ -1157,6 +1172,14 @@ def worker_loop(q: "queue.Queue[str]"):
                         error="MP3 conversion failed (using WAV fallback)"
                     )
             else:
+                if j.chapter_id:
+                    from .db import update_segments_status_bulk
+                    with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT id FROM chapter_segments WHERE chapter_id = ?", (j.chapter_id,))
+                        sids = [r[0] for r in cursor.fetchall()]
+                        update_segments_status_bulk(sids, j.chapter_id, "done")
+
                 update_job(
                     jid,
                     status="done",

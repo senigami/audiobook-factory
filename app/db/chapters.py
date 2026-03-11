@@ -64,6 +64,11 @@ def update_chapter(chapter_id: str, **updates) -> bool:
             values.append(chapter_id)
             cursor.execute(f"UPDATE chapters SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
+
+            if "text_content" in updates:
+                from .segments import sync_chapter_segments
+                sync_chapter_segments(chapter_id, updates["text_content"])
+
             return cursor.rowcount > 0
 
 def delete_chapter(chapter_id: str) -> bool:

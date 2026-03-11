@@ -59,7 +59,8 @@ async def legacy_create_audiobook(request: Request):
 async def legacy_save_settings(request: Request):
     from .api.routers.system import save_settings
     form = await request.form()
-    return save_settings(
+    return await save_settings(
+        request=request,
         safe_mode=form.get("safe_mode"),
         make_mp3=form.get("make_mp3")
     )

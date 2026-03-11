@@ -53,14 +53,33 @@ def api_home():
         "speakers": speakers,
     }
 
+from fastapi import Request
+
 @router.post("/settings")
-def save_settings(
+async def save_settings(
+    request: Request,
     safe_mode: Optional[bool] = Form(None),
     make_mp3: Optional[bool] = Form(None)
 ):
     updates = {}
-    if safe_mode is not None: updates["safe_mode"] = safe_mode
-    if make_mp3 is not None: updates["make_mp3"] = make_mp3
+
+    # Try parsing as JSON first (common for React fetch/axios calls)
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            for k in ["safe_mode", "make_mp3"]:
+                if k in body:
+                    updates[k] = body[k]
+    except Exception:
+        # Fallback to form data
+        def to_bool(v):
+            if isinstance(v, bool): return v
+            if str(v).lower() == "true": return True
+            if str(v).lower() == "false": return False
+            return v
+
+        if safe_mode is not None: updates["safe_mode"] = to_bool(safe_mode)
+        if make_mp3 is not None: updates["make_mp3"] = to_bool(make_mp3)
 
     if updates:
         update_settings(updates)

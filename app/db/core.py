@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 # Use a connection pool or a single connection with a lock
-_db_lock = threading.Lock()
+_db_lock = threading.RLock()
 DB_PATH = Path(os.getenv("DB_PATH", "audiobook_studio.db"))
 
 def get_connection():

@@ -238,4 +238,8 @@ def test_speaker_profile(name: str):
     )
     put_job(j)
     enqueue(j)
-    return JSONResponse({"status": "ok", "job_id": jid})
+    return JSONResponse({
+        "status": "ok", 
+        "job_id": jid,
+        "audio_url": f"/out/voices/{name}/sample.wav"
+    })

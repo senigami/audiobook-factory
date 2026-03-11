@@ -108,7 +108,21 @@ def api_get_segments(chapter_id: str):
     return JSONResponse({"segments": get_chapter_segments(chapter_id)})
 
 @router.put("/segments/{segment_id}")
-def api_update_segment_route(segment_id: str, updates: dict):
+async def api_update_segment_route(segment_id: str, request: Request):
+    updates = {}
+    try:
+        # 1. Try JSON
+        updates = await request.json()
+    except Exception:
+        # 2. Fallback to Form
+        form = await request.form()
+        updates = {k: v for k, v in form.items()}
+
+    # Normalize: empty strings for IDs/Profiles should be None
+    for k in ["speaker_profile_name", "character_id"]:
+        if k in updates and updates[k] == "":
+            updates[k] = None
+
     success = update_segment(segment_id, **updates)
     return JSONResponse({"status": "ok" if success else "error"})
 
