@@ -112,7 +112,7 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
             strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
             strokeDashoffset={segmentLength + 1.5} // Position on left
             strokeLinecap="round"
-            style={{ opacity: hasM4a ? 0.8 : 0.3, transition: 'all 0.3s' }}
+            style={{ opacity: isStale ? 0 : (hasM4a ? 0.8 : 0.3), transition: 'all 0.3s' }}
           />
 
           {/* MP3 Arc (Top-Right) */}
@@ -124,7 +124,7 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
             strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
             strokeDashoffset={-1.5} // Position on right
             strokeLinecap="round"
-            style={{ opacity: hasMp3 ? 0.8 : 0.3, transition: 'all 0.3s' }}
+            style={{ opacity: isStale ? 0 : (hasMp3 ? 0.8 : 0.3), transition: 'all 0.3s' }}
           />
 
           {/* Base Orb */}
