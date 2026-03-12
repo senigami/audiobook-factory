@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { SpeakerProfile } from '../../types';
 import { 
-    Music, Trash2, Play, Loader2, RefreshCw, FileEdit, X, 
-    Pause, Upload, AlertTriangle, Plus, ChevronUp, Sliders
+    Trash2, Play, Loader2, RefreshCw, FileEdit, 
+    Pause, Sliders
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { SpeedPopover } from './VoiceUtils';
+import { useVariantActions } from '../../hooks/useVariantActions';
+import { SampleManager } from './SampleManager';
 
 interface VariantEditorProps {
     profile: SpeakerProfile;
@@ -28,41 +30,32 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
     onEditTestText, onBuildNow, requestConfirm, testStatus,
     voiceName, showControlsInline = false, buildingProfiles
 }) => {
-    const [localSpeed, setLocalSpeed] = useState<number | null>(null);
-    const [cacheBuster, setCacheBuster] = useState(Date.now());
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [playingSample, setPlayingSample] = useState<string | null>(null);
-    const [hoveredSampleIdx, setHoveredSampleIdx] = useState<number | null>(null);
+    const {
+        localSpeed,
+        setLocalSpeed,
+        isPlaying,
+        setIsPlaying,
+        playingSample,
+        cacheBuster,
+        setCacheBuster,
+        audioRef,
+        sampleAudioRef,
+        handlePlayClick,
+        handlePlaySample,
+        handleSpeedChange,
+        handleDeleteSample,
+        uploadFiles
+    } = useVariantActions(profile, onRefresh, onTest, requestConfirm);
+
     const isBuilding = buildingProfiles[profile.name];
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const sampleAudioRef = useRef<HTMLAudioElement>(null);
     const speedPillRef = useRef<HTMLButtonElement>(null);
     const speed = localSpeed ?? profile.speed;
-
-    const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => {
         if (profile.preview_url) {
             setCacheBuster(Date.now());
         }
-    }, [profile.preview_url, isTesting]);
-
-    const uploadFiles = async (files: FileList | File[]) => {
-        const formData = new FormData();
-        Array.from(files).forEach(f => formData.append('files', f));
-        
-        try {
-            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/upload`, {
-                method: 'POST',
-                body: formData
-            });
-            if (resp.ok) {
-                onRefresh();
-            }
-        } catch (err) {
-            console.error('Failed to upload samples', err);
-        }
-    };
+    }, [profile.preview_url, isTesting, setCacheBuster]);
 
     const handleRebuild = async () => {
         try {
@@ -72,67 +65,8 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
         }
     };
 
-    const handlePlayClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!profile.preview_url) {
-            onTest(profile.name);
-            return;
-        }
-
-        if (playingSample) {
-            sampleAudioRef.current?.pause();
-            setPlayingSample(null);
-        }
-
-        if (audioRef.current) {
-            if (isPlaying) {
-                audioRef.current.pause();
-            } else {
-                audioRef.current.play();
-            }
-        }
-    };
-
-    const handlePlaySample = (s: string) => {
-        if (playingSample === s) {
-            sampleAudioRef.current?.pause();
-            setPlayingSample(null);
-            return;
-        }
-
-        if (isPlaying) {
-            audioRef.current?.pause();
-            setIsPlaying(false);
-        }
-
-        setPlayingSample(s);
-        if (sampleAudioRef.current) {
-            sampleAudioRef.current.src = `/out/voices/${encodeURIComponent(profile.name)}/${encodeURIComponent(s)}?t=${Date.now()}`;
-            sampleAudioRef.current.play().catch(err => {
-                console.error("Playback failed", err);
-                setPlayingSample(null);
-            });
-        }
-    };
-
-    const handleSpeedChange = async (val: number) => {
-        try {
-            const formData = new URLSearchParams();
-            formData.append('speed', val.toString());
-            await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/speed`, {
-                method: 'POST',
-                body: formData
-            });
-            onRefresh();
-        } catch (e) {
-            console.error('Failed to update profile speed', e);
-        } finally {
-            setLocalSpeed(null);
-        }
-    };
-
     const [showSpeedPopover, setShowSpeedPopover] = useState(false);
-    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0 || (profile.samples && profile.samples.length === 0));
+    const [isSamplesExpanded, setIsSamplesExpanded] = useState(profile.wav_count === 0 || profile.samples?.length === 0);
     const [isRebuildRequired, setIsRebuildRequired] = useState(profile.is_rebuild_required || false);
     
     useEffect(() => {
@@ -147,254 +81,16 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
 
     const renderControls = () => (
         <div style={{ padding: '0 1.25rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div 
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    if (e.dataTransfer.files?.length) {
-                        uploadFiles(e.dataTransfer.files);
-                    }
-                }}
-                style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    border: isDragging ? '1px solid var(--accent)' : '1px solid var(--border-light)', 
-                    borderRadius: '12px', 
-                    background: isDragging ? 'rgba(var(--accent-rgb), 0.05)' : 'var(--surface-light)', 
-                    overflow: 'hidden',
-                    position: 'relative',
-                    transition: 'all 0.2s'
-                }}
-            >
-                {isDragging && (
-                    <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(var(--accent-rgb), 0.08)',
-                        backdropFilter: 'blur(2px)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        zIndex: 10,
-                        pointerEvents: 'none',
-                        border: '2px dashed var(--accent)',
-                        borderRadius: '12px'
-                    }}>
-                        <Upload size={24} color="var(--accent)" />
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)' }}>Drop Samples to Add</span>
-                    </div>
-                )}
-
-                <div 
-                    style={{
-                        width: '100%',
-                        padding: '10px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: 'none',
-                        border: 'none',
-                        transition: 'background 0.2s',
-                        userSelect: 'none',
-                        gap: '12px'
-                    }}
-                >
-                    <div 
-                        onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
-                        style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '10px', 
-                            color: 'var(--text-secondary)', 
-                            flex: 1,
-                            cursor: 'pointer',
-                            height: '100%',
-                            padding: '4px 0'
-                        }}
-                    >
-                        <Music size={14} className="text-accent" />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Samples ({profile.samples?.length || 0})</span>
-                        {isRebuildRequired && <AlertTriangle size={12} className="text-warning" />}
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input 
-                            type="file" 
-                            multiple 
-                            accept=".wav" 
-                            onChange={(e) => {
-                                if (e.target.files) uploadFiles(e.target.files);
-                            }} 
-                            style={{ display: 'none' }} 
-                            id={`file-input-${profile.name.replace(/\s+/g, '-')}`}
-                        />
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                document.getElementById(`file-input-${profile.name.replace(/\s+/g, '-')}`)?.click();
-                            }}
-                            className="btn-ghost" 
-                            title="Add Samples Manually" 
-                            style={{ 
-                                padding: '4px', 
-                                height: '28px', 
-                                width: '28px', 
-                                borderRadius: '8px', 
-                                background: 'rgba(255,255,255,0.08)',
-                                border: '1px solid var(--border)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s ease',
-                                color: 'var(--accent)'
-                            }}
-                        >
-                            <Plus size={16} />
-                        </button>
-                        
-                        <div 
-                            onClick={() => setIsSamplesExpanded(!isSamplesExpanded)}
-                            style={{ 
-                                padding: '6px', 
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'transform 0.2s'
-                            }}
-                        >
-                            <ChevronUp 
-                                size={16} 
-                                style={{ 
-                                    transform: isSamplesExpanded ? 'none' : 'rotate(180deg)', 
-                                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    color: 'var(--text-muted)'
-                                }} 
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <AnimatePresence>
-                    {isSamplesExpanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            <div style={{ padding: '0 16px 16px', position: 'relative', minHeight: '40px' }}>
-                                {profile.samples_detailed && profile.samples_detailed.length > 0 ? (
-                                    <>
-                                        {profile.samples_detailed.map((s, idx) => (
-                                            <div 
-                                                key={idx} 
-                                                className="sample-row" 
-                                                onMouseEnter={() => setHoveredSampleIdx(idx)}
-                                                onMouseLeave={() => setHoveredSampleIdx(null)}
-                                                style={{ 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
-                                                    justifyContent: 'space-between',
-                                                    fontSize: '0.8rem',
-                                                    padding: '6px 10px',
-                                                    borderRadius: '6px',
-                                                    background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                                    transition: 'background 0.2s',
-                                                    ...(s.is_new ? {
-                                                        background: 'rgba(var(--accent-rgb), 0.05)',
-                                                        border: '1px dashed var(--accent-glow)'
-                                                    } : {})
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden' }}>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handlePlaySample(s.name);
-                                                        }}
-                                                        className="btn-ghost"
-                                                        style={{
-                                                            padding: 0,
-                                                            width: '24px',
-                                                            height: '24px',
-                                                            borderRadius: '6px',
-                                                            background: playingSample === s.name ? 'var(--accent-glow)' : 'rgba(255,255,255,0.05)',
-                                                            border: playingSample === s.name ? '1px solid var(--accent)' : '1px solid var(--border-light)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            color: playingSample === s.name ? 'var(--accent)' : 'var(--text-muted)',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                    >
-                                                        {playingSample === s.name ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
-                                                    </button>
-
-                                                    {s.is_new && (
-                                                        <span style={{ color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(var(--accent-rgb), 0.1)', padding: '2px 4px', borderRadius: '4px' }}>NEW</span>
-                                                    )}
-                                                    <span style={{ color: 'var(--text-primary)', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {s.name}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>WAV</span>
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            requestConfirm({
-                                                                title: 'Remove Sample',
-                                                                message: `Are you sure you want to remove "${s.name}"? A voice rebuild will be required to apply this change.`,
-                                                                isDestructive: true,
-                                                                onConfirm: async () => {
-                                                                    try {
-                                                                        const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(s.name)}`, {
-                                                                            method: 'DELETE'
-                                                                        });
-                                                                        if (resp.ok) {
-                                                                            onRefresh();
-                                                                        }
-                                                                    } catch (err) {
-                                                                        console.error('Failed to remove sample', err);
-                                                                    }
-                                                                }
-                                                            });
-                                                        }}
-                                                        className="btn-ghost"
-                                                        style={{ 
-                                                            padding: '4px', 
-                                                            borderRadius: '4px', 
-                                                            color: 'var(--text-muted)', 
-                                                            opacity: hoveredSampleIdx === idx ? 1 : 0,
-                                                            pointerEvents: hoveredSampleIdx === idx ? 'auto' : 'none',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                ) : (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                        No samples yet. Drag and drop samples here to start building the voice.
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
+            <SampleManager
+                profile={profile}
+                isSamplesExpanded={isSamplesExpanded}
+                setIsSamplesExpanded={setIsSamplesExpanded}
+                isRebuildRequired={isRebuildRequired}
+                uploadFiles={uploadFiles}
+                playingSample={playingSample}
+                handlePlaySample={handlePlaySample}
+                handleDeleteSample={handleDeleteSample}
+            />
         </div>
     );
 
@@ -411,9 +107,9 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
             )}
             <audio 
                 ref={sampleAudioRef}
-                onPlay={() => setPlayingSample(playingSample)} 
-                onPause={() => setPlayingSample(null)}
-                onEnded={() => setPlayingSample(null)}
+                onPlay={() => {}} // Hook handles state
+                onPause={() => {}} 
+                onEnded={() => {}}
             />
 
             <div 

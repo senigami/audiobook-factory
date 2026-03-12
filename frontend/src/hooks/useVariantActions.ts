@@ -1,0 +1,131 @@
+import { useState, useCallback, useRef } from 'react';
+import type { SpeakerProfile } from '../types';
+
+export function useVariantActions(
+    profile: SpeakerProfile, 
+    onRefresh: () => void,
+    onTest: (name: string) => void,
+    requestConfirm: (config: { title: string; message: string; onConfirm: () => void; isDestructive?: boolean; isAlert?: boolean }) => void
+) {
+    const [localSpeed, setLocalSpeed] = useState<number | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [playingSample, setPlayingSample] = useState<string | null>(null);
+    const [cacheBuster, setCacheBuster] = useState(Date.now());
+    
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const sampleAudioRef = useRef<HTMLAudioElement>(null);
+
+    const handlePlayClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!profile.preview_url) {
+            onTest(profile.name);
+            return;
+        }
+
+        if (playingSample) {
+            sampleAudioRef.current?.pause();
+            setPlayingSample(null);
+        }
+
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play();
+            }
+        }
+    }, [profile.preview_url, profile.name, onTest, playingSample, isPlaying]);
+
+    const handlePlaySample = useCallback((s: string) => {
+        if (playingSample === s) {
+            sampleAudioRef.current?.pause();
+            setPlayingSample(null);
+            return;
+        }
+
+        if (isPlaying) {
+            audioRef.current?.pause();
+            setIsPlaying(false);
+        }
+
+        setPlayingSample(s);
+        if (sampleAudioRef.current) {
+            sampleAudioRef.current.src = `/out/voices/${encodeURIComponent(profile.name)}/${encodeURIComponent(s)}?t=${Date.now()}`;
+            sampleAudioRef.current.play().catch(err => {
+                console.error("Playback failed", err);
+                setPlayingSample(null);
+            });
+        }
+    }, [profile.name, playingSample, isPlaying]);
+
+    const handleSpeedChange = useCallback(async (val: number) => {
+        try {
+            const formData = new URLSearchParams();
+            formData.append('speed', val.toString());
+            await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/speed`, {
+                method: 'POST',
+                body: formData
+            });
+            onRefresh();
+        } catch (e) {
+            console.error('Failed to update profile speed', e);
+        } finally {
+            setLocalSpeed(null);
+        }
+    }, [profile.name, onRefresh]);
+
+    const handleDeleteSample = useCallback((sampleName: string) => {
+        requestConfirm({
+            title: 'Remove Sample',
+            message: `Are you sure you want to remove "${sampleName}"? A voice rebuild will be required to apply this change.`,
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/${encodeURIComponent(sampleName)}`, {
+                        method: 'DELETE'
+                    });
+                    if (resp.ok) {
+                        onRefresh();
+                    }
+                } catch (err) {
+                    console.error('Failed to remove sample', err);
+                }
+            }
+        });
+    }, [profile.name, onRefresh, requestConfirm]);
+
+    const uploadFiles = useCallback(async (files: FileList | File[]) => {
+        const formData = new FormData();
+        Array.from(files).forEach(f => formData.append('files', f));
+        
+        try {
+            const resp = await fetch(`/api/speaker-profiles/${encodeURIComponent(profile.name)}/samples/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                onRefresh();
+            }
+        } catch (err) {
+            console.error('Failed to upload samples', err);
+        }
+    }, [profile.name, onRefresh]);
+
+    return {
+        localSpeed,
+        setLocalSpeed,
+        isPlaying,
+        setIsPlaying,
+        playingSample,
+        setPlayingSample,
+        cacheBuster,
+        setCacheBuster,
+        audioRef,
+        sampleAudioRef,
+        handlePlayClick,
+        handlePlaySample,
+        handleSpeedChange,
+        handleDeleteSample,
+        uploadFiles
+    };
+}

@@ -89,132 +89,15 @@ def update_settings(**updates) -> None:
     state["settings"].update(updates)
     save_state(state)
 
-# ---------------
-# Text processing
-# ---------------
-_SENT_SPLIT_RE = re.compile(r"(.+?)(?:(?<=[.!?])\s+|$)", re.DOTALL)
-
-def split_sentences_with_spans(text: str):
-    for m in _SENT_SPLIT_RE.finditer(text):
-        sent = m.group(1)
-        if not sent.strip():
-            continue
-        yield sent, m.start(1), m.end(1)
-
-def approx_line_col(text: str, start_idx: int) -> tuple[int, int]:
-    line = text.count("\n", 0, start_idx) + 1
-    last_nl = text.rfind("\n", 0, start_idx)
-    col = start_idx + 1 if last_nl == -1 else start_idx - last_nl
-    return line, col
-
-def make_context(text: str, start: int, end: int, window: int = 120) -> str:
-    left = max(0, start - window)
-    right = min(len(text), end + window)
-    ctx = text[left:right]
-    prefix = "..." if left > 0 else ""
-    suffix = "..." if right < len(text) else ""
-    return (prefix + ctx + suffix).strip()
-
-def safe_split_long_sentences(text: str, target: int = SAFE_SPLIT_TARGET) -> str:
-    """
-    Heuristic: if a sentence exceeds target chars, split it at best available delimiters.
-    We prefer: ". " already ok; otherwise split on ";", " - ", ",", ":" then whitespace.
-    This is intentionally conservative (tries to preserve meaning).
-    """
-    def split_one(s: str) -> List[str]:
-        s = s.strip()
-        if len(s) <= target:
-            return [s]
-        # Prefer splitting points
-        seps = ["; ", " - ", ", ", ": ", " and ", " but ", " so ", " because "]
-        for sep in seps:
-            if sep in s:
-                parts = s.split(sep)
-                rebuilt = []
-                buf = ""
-                for i, p in enumerate(parts):
-                    chunk = (p if i == 0 else (sep.strip() + " " + p)).strip()
-                    if not buf:
-                        buf = chunk
-                    elif len(buf) + 1 + len(chunk) <= target:
-                        buf = (buf + " " + chunk).strip()
-                    else:
-                        rebuilt.append(buf.strip())
-                        buf = chunk
-                if buf:
-                    rebuilt.append(buf.strip())
-                # If we actually reduced size, accept; else keep trying other separators
-                if max(len(x) for x in rebuilt) < len(s):
-                    # add periods to enforce sentence boundaries
-                    return [x.rstrip(" .") + "." for x in rebuilt]
-        # Last resort: hard wrap at nearest whitespace
-        out = []
-        start = 0
-        while start < len(s):
-            end = min(len(s), start + target)
-            if end < len(s):
-                ws = s.rfind(" ", start, end)
-                if ws > start + 60:
-                    end = ws
-            out.append(s[start:end].strip().rstrip(" .") + ".")
-            start = end
-        return out
-
-    pieces = []
-    for sent, _, _ in split_sentences_with_spans(text):
-        s = sent.strip()
-        if len(s) > target:
-            pieces.extend(split_one(s))
-        else:
-            pieces.append(s)
-    # preserve paragraph breaks loosely
-    return "\n".join(pieces)
-
-def sanitize_for_xtts(text: str) -> str:
-    """
-    Advanced sanitization to prevent XTTS hallucinations (e.g., 'nahnday').
-    Based on Gemini feedback: handles smart quotes, ellipses, and non-ASCII chars.
-    """
-    import re
-    # Convert smart quotes to straight quotes
-    text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
-    # Replace ellipses with a comma for better natural pauses without breaking the thought
-    text = text.replace('...', ', ')
-    # Remove any non-standard characters/emojis
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
-    # Collapse multiple spaces and trim
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
-def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT) -> str:
-    """
-    Greedily packs sentences into larger chunks as close to the limit as possible.
-    This gives XTTS the maximum context and prevents choppiness from short lines.
-    """
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    if not lines:
-        return ""
-
-    packed = []
-    current_chunk = ""
-
-    for line in lines:
-        # Check if adding this line (plus a space) exceeds the limit
-        # We use a small buffer (5 chars) for safety
-        if len(current_chunk) + len(line) + 1 < (limit - 5):
-            if current_chunk:
-                current_chunk += " " + line
-            else:
-                current_chunk = line
-        else:
-            if current_chunk:
-                packed.append(current_chunk)
-            current_chunk = line
-
-    if current_chunk:
-        packed.append(current_chunk)
-
-    return '\n'.join(packed)
+from app.utils.text_processing import (
+    split_sentences_with_spans,
+    approx_line_col,
+    make_context,
+    safe_split_long_sentences,
+    sanitize_for_xtts,
+    pack_text_to_limit
+)
+from app.dashboard_templates import INDEX_HTML, JOB_HTML
 
 # ----------------
 # Chapter handling
@@ -281,13 +164,13 @@ def xtts_generate(chapter_path: Path, out_wav: Path, safe_mode: bool, cancel_eve
 
     text = chapter_path.read_text(encoding="utf-8", errors="replace").strip()
     if safe_mode:
-        text = safe_split_long_sentences(text)
+        text = safe_split_long_sentences(text, target=SAFE_SPLIT_TARGET)
 
     # Apply advanced sanitization for XTTS stability
     text = sanitize_for_xtts(text)
 
     # Pack sentences to the limit to maximize context and stability
-    text = pack_text_to_limit(text)
+    text = pack_text_to_limit(text, limit=SENT_CHAR_LIMIT)
 
     cmd = (
         f"source {shlex.quote(str(XTTS_ENV_ACTIVATE))} && "
@@ -422,183 +305,6 @@ def worker_loop():
 worker_thread = threading.Thread(target=worker_loop, daemon=True)
 worker_thread.start()
 
-# -------------
-# HTML template
-# -------------
-INDEX_HTML = r"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>TTS Dashboard</title>
-<style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 18px; }
-  .row { display: flex; gap: 18px; align-items: flex-start; }
-  .panel { border: 1px solid #ddd; border-radius: 12px; padding: 14px; flex: 1; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
-  .tag { padding: 2px 8px; border-radius: 999px; border: 1px solid #ccc; font-size: 12px; }
-  .btnrow form { display:inline; margin-right: 8px; }
-  .small { color:#444; font-size: 13px; }
-  .warn { color:#b00020; }
-  .ok { color:#0b6; }
-</style>
-</head>
-<body>
-
-<h2>TTS Dashboard</h2>
-
-<div class="panel">
-  <h3>Quick Start (for Future You)</h3>
-  <div class="small">
-    <ol>
-      <li>Put chapter text files in <span class="mono">chapters_out/</span> (one chapter per .txt).</li>
-      <li>Put your XTTS reference voice in <span class="mono">narrator_clean.wav</span> (same folder as this app).</li>
-      <li>Run the server:
-        <div class="mono">cd ~/tts-dashboard
-source venv/bin/activate
-uvicorn app:app --reload --port 8123</div>
-      </li>
-      <li>Open: <span class="mono">http://127.0.0.1:8123</span></li>
-      <li>Recommended: click <b>Analyze long sentences</b> before generating XTTS.</li>
-          <li>Outputs: <span class="mono">xtts_audio/</span></li>
-    </ol>
-    <p><b>Why Safe Mode?</b> XTTS may truncate “sentences” longer than {{ sent_limit }} chars. Safe Mode auto-splits long sentences before synthesis.</p>
-  </div>
-</div>
-
-<div class="row">
-  <div class="panel">
-    <h3>Chapters</h3>
-    <p class="small">Found <b>{{ chapter_count }}</b> files in <span class="mono">chapters_out/</span></p>
-
-    <div class="btnrow">
-      <form method="post" action="/analyze"><button type="submit">Analyze long sentences</button></form>
-      <form method="post" action="/enqueue_missing"><button type="submit">Enqueue missing (XTTS)</button></form>
-      <form method="post" action="/enqueue_next"><button type="submit">Generate next chapter</button></form>
-    </div>
-
-    <hr/>
-    <p class="small">
-      Default settings:
-      <b>Safe Mode:</b> {{ "ON" if settings.safe_mode else "OFF" }} |
-      <b>MP3:</b> {{ "ON" if settings.make_mp3 else "OFF" }}
-    </p>
-
-    <form method="post" action="/settings" class="small">
-      <label><input type="checkbox" name="safe_mode" value="1" {% if settings.safe_mode %}checked{% endif %}/> Safe Mode (split long sentences)</label><br/>
-      <label><input type="checkbox" name="make_mp3" value="1" {% if settings.make_mp3 %}checked{% endif %}/> Convert WAV → MP3</label><br/>
-      <button type="submit">Save settings</button>
-    </form>
-
-    <hr/>
-    <table>
-      <tr><th>File</th><th>Actions</th></tr>
-      {% for c in chapters %}
-      <tr>
-        <td>
-          {{ c }}
-          {% if c in done_xtts %}<span class="tag ok">XTTS done</span>{% endif %}
-        </td>
-        <td>
-          <form method="post" action="/enqueue" style="display:inline">
-            <input type="hidden" name="chapter_file" value="{{ c }}"/>
-            <input type="hidden" name="engine" value="xtts"/>
-            <button type="submit">Enqueue XTTS</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-  </div>
-
-  <div class="panel">
-    <h3>Queue + Jobs</h3>
-
-    <div class="btnrow">
-      <form method="post" action="/pause"><button type="submit">{{ "Resume" if paused else "Pause" }}</button></form>
-      <form method="post" action="/clear_failed"><button type="submit">Clear failed jobs</button></form>
-    </div>
-
-    <p class="small">
-      <b>XTTS narrator wav:</b>
-      {% if narrator_ok %}<span class="ok">Found</span>{% else %}<span class="warn">Missing (narrator_clean.wav)</span>{% endif %}
-      <br/>
-      <b>Latest report:</b> {% if latest_report %}<a href="/report/{{ latest_report }}">{{ latest_report }}</a>{% else %}—{% endif %}
-    </p>
-
-    <table>
-      <tr><th>Status</th><th>Engine</th><th>Chapter</th><th>Output</th><th>Actions</th></tr>
-      {% for j in jobs %}
-      <tr>
-        <td><span class="tag">{{ j.status }}</span></td>
-        <td>{{ j.engine }}</td>
-        <td>{{ j.chapter_file }}</td>
-        <td>
-          {% if j.output_mp3 %}
-            <a href="/out/{{ j.engine }}/{{ j.output_mp3 }}">mp3</a>
-          {% endif %}
-          {% if j.output_wav %}
-            | <a href="/out/{{ j.engine }}/{{ j.output_wav }}">wav</a>
-          {% endif %}
-        </td>
-        <td>
-          <a href="/job/{{ j.id }}">View</a>
-          {% if j.status in ["queued","running"] %}
-            | <form method="post" action="/cancel" style="display:inline">
-                <input type="hidden" name="job_id" value="{{ j.id }}"/>
-                <button type="submit">Cancel</button>
-              </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-
-    <p class="small"><a href="/state">Raw state JSON</a></p>
-  </div>
-</div>
-
-</body>
-</html>
-"""
-
-JOB_HTML = r"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>Job {{ job.id }}</title>
-<style>
-body { font-family: -apple-system, system-ui, sans-serif; margin: 18px; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; font-size: 12px; border:1px solid #ddd; padding:10px; border-radius: 10px;}
-.tag { padding: 2px 8px; border-radius: 999px; border: 1px solid #ccc; font-size: 12px; }
-.warn { color:#b00020; }
-</style>
-</head>
-<body>
-  <p><a href="/">← Back</a></p>
-  <h2>Job {{ job.id }}</h2>
-  <p><b>Status:</b> <span class="tag">{{ job.status }}</span></p>
-  <p><b>Engine:</b> {{ job.engine }}</p>
-  <p><b>Chapter:</b> {{ job.chapter_file }}</p>
-  <p><b>Safe Mode:</b> {{ job.safe_mode }}</p>
-  <p><b>MP3:</b> {{ job.make_mp3 }}</p>
-  <p><b>Output:</b>
-    {% if job.output_mp3 %}<a href="/out/{{ job.engine }}/{{ job.output_mp3 }}">mp3</a>{% endif %}
-    {% if job.output_wav %} | <a href="/out/{{ job.engine }}/{{ job.output_wav }}">wav</a>{% endif %}
-  </p>
-  {% if job.error %}<p class="warn"><b>Error:</b> {{ job.error }}</p>{% endif %}
-  <h3>Log</h3>
-  <div class="mono">{{ job.log }}</div>
-</body>
-</html>
-"""
-
-# -------------
-# Routes
-# -------------
 @app.get("/", response_class=HTMLResponse)
 def index():
     chapters = [p.name for p in list_chapters()]
