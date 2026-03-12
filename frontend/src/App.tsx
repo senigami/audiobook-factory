@@ -89,7 +89,7 @@ function App() {
         }}>
           <div style={{ flex: 1 }}>
             <Routes>
-              <Route path="/" element={<ProjectLibrary />} />
+              <Route path="/" element={<ProjectLibrary onSelectProject={(id) => navigate(`/project/${id}`)} />} />
               <Route path="/project/:projectId" element={
                 <ProjectView 
                   jobs={jobs}

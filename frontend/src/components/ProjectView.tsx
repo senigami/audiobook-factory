@@ -128,8 +128,8 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ jobs, speakerProfiles,
                         ...(speakerProfiles || []).filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id))
                         .map(p => ({ id: `unassigned-${p.name}`, name: p.name }))];
 
-  const totalRuntime = chapters.reduce((acc, c) => acc + (c.audio_status === 'done' ? (c.audio_length_seconds || c.predicted_audio_length || 0) : 0), 0);
-  const totalPredicted = chapters.reduce((acc, c) => acc + (c.predicted_audio_length || 0), 0);
+  const totalRuntime = (Array.isArray(chapters) ? chapters : []).reduce((acc, c) => acc + (c.audio_status === 'done' ? (c.audio_length_seconds || c.predicted_audio_length || 0) : 0), 0);
+  const totalPredicted = (Array.isArray(chapters) ? chapters : []).reduce((acc, c) => acc + (c.predicted_audio_length || 0), 0);
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '4rem' }}>

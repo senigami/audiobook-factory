@@ -156,7 +156,7 @@ def startup_event():
     # Recovery: Delete queued/running jobs on startup (clean slate)
     from .state import get_jobs, delete_jobs
     jobs = get_jobs()
-    to_del = [jid for jid, j in jobs.items() if j.status in ("queued", "running")]
+    to_del = [jid for jid, j in jobs.items() if j.status in ("queued", "running", "preparing", "finalizing")]
     if to_del:
         delete_jobs(to_del)
 
