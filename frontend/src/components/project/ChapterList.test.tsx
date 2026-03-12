@@ -72,4 +72,23 @@ describe('ChapterList', () => {
     expect(sources2[0].getAttribute('src')).toBe('/projects/proj-1/audio/chap-456.mp3');
     expect(sources2[1].getAttribute('src')).toBe('/projects/proj-1/audio/chap-456.wav');
   });
+
+  it('renders spinner when audio_status is processing even if no activeJob', () => {
+    const processingChapter: Chapter = {
+      id: 'chap-789',
+      project_id: 'proj-1',
+      title: 'Processing Chapter',
+      audio_status: 'processing',
+      audio_file_path: null,
+      has_wav: false,
+      has_mp3: false,
+      sort_order: 3
+    } as any;
+
+    const { container } = render(<ChapterList {...defaultProps} chapters={[processingChapter]} />);
+    
+    // The StatusOrb renders a RefreshCw icon with animate-spin class when processing
+    const spinner = container.querySelector('.animate-spin');
+    expect(spinner).toBeTruthy();
+  });
 });

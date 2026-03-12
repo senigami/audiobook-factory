@@ -59,6 +59,64 @@ def test_startup_recovery_clears_stuck_states():
     assert "stuck-finalizing" not in remaining
     assert "safe-done" in remaining
 
+def test_startup_recovery_clears_stuck_chapter_status():
+    from app.db.reconcile import reconcile_all_chapter_statuses
+    from app.db.core import get_connection
+
+    # Setup: Create a project and chapter in 'processing' state
+    pid = create_project("Ghost Project")
+    cid = create_chapter(pid, "Ghost Chapter", "content")
+
+    with get_connection() as conn:
+        conn.execute("UPDATE chapters SET audio_status = 'processing' WHERE id = ?", (cid,))
+        conn.commit()
+
+    # Run reconciliation with NO active chapter IDs
+    reconcile_all_chapter_statuses(set())
+
+    # Verify it was reset
+    with get_connection() as conn:
+        row = conn.execute("SELECT audio_status FROM chapters WHERE id = ?", (cid,)).fetchone()
+        assert row[0] == 'unprocessed'
+
+def test_audiobook_listing_finds_png_cover():
+    pid = create_project("PNG Project")
+    # Simulate an m4b file in the project's m4b dir
+    from app.config import get_project_m4b_dir
+    m4b_dir = get_project_m4b_dir(pid)
+    m4b_dir.mkdir(parents=True, exist_ok=True)
+
+    m4b_file = m4b_dir / "test_book.m4b"
+    m4b_file.write_text("dummy m4b content")
+
+    png_file = m4b_dir / "test_book.png"
+    png_file.write_text("fake png data")
+
+    response = client.get(f"/api/projects/{pid}/audiobooks")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Find our book in the list
+    book = next(b for b in data if b["filename"] == "test_book.m4b")
+    assert book["cover_url"] == f"/projects/{pid}/m4b/test_book.png"
+
+def test_state_pruning():
+    from app.state import put_job, Job, get_jobs, prune_completed_jobs
+    import time
+
+    # Add 60 done jobs
+    for i in range(60):
+        jid = f"prune-this-{i}"
+        put_job(Job(id=jid, status="done", created_at=time.time(), engine="xtts", chapter_file=f"file_{i}.txt", finished_at=time.time()))
+
+    # Trigger pruning
+    prune_completed_jobs()
+
+    # Should only have 50 (plus whatever else was there, but it keeps 50 most recent terminal ones)
+    remaining = get_jobs()
+    terminal_remaining = [j for j in remaining.values() if j.status in ("done", "failed", "cancelled")]
+    assert len(terminal_remaining) <= 50
+
 def test_stream_chapter_fallback_logic():
     # Test that it falls back to {chapter_id}_0.wav even if NOT in DB
     pid = create_project("Fallback Project")

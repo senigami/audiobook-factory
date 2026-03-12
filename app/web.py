@@ -153,12 +153,29 @@ def startup_event():
     for d in [XTTS_OUT_DIR, AUDIOBOOK_DIR, VOICES_DIR, SAMPLES_DIR, UPLOAD_DIR, CHAPTER_DIR, REPORT_DIR, COVER_DIR, ASSETS_DIR, PROJECTS_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # Recovery: Delete queued/running jobs on startup (clean slate)
+    # 1. Clear out any stuck jobs from state.json
     from .state import get_jobs, delete_jobs
     jobs = get_jobs()
-    to_del = [jid for jid, j in jobs.items() if j.status in ("queued", "running", "preparing", "finalizing")]
-    if to_del:
-        delete_jobs(to_del)
+    stuck_jids = [jid for jid, j in jobs.items() if j.status in ("queued", "running", "preparing", "finalizing")]
+    if stuck_jids:
+        delete_jobs(stuck_jids)
+        print(f"Startup: Cleared {len(stuck_jids)} stuck jobs from memory state.")
+
+    # 2. Reconcile Database tables (Clear ghost indicators)
+    try:
+        from .db.reconcile import reconcile_all_chapter_statuses
+        from .db.queue import reconcile_queue_status
+
+        # Fresh job list after deletion
+        remaining_jobs = get_jobs()
+        active_ids = list(remaining_jobs.keys())
+        active_chapter_ids = {j.chapter_id for j in remaining_jobs.values() if j.chapter_id}
+
+        reconcile_all_chapter_statuses(active_chapter_ids)
+        reconcile_queue_status(active_ids)
+        print("Startup: Database reconciliation complete.")
+    except Exception as e:
+        print(f"Startup Warning: Database reconciliation failed: {e}")
 
 @app.on_event("shutdown")
 def shutdown_event():

@@ -251,6 +251,39 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
             except Exception as e:
                 print(f"Error in job listener: {e}")
 
+        # PRUNING: If job is done/failed/cancelled, we can remove it from state.json
+        # because the historical record is now in SQLite's processing_queue table.
+        if updates.get("status", j.get("status")) in ("done", "failed", "cancelled"):
+            # We keep it just long enough for the final broadcast to reach clients (approx 1s)
+            # Or we can just prune it now. Let's do a 'soft' prune by calling a dedicated function.
+            prune_completed_jobs()
+
+
+def prune_completed_jobs() -> None:
+    """
+    Removes jobs from the state if they are in a terminal state.
+    We keep a small buffer of recent completions (e.g. 50) to allow UI transitions.
+    """
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        jobs = state.get("jobs", {})
+
+        terminal_jobs = [
+            (jid, jdata.get("finished_at", 0) or jdata.get("created_at", 0))
+            for jid, jdata in jobs.items()
+            if jdata.get("status") in ("done", "failed", "cancelled")
+        ]
+
+        # Sort by completion time, keep the most recent 50
+        terminal_jobs.sort(key=lambda x: x[1], reverse=True)
+        to_prune = [jid for jid, _ in terminal_jobs[50:]]
+
+        if to_prune:
+            for jid in to_prune:
+                del jobs[jid]
+            _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+            print(f"DEBUG: Pruned {len(to_prune)} terminal jobs from state.json")
+
 
 def delete_jobs(job_ids: list[str]) -> None:
     with _STATE_LOCK:

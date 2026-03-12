@@ -105,3 +105,25 @@ def reconcile_project_audio(project_id: str):
                     """, (best_file, duration, cid))
 
             conn.commit()
+
+
+def reconcile_all_chapter_statuses(active_chapter_ids: set[str]):
+    """
+    Resets any chapters marked as 'processing' to 'unprocessed' if their ID
+    is not in the provided active set. This clears 'stuck' indicators.
+    """
+    with _db_lock:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. First, any chapter that is 'processing' but not in our active set
+            if active_chapter_ids:
+                placeholders = ','.join(['?'] * len(active_chapter_ids))
+                params = list(active_chapter_ids)
+                cursor.execute(f"UPDATE chapters SET audio_status = 'unprocessed' WHERE audio_status = 'processing' AND id NOT IN ({placeholders})", params)
+            else:
+                cursor.execute("UPDATE chapters SET audio_status = 'unprocessed' WHERE audio_status = 'processing'")
+
+            # 2. Also ensure that if they are 'done', they actually have a file_path
+            cursor.execute("UPDATE chapters SET audio_status = 'unprocessed' WHERE audio_status = 'done' AND (audio_file_path IS NULL OR audio_file_path = '')")
+
+            conn.commit()

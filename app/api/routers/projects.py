@@ -148,12 +148,16 @@ def api_list_project_audiobooks(project_id: str):
                     item["title"] = fmt["tags"]["title"]
         except: pass
 
-        target_jpg = p.with_suffix(".jpg")
-        if target_jpg.exists() and target_jpg.stat().st_size > 0:
-            if "/out/audiobook/" in url:
-                item["cover_url"] = f"/out/audiobook/{target_jpg.name}"
-            else:
-                item["cover_url"] = url.replace(".m4b", ".jpg")
+        # Look for cover image with multiple extensions
+        item["cover_url"] = None
+        for ext in [".jpg", ".png", ".jpeg", ".webp"]:
+            target_img = p.with_suffix(ext)
+            if target_img.exists() and target_img.stat().st_size > 0:
+                if "/out/audiobook/" in url:
+                    item["cover_url"] = f"/out/audiobook/{target_img.name}"
+                else:
+                    item["cover_url"] = url.replace(".m4b", ext)
+                break
         res.append(item)
     return res
 
