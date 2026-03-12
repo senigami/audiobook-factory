@@ -120,7 +120,7 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
                     alignItems: 'center',
                     borderBottom: profile.wav_count > 0 ? '1px solid var(--border)' : 'none',
                     transition: 'border-bottom 0.2s',
-                    background: 'var(--as-info-tint)'
+                    background: 'rgba(var(--accent-rgb), 0.02)'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
@@ -269,8 +269,8 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
 
             <div style={{ 
                 padding: '1.25rem', 
-                borderTop: '1px solid var(--border)', 
-                background: 'var(--as-info-tint)',
+                borderTop: '1px solid var(--border-light)', 
+                background: 'rgba(239, 68, 68, 0.02)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',

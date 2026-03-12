@@ -46,7 +46,7 @@ export const SampleManager: React.FC<SampleManagerProps> = ({
                 flexDirection: 'column', 
                 border: isDragging ? '1px solid var(--accent)' : '1px solid var(--border-light)', 
                 borderRadius: '12px', 
-                background: isDragging ? 'rgba(var(--accent-rgb), 0.05)' : 'var(--surface-light)', 
+                background: isDragging ? 'var(--accent-glow)' : 'var(--surface)', 
                 overflow: 'hidden',
                 position: 'relative',
                 transition: 'all 0.2s'

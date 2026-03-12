@@ -7,11 +7,7 @@ import { GlassInput } from './GlassInput';
 import { GhostButton } from './GhostButton';
 import { NarratorCard } from './voices/NarratorCard';
 import { useVoiceManagement } from '../hooks/useVoiceManagement';
-
-
-
-
-
+import { VoicesModals } from './VoicesModals';
 
 interface VoicesTabProps {
     onRefresh: () => void;
@@ -19,9 +15,15 @@ interface VoicesTabProps {
     testProgress: Record<string, { progress: number; started_at?: number }>;
 }
 
-import { VoicesModals } from './VoicesModals';
-
 export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles, testProgress }) => {
+    const [confirmConfig, setConfirmConfig] = useState<{
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDestructive?: boolean;
+        isAlert?: boolean;
+    } | null>(null);
+
     const {
         speakers,
         testingProfile,
@@ -40,13 +42,6 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [variantName, setVariantName] = useState('');
     const [isSavingText, setIsSavingText] = useState(false);
     const [showGuide, setShowGuide] = useState(false);
-    const [confirmConfig, setConfirmConfig] = useState<{
-        title: string;
-        message: string;
-        onConfirm: () => void;
-        isDestructive?: boolean;
-        isAlert?: boolean;
-    } | null>(null);
 
     // Sync state with editing profile
     useEffect(() => {
@@ -66,9 +61,9 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
     const [renameSpeakerId, setRenameSpeakerId] = useState<string | null>(null);
     const [originalSpeakerName, setOriginalSpeakerName] = useState('');
-    const [addVariantSpeaker, setAddVariantSpeaker] = useState<{ speaker: Speaker, nextVariantNum: number } | null>(null);
-    const [newVoiceName, setNewVoiceName] = useState('');
     const [newSpeakerName, setNewSpeakerName] = useState('');
+    const [newVoiceName, setNewVoiceName] = useState('');
+    const [addVariantSpeaker, setAddVariantSpeaker] = useState<{ speaker: Speaker; nextVariantNum: number } | null>(null);
     const [newVariantNameModal, setNewVariantNameModal] = useState('');
     const [isCreatingVoice, setIsCreatingVoice] = useState(false);
     const [isAddingVariantModal, setIsAddingVariantModal] = useState(false);
@@ -131,7 +126,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                 method: 'POST'
             });
             const result = await resp.json();
-            if (result.status === 'ok') {
+            if (result.status === 'ok' || result.status === 'success') {
                 setTestText(result.test_text);
                 onRefresh();
             }
@@ -144,10 +139,11 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
 
     const handleCreateVoice = async () => {
         setIsCreatingVoice(true);
+        const nameToUse = newVoiceName.trim();
         try {
             const resp = await fetch('/api/speakers', {
                 method: 'POST',
-                body: new URLSearchParams({ name: newVoiceName.trim() })
+                body: new URLSearchParams({ name: nameToUse })
             });
             if (resp.ok) {
                 const data = await resp.json();
@@ -276,86 +272,138 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
         }
     };
 
-
     // --- Data Processing ---
-    // Merge speakers and profiles into a unified Voice concept
-    const allVoices = [
-        ...speakers.map(s => ({
-            id: s.id,
-            name: s.name,
-            profiles: speakerProfiles.filter(p => p.speaker_id === s.id)
-        })),
-        ...speakerProfiles
-            .filter(p => !p.speaker_id)
-            .map(p => ({
-                id: `unassigned-${p.name}`,
-                name: p.name,
-                profiles: [p]
-            }))
-    ].sort((a, b) => a.name.localeCompare(b.name));
+    const voices = (speakers || []).map(speaker => {
+        const pList = speakerProfiles.filter(p => p.speaker_id === speaker.id);
+        if (pList.length === 0) {
+            pList.push({
+                name: speaker.name,
+                speaker_id: speaker.id,
+                variant_name: 'Default',
+                wav_count: 0,
+                speed: 1.0,
+                is_default: false,
+                preview_url: null,
+                wav_files: []
+            } as SpeakerProfile);
+        }
+        return {
+            id: speaker.id,
+            name: speaker.name,
+            profiles: pList
+        };
+    });
 
-    const filteredVoices = allVoices.filter(v =>
-        v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.profiles.some(p => (p.variant_name || p.name).toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const unassigned = speakerProfiles.filter(p => !p.speaker_id || !speakers.some(s => s.id === p.speaker_id));
+    const unassignedVoices = unassigned.map(p => ({
+        id: `unassigned-${p.name}`,
+        name: p.name,
+        profiles: [p],
+        isUnassigned: true
+    }));
+
+    const allVoices = [...voices, ...unassignedVoices];
+
+    const filteredVoices = allVoices.filter(v => {
+        const query = searchQuery.toLowerCase();
+        return v.name.toLowerCase().includes(query) || 
+               v.profiles.some(p => (p.variant_name || p.name).toLowerCase().includes(query));
+    }).sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-        <div className="flex flex-col h-full bg-bg overflow-hidden relative">
-            <div className="flex-shrink-0 p-8 pt-6 pb-2">
-                <div className="flex flex-col gap-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-                                <User className="text-accent" size={24} />
-                                AI Voice Lab
-                            </h2>
-                            <p className="text-sm text-text-muted mt-1">Manage and train custom voice profiles</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <GhostButton icon={Info} onClick={() => setShowGuide(true)} label="Guide" />
-                            <button
-                                onClick={() => setIsCreateModalOpen(true)}
-                                className="px-5 h-11 bg-accent hover:bg-accent-hover text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-accent active:scale-95"
-                            >
-                                <Plus size={20} />
-                                New Voice
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="relative group max-w-xl">
-                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none transition-colors group-focus-within:text-accent text-text-muted">
-                            <Search size={18} />
-                        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            {/* STYLES REVERTED TO MASTER DESIGN */}
+            <div style={{ 
+                padding: '1.25rem 2rem', 
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'var(--surface-light)',
+                zIndex: 10
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Voices</h2>
+                    
+                    <div style={{ position: 'relative' }}>
                         <GlassInput
-                            placeholder="Search voices or variants..."
+                            icon={<Search size={16} />}
+                            placeholder="Search voices..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-12 h-12 text-base bg-surface-alt/50"
+                            className="search-responsive"
+                            style={{
+                                width: '240px',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                            }}
+                            onFocus={(e) => {
+                                e.currentTarget.style.width = '320px';
+                            }}
+                            onBlur={(e) => {
+                                e.currentTarget.style.width = '240px';
+                            }}
                         />
                     </div>
                 </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <GhostButton 
+                        onClick={() => setIsCreateModalOpen(true)} 
+                        icon={Plus}
+                        label="New Voice"
+                    />
+                    
+                    <div className="mobile-hide" style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
+                    
+                    <GhostButton 
+                        onClick={() => setShowGuide(true)} 
+                        icon={Info}
+                        label="Recording Guide"
+                    />
+                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-8 pb-8 custom-scrollbar pt-4">
-                <div className="grid grid-cols-1 gap-6 max-w-5xl">
-                    {filteredVoices.length === 0 ? (
-                        <div className="glass-panel p-16 flex flex-col items-center justify-center text-center">
-                            <div className="w-16 h-16 rounded-2xl bg-surface-light border border-border-light flex items-center justify-center mb-4 text-text-muted">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+                <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {allVoices.length === 0 ? (
+                        <div style={{ 
+                            padding: '60px', 
+                            textAlign: 'center', 
+                            background: 'rgba(var(--accent-rgb), 0.02)', 
+                            borderRadius: '24px', 
+                            border: '2px dashed var(--border)' 
+                        }}>
+                            <div style={{ 
+                                width: '64px', 
+                                height: '64px', 
+                                borderRadius: '20px', 
+                                background: 'var(--surface-alt)', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                margin: '0 auto 20px',
+                                color: 'var(--text-muted)'
+                            }}>
                                 <User size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-white">No voices found</h3>
-                            <p className="text-text-muted max-w-xs mt-2">
-                                {searchQuery ? `No results for "${searchQuery}"` : "Create your first custom voice to start building your library."}
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px' }}>No Voices Yet</h3>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '300px', margin: '0 auto 24px' }}>
+                                Create your first voice to start generating premium AI audio.
                             </p>
-                            {searchQuery && (
-                                <button
-                                    onClick={() => setSearchQuery('')}
-                                    className="mt-6 text-accent font-bold hover:underline"
-                                >
-                                    Clear search
-                                </button>
-                            )}
+                            <button 
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="btn-primary" 
+                                style={{ gap: '8px', padding: '0 24px', height: '44px', borderRadius: '12px' }}
+                            >
+                                <Plus size={20} />
+                                Create New Voice
+                            </button>
+                        </div>
+                    ) : filteredVoices.length === 0 ? (
+                        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <Search size={48} style={{ opacity: 0.2, marginBottom: '20px' }} />
+                            <h3 style={{ margin: '0 0 10px', fontSize: '1.25rem' }}>No Matches Found</h3>
+                            <p style={{ margin: 0 }}>Try adjusting your search query.</p>
                         </div>
                     ) : (
                         <>
@@ -372,7 +420,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                                         setSelectedMoveSpeakerId('');
                                         setIsMoveVariantModalOpen(true);
                                     }}
-                                    onEditTestText={(p) => setEditingProfile(p)}
+                                    onEditTestText={setEditingProfile}
                                     onBuildNow={handleBuildNow}
                                     isTestingProfileId={testingProfile}
                                     testProgress={testProgress}
