@@ -17,7 +17,7 @@ ignore = [
 omit = ["app/xtts_inference.py"]
 
 [tool.coverage.report]
-fail_under = 67
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
