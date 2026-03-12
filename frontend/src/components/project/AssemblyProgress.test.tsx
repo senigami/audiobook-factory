@@ -9,6 +9,7 @@ describe('AssemblyProgress', () => {
     name: 'Test Project',
     series: 'Test Series',
     author: 'Test Author',
+    cover_image_path: null,
     created_at: 123456789,
     updated_at: 123456789,
   };
@@ -28,6 +29,9 @@ describe('AssemblyProgress', () => {
       status: 'running',
       progress: 0.5,
       eta_seconds: 120,
+      safe_mode: false,
+      make_mp3: false,
+      warning_count: 0,
       created_at: 123456789,
     };
 
@@ -51,6 +55,9 @@ describe('AssemblyProgress', () => {
       status: 'done',
       progress: 1.0,
       output_mp3: 'final_audiobook.mp3',
+      safe_mode: false,
+      make_mp3: false,
+      warning_count: 0,
       created_at: 123456789,
     };
 
@@ -72,6 +79,9 @@ describe('AssemblyProgress', () => {
       chapter_file: 'c1.txt',
       status: 'running',
       progress: 0.5,
+      safe_mode: false,
+      make_mp3: false,
+      warning_count: 0,
       created_at: 123456789,
     };
 

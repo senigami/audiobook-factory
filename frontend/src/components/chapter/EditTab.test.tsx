@@ -6,13 +6,17 @@ const mockChapter = {
     id: 'c1',
     project_id: 'p1',
     title: 'Chapter 1',
-    text: 'Test content',
+    text_content: 'Test content',
+    sort_order: 0,
+    audio_status: 'unprocessed' as const,
+    audio_file_path: null,
+    text_last_modified: Date.now(),
+    audio_generated_at: null,
     char_count: 12,
     word_count: 2,
-    order: 0,
-    status: 'pending' as any,
-    created_at: '',
-    updated_at: ''
+    sent_count: 1,
+    predicted_audio_length: 0,
+    audio_length_seconds: 0
 };
 
 describe('EditTab', () => {

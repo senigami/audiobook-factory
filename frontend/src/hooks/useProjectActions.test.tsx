@@ -125,7 +125,7 @@ describe('useProjectActions', () => {
       res = await result.current.handleQueueAllUnprocessed(chapters, jobs);
     });
 
-    expect(res.success).toBe(true);
+    expect((res as any).success).toBe(true);
     expect(api.addProcessingQueue).toHaveBeenCalledTimes(1); // Only c1
     expect(api.addProcessingQueue).toHaveBeenCalledWith(projectId, 'c1', 0, undefined);
     expect(navigate).toHaveBeenCalledWith('/queue');

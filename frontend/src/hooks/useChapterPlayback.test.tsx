@@ -1,4 +1,4 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useChapterPlayback } from './useChapterPlayback';
 import type { ChapterSegment } from '../types';
@@ -105,7 +105,7 @@ describe('useChapterPlayback', () => {
     );
 
     let errorTriggered = false;
-    (global.Audio as any).mockImplementation((src: string) => {
+    (global.Audio as any).mockImplementation((_src: string) => {
       const audio: any = {
         play: vi.fn(),
         pause: vi.fn(),

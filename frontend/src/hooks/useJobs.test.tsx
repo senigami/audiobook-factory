@@ -41,7 +41,7 @@ describe('useJobs', () => {
 
   it('handles job updates via WebSocket', async () => {
     let wsHandler: (data: any) => void = () => {};
-    (useWebSocket as any).mockImplementation((url: string, handler: any) => {
+    (useWebSocket as any).mockImplementation((_url: string, handler: any) => {
       wsHandler = handler;
       return { connected: true };
     });
@@ -67,7 +67,7 @@ describe('useJobs', () => {
 
   it('triggers onJobComplete when a job finishes', async () => {
     let wsHandler: (data: any) => void = () => {};
-    (useWebSocket as any).mockImplementation((url: string, handler: any) => {
+    (useWebSocket as any).mockImplementation((_url: string, handler: any) => {
       wsHandler = handler;
       return { connected: true };
     });
@@ -94,7 +94,7 @@ describe('useJobs', () => {
 
   it('handles queue_updated, pause_updated, and segments_updated', async () => {
     let wsHandler: (data: any) => void = () => {};
-    (useWebSocket as any).mockImplementation((url: string, handler: any) => {
+    (useWebSocket as any).mockImplementation((_url: string, handler: any) => {
       wsHandler = handler;
       return { connected: true };
     });
