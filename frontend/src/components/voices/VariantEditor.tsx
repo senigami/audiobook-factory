@@ -118,7 +118,7 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
-                    borderBottom: profile.wav_count > 0 ? '1px solid var(--border)' : 'none',
+                    borderBottom: 'none',
                     transition: 'border-bottom 0.2s',
                     background: 'rgba(var(--accent-rgb), 0.02)'
                 }}
