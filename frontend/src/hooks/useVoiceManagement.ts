@@ -71,7 +71,7 @@ export function useVoiceManagement(
                 body: new URLSearchParams({ name }),
             });
             const result = await resp.json();
-            if (result.status === 'ok') {
+            if (result.status === 'ok' || result.status === 'success') {
                 onRefresh();
             } else {
                 requestConfirm({

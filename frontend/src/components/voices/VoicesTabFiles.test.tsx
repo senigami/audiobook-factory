@@ -51,8 +51,8 @@ describe('Voices Tab Components', () => {
     describe('VoicesTab', () => {
         it('renders voice lab header and search bar', () => {
             render(<VoicesTab onRefresh={vi.fn()} speakerProfiles={[mockProfile]} testProgress={{}} />);
-            expect(screen.getByText('AI Voice Lab')).toBeInTheDocument();
-            expect(screen.getByPlaceholderText('Search voices or variants...')).toBeInTheDocument();
+            expect(screen.getByText('Voices')).toBeInTheDocument();
+            expect(screen.getByPlaceholderText('Search voices...')).toBeInTheDocument();
         });
 
         it('renders list of voices', () => {

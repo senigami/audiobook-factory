@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ChapterList } from './ChapterList';
 import { vi, describe, it, expect } from 'vitest';
 import type { Chapter } from '../../types';
@@ -73,7 +73,7 @@ describe('ChapterList', () => {
     expect(sources2[1].getAttribute('src')).toBe('/projects/proj-1/audio/chap-456.wav');
   });
 
-  it('renders spinner when audio_status is processing even if no activeJob', () => {
+  it('renders warning pulse when audio_status is processing but no activeJob', () => {
     const processingChapter: Chapter = {
       id: 'chap-789',
       project_id: 'proj-1',
@@ -87,8 +87,12 @@ describe('ChapterList', () => {
 
     const { container } = render(<ChapterList {...defaultProps} chapters={[processingChapter]} />);
     
-    // The StatusOrb renders a RefreshCw icon with animate-spin class when processing
+    // StatusOrb should render with a specific tooltip/aria-label for stuck processing
+    const orb = screen.getByLabelText(/Render was interrupted/i);
+    expect(orb).toBeTruthy();
+    
+    // It should NOT render a spinner (RefreshCw icon)
     const spinner = container.querySelector('.animate-spin');
-    expect(spinner).toBeTruthy();
+    expect(spinner).toBeFalsy();
   });
 });
