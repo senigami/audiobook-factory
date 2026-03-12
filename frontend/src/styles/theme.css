@@ -47,8 +47,4 @@
   --as-blue: #2b6eff; /* brand-blue */
   --as-amber: #f97316; /* brand-orange */
   --as-info-tint: #f0f7ff; /* very soft blue tint */
-  /* New Surface Dark for depth */
-  --surface-dark: #0f172a;
-  --surface-light-rgb: 248, 250, 252;
-  --accent-rgb: 43, 110, 255;
 }

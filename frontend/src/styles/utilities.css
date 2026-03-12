@@ -303,8 +303,8 @@
 .mt-6 { margin-top: 1.5rem; }
 .mb-4 { margin-bottom: 1rem; }
 
-.bg-surface-dark { background-color: var(--surface-dark); }
-.bg-surface-light\/50 { background-color: rgba(var(--surface-light-rgb), 0.5); }
+.bg-bg { background-color: var(--bg); }
+.bg-surface-alt { background-color: var(--surface-alt); }
 
 .rounded-xl { border-radius: 12px; }
 .rounded-2xl { border-radius: 16px; }
@@ -321,10 +321,10 @@
 .bg-surface-light { background-color: var(--surface-light); }
 .text-accent { color: var(--accent); }
 .text-text-muted { color: var(--text-muted); }
-.text-white { color: #ffffff; }
+.text-text-primary { color: var(--text-primary); }
 .hover\:bg-accent-hover:hover { background-color: var(--accent-hover); }
 .group-focus-within\:text-accent:focus-within { color: var(--accent); }
-.shadow-accent\/20 { box-shadow: 0 10px 15px -3px rgba(var(--accent-rgb), 0.2); }
+.shadow-accent { box-shadow: 0 10px 15px -3px var(--accent-glow); }
 .active\:scale-95:active { transform: scale(0.95); }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }

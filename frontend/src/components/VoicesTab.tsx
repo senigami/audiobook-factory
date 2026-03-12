@@ -300,12 +300,12 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
     );
 
     return (
-        <div className="flex flex-col h-full bg-surface-dark overflow-hidden relative">
+        <div className="flex flex-col h-full bg-bg overflow-hidden relative">
             <div className="flex-shrink-0 p-8 pt-6 pb-2">
                 <div className="flex flex-col gap-6">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                            <h2 className="text-2xl font-bold text-text-primary flex items-center gap-3">
                                 <User className="text-accent" size={24} />
                                 AI Voice Lab
                             </h2>
@@ -315,7 +315,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             <GhostButton icon={Info} onClick={() => setShowGuide(true)} label="Guide" />
                             <button
                                 onClick={() => setIsCreateModalOpen(true)}
-                                className="px-5 h-11 bg-accent hover:bg-accent-hover text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-accent/20 active:scale-95 border border-white/10"
+                                className="px-5 h-11 bg-accent hover:bg-accent-hover text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-accent active:scale-95"
                             >
                                 <Plus size={20} />
                                 New Voice
@@ -331,7 +331,7 @@ export const VoicesTab: React.FC<VoicesTabProps> = ({ onRefresh, speakerProfiles
                             placeholder="Search voices or variants..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-12 h-12 text-base bg-surface-light/50"
+                            className="pl-12 h-12 text-base bg-surface-alt/50"
                         />
                     </div>
                 </div>

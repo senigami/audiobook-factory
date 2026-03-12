@@ -16,7 +16,7 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
   totalSegments = 0, 
 }) => {
   // 1. Determine priority states
-  const isError = chap.audio_status === 'error';
+  const isError = chap.audio_status === 'error' || chap.audio_status === 'failed';
   const isStale = !!(chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at));
   
   // We only count it as 'processing' (spinner) if we HAVE a live active job.

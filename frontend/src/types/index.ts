@@ -29,7 +29,7 @@ export interface ChapterSegment {
   character_id: string | null;
   speaker_profile_name: string | null;
   audio_file_path: string | null;
-  audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
+  audio_status: 'unprocessed' | 'processing' | 'done' | 'error' | 'failed' | 'cancelled';
   audio_generated_at: number | null;
 }
 
@@ -39,7 +39,7 @@ export interface Chapter {
   title: string;
   text_content: string;
   sort_order: number;
-  audio_status: 'unprocessed' | 'processing' | 'done' | 'error';
+  audio_status: 'unprocessed' | 'processing' | 'done' | 'error' | 'failed' | 'cancelled';
   audio_file_path: string | null;
   has_wav?: boolean;
   has_mp3?: boolean;

@@ -118,9 +118,9 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
-                    borderBottom: profile.wav_count > 0 ? '1px solid var(--border-light)' : 'none',
+                    borderBottom: profile.wav_count > 0 ? '1px solid var(--border)' : 'none',
                     transition: 'border-bottom 0.2s',
-                    background: 'rgba(var(--accent-rgb), 0.02)'
+                    background: 'var(--as-info-tint)'
                 }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
@@ -139,7 +139,7 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
                                 border: isPlaying ? '1px solid var(--accent)' : '1px solid var(--border)',
                                 position: 'relative',
                                 overflow: 'hidden',
-                                boxShadow: isPlaying ? '0 0 0 3px rgba(var(--accent-rgb), 0.2)' : 'var(--shadow-sm)',
+                                boxShadow: isPlaying ? '0 0 0 3px var(--accent-glow)' : 'var(--shadow-sm)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -269,8 +269,8 @@ export const VariantEditor: React.FC<VariantEditorProps> = ({
 
             <div style={{ 
                 padding: '1.25rem', 
-                borderTop: '1px solid var(--border-light)', 
-                background: 'rgba(239, 68, 68, 0.02)',
+                borderTop: '1px solid var(--border)', 
+                background: 'var(--as-info-tint)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',

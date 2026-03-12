@@ -42,9 +42,9 @@ export const NarratorCard: React.FC<NarratorCardProps> = ({
 
     const getStatusInfo = (p: SpeakerProfile | undefined) => {
         if (!p) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
-        if (buildingProfiles[p.name] || isTestingProfileId === p.name) return { label: 'BUILDING...', color: 'var(--accent)', bg: 'rgba(var(--accent-rgb), 0.1)' };
+        if (buildingProfiles[p.name] || isTestingProfileId === p.name) return { label: 'BUILDING...', color: 'var(--accent)', bg: 'var(--accent-glow)' };
         if (p.wav_count === 0) return { label: 'NO SAMPLES', color: 'var(--text-muted)', bg: 'var(--surface-alt)' };
-        return { label: 'BUILT', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' };
+        return { label: 'BUILT', color: 'var(--success)', bg: 'var(--success-muted)' };
     };
 
     const status = getStatusInfo(activeProfile as SpeakerProfile);
@@ -185,7 +185,7 @@ export const NarratorCard: React.FC<NarratorCardProps> = ({
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         style={{ overflow: 'hidden' }}
                     >
-                        <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(var(--accent-rgb), 0.02)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
+                        <div style={{ padding: '0.75rem 1.5rem', background: 'var(--as-info-tint)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto' }}>
                                 {profiles.map(p => {
                                     const isActive = activeProfileId === p.name;
                                     return (
@@ -233,7 +233,7 @@ export const NarratorCard: React.FC<NarratorCardProps> = ({
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '4px',
-                                        background: 'rgba(var(--accent-rgb), 0.05)',
+                                        background: 'var(--accent-glow)',
                                         border: '1px dashed var(--accent)',
                                         marginLeft: '4px',
                                         whiteSpace: 'nowrap'
