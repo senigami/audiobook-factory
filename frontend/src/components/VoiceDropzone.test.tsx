@@ -11,12 +11,11 @@ describe('VoiceDropzone', () => {
     
     // Mock Audio
     global.Audio = vi.fn().mockImplementation(function(this: any) {
-      const self = this;
-      self.duration = 10;
+      this.duration = 10;
       setTimeout(() => {
-        if (self.onloadedmetadata) self.onloadedmetadata();
+        if (this.onloadedmetadata) this.onloadedmetadata();
       }, 10);
-      return self;
+      return this;
     }) as any;
 
     // Mock alert
@@ -81,12 +80,11 @@ describe('VoiceDropzone', () => {
 
   it('shows warning for short files', async () => {
     (global.Audio as any).mockImplementation(function(this: any) {
-      const self = this;
-      self.duration = 1; // 1 second
+      this.duration = 1; // 1 second
       setTimeout(() => {
-        if (self.onloadedmetadata) self.onloadedmetadata();
+        if (this.onloadedmetadata) this.onloadedmetadata();
       }, 10);
-      return self;
+      return this;
     });
 
     const onFilesChange = vi.fn();
