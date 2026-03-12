@@ -137,8 +137,26 @@ export const ChapterList: React.FC<ChapterListProps> = ({
                     </div>
                 ) : chap.audio_status === 'done' && (chap.has_wav || chap.has_mp3) && !isAssemblyMode ? (
                   <audio controls key={chap.id} style={{ height: '36px', width: '100%', maxWidth: '600px' }} onClick={e => e.stopPropagation()} preload="metadata">
-                    <source src={`/projects/${projectId}/audio/${chap.id}.mp3`} type="audio/mpeg" />
-                    <source src={`/projects/${projectId}/audio/${chap.id}.wav`} type="audio/wav" />
+                    {(() => {
+                      const audioPath = chap.audio_file_path;
+                      if (!audioPath) {
+                        return (
+                          <>
+                            <source src={`/projects/${projectId}/audio/${chap.id}.mp3`} type="audio/mpeg" />
+                            <source src={`/projects/${projectId}/audio/${chap.id}.wav`} type="audio/wav" />
+                          </>
+                        );
+                      }
+                      const wavPath = audioPath.replace(/\.[^.]+$/, '.wav');
+                      const mp3Path = audioPath.replace(/\.[^.]+$/, '.mp3');
+                      return (
+                        <>
+                          <source src={`/projects/${projectId}/audio/${audioPath}`} />
+                          {audioPath !== mp3Path && <source src={`/projects/${projectId}/audio/${mp3Path}`} type="audio/mpeg" />}
+                          {audioPath !== wavPath && <source src={`/projects/${projectId}/audio/${wavPath}`} type="audio/wav" />}
+                        </>
+                      );
+                    })()}
                   </audio>
                 ) : (
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>~{formatLength(chap.predicted_audio_length || 0)} runtime</span>

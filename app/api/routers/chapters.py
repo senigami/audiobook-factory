@@ -226,12 +226,24 @@ def api_preview(chapter_file: str, processed: bool = False):
     return JSONResponse({"text": text, "analysis": analysis})
 @router.post("/chapter/{chapter_id}/export-sample")
 async def api_export_chapter_sample(chapter_id: str, project_id: Optional[str] = None):
+    chapter = get_chapter(chapter_id)
     pdir = config.get_project_audio_dir(project_id) if project_id else config.XTTS_OUT_DIR
-    wav_path = pdir / f"{chapter_id}.wav"
-    if not wav_path.exists():
-        wav_path = pdir / f"{chapter_id}.mp3"
 
-    if not wav_path.exists():
+    wav_path = None
+    if chapter and chapter.get("audio_file_path"):
+        wav_path = pdir / chapter["audio_file_path"]
+
+    if not wav_path or not wav_path.exists():
+        # Fallbacks
+        wav_path = pdir / f"{chapter_id}.wav"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}.mp3"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}_0.wav"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}_0.mp3"
+
+    if not wav_path or not wav_path.exists():
         return JSONResponse({"status": "error", "message": "Audio not found"}, status_code=404)
 
     rel_path = f"/api/chapters/{chapter_id}/stream"
@@ -242,12 +254,24 @@ async def api_export_chapter_sample(chapter_id: str, project_id: Optional[str] =
 
 @router.get("/chapters/{chapter_id}/stream")
 def api_stream_chapter(chapter_id: str, project_id: Optional[str] = None):
+    chapter = get_chapter(chapter_id)
     pdir = config.get_project_audio_dir(project_id) if project_id else config.XTTS_OUT_DIR
-    wav_path = pdir / f"{chapter_id}.wav"
-    if not wav_path.exists():
-        wav_path = pdir / f"{chapter_id}.mp3"
 
-    if not wav_path.exists():
+    wav_path = None
+    if chapter and chapter.get("audio_file_path"):
+        wav_path = pdir / chapter["audio_file_path"]
+
+    if not wav_path or not wav_path.exists():
+        # Fallbacks
+        wav_path = pdir / f"{chapter_id}.wav"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}.mp3"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}_0.wav"
+        if not wav_path.exists():
+            wav_path = pdir / f"{chapter_id}_0.mp3"
+
+    if not wav_path or not wav_path.exists():
          return JSONResponse({"status": "error", "message": "Audio not found"}, status_code=404)
 
     return FileResponse(wav_path)
