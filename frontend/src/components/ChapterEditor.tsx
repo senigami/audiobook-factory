@@ -274,7 +274,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({
                 setConfirmConfig({
                     title: 'Large Chapter Warning',
                     message: `Chapter is long (${chapter.char_count.toLocaleString()} chars). Queue anyway?`,
-                    onConfirm: async () => { setConfirmConfig(null); await executeQueue(); }
+                    onConfirm: async () => { setConfirmConfig(null); await executeQueue(); },
+                    confirmText: 'Yes, Queue It'
                 });
             } else executeQueue();
         }}

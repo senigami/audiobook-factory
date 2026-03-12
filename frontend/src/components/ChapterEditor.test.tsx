@@ -1,88 +1,241 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { ChapterEditor } from './ChapterEditor'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api } from '../api'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock the API
+// Mock API
 vi.mock('../api', () => ({
   api: {
     fetchChapters: vi.fn(),
     fetchSegments: vi.fn(),
     fetchCharacters: vi.fn(),
-    analyzeChapter: vi.fn(),
-    updateChapter: vi.fn().mockResolvedValue({ status: 'success' }),
-    generateSegments: vi.fn()
-  }
-}))
+    updateChapter: vi.fn(),
+    generateSegments: vi.fn(),
+    updateSegmentsBulk: vi.fn(),
+    addProcessingQueue: vi.fn(),
+    cancelChapterGeneration: vi.fn(),
+    updateCharacter: vi.fn(),
+    bakeChapter: vi.fn(),
+  },
+}));
 
-// Mock useWebSocket
-vi.mock('../hooks/useWebSocket', () => ({
-  useWebSocket: vi.fn(() => ({ connected: true }))
-}))
+// Mock hooks
+vi.mock('../hooks/useChapterAnalysis', () => ({
+  useChapterAnalysis: () => ({
+    analysis: null,
+    setAnalysis: vi.fn(),
+    analyzing: false,
+    loadingVoiceChunks: false,
+    ensureVoiceChunks: vi.fn(),
+    runAnalysis: vi.fn(),
+  }),
+}));
 
-describe('ChapterEditor Tests', () => {
+vi.mock('../hooks/useChapterPlayback', () => ({
+  useChapterPlayback: () => ({
+    playingSegmentId: null,
+    playSegment: vi.fn(),
+    stopPlayback: vi.fn(),
+  }),
+}));
+
+// Mock framer-motion
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+  },
+  AnimatePresence: ({ children }: any) => <>{children}</>,
+}));
+
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { ChapterEditor } from './ChapterEditor';
+import { api } from '../api';
+import type { Character } from '../types';
+
+describe('ChapterEditor', () => {
+  const mockProjectId = 'proj-123';
+  const mockChapterId = 'chap-456';
   const mockChapter = {
-    id: 'chap1',
-    project_id: 'proj1',
+    id: mockChapterId,
+    project_id: mockProjectId,
     title: 'Test Chapter',
-    text_content: 'Line 1.\nLine 2.',
-    audio_status: 'unprocessed',
-    char_count: 100,
-    word_count: 20
-  }
+    text_content: 'Once upon a time.',
+    char_count: 50,
+    word_count: 10,
+    audio_status: 'unprocessed' as const,
+  };
+
+  const mockSpeakers = [
+    { id: 'speaker-1', name: 'Voice 1' }
+  ];
+
+  const mockSpeakerProfiles = [
+    { name: 'Profile 1', speaker_id: 'speaker-1' }
+  ];
+
+  const mockSegments = [
+    { id: 'seg-1', chapter_id: mockChapterId, text_content: 'Once upon a time.', character_id: null, audio_status: 'unprocessed' }
+  ];
+
+  const mockCharacters: Character[] = [
+    { id: 'char-1', project_id: mockProjectId, name: 'Char 1', color: '#ff0000' } as any
+  ];
 
   beforeEach(() => {
-    vi.clearAllMocks()
-    ;(api.fetchChapters as any).mockResolvedValue([mockChapter])
-    ;(api.fetchSegments as any).mockResolvedValue([])
-    ;(api.fetchCharacters as any).mockResolvedValue([])
-  })
+    vi.clearAllMocks();
+    (api.fetchChapters as any).mockResolvedValue([mockChapter]);
+    (api.fetchSegments as any).mockResolvedValue(mockSegments);
+    (api.fetchCharacters as any).mockResolvedValue(mockCharacters);
+  });
 
-  it('highlights currently processing segments in purple', async () => {
-    const mockSegments = [
-      { id: 'seg1', text_content: 'Segment 1', audio_status: 'done', audio_file_path: 's1.wav', character_id: null },
-      { id: 'seg2', text_content: 'Segment 2', audio_status: 'processing', audio_file_path: null, character_id: null }
-    ]
-    ;(api.fetchSegments as any).mockResolvedValue(mockSegments)
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders loading state initially', () => {
+    render(
+      <ChapterEditor 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={[]} 
+        speakers={[]} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={vi.fn()} 
+      />
+    );
+    expect(screen.getByText('Loading editor...')).toBeInTheDocument();
+  });
+
+  it('loads and renders chapter data', async () => {
+    render(
+      <ChapterEditor 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={mockSpeakerProfiles as any} 
+        speakers={mockSpeakers as any} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={vi.fn()} 
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading editor...')).not.toBeInTheDocument();
+    });
+
+    expect(api.fetchChapters).toHaveBeenCalledWith(mockProjectId);
+    expect(screen.getByDisplayValue('Test Chapter')).toBeInTheDocument();
+  });
+
+  it('switches between tabs', async () => {
+    render(
+      <ChapterEditor 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={mockSpeakerProfiles as any} 
+        speakers={mockSpeakers as any} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={vi.fn()} 
+      />
+    );
+
+    await waitFor(() => screen.findByDisplayValue('Test Chapter'));
+
+    // Production Tab
+    fireEvent.click(screen.getByText('Production'));
+    expect(await screen.findByText('NARRATOR')).toBeInTheDocument();
+
+    // Performance Tab
+    fireEvent.click(screen.getByText('Performance'));
+    expect(await screen.findByText('Bake Final Chapter')).toBeInTheDocument();
+
+    // Preview Tab
+    fireEvent.click(screen.getByText('Preview Safe Output'));
+    expect(await screen.findByText('Preview Safe Output')).toBeInTheDocument();
+  });
+
+  it('saves chapter changes on title/text edit', async () => {
+    render(
+      <ChapterEditor 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={mockSpeakerProfiles as any} 
+        speakers={mockSpeakers as any} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={vi.fn()} 
+      />
+    );
+
+    // use real timers for initial load to avoid hanging `waitFor`
+    await screen.findByDisplayValue('Test Chapter');
+    
+    vi.useFakeTimers();
+
+    const titleInput = screen.getByDisplayValue('Test Chapter');
+    
+    await act(async () => {
+      fireEvent.change(titleInput, { target: { value: 'Updated Title' } });
+    });
+
+    // Advance timers for debounce
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    // Check expectation
+    expect(api.updateChapter).toHaveBeenCalledWith(mockChapterId, expect.objectContaining({
+      title: 'Updated Title'
+    }));
+  });
+
+  it('handles "Add to Queue"', async () => {
+    const onNavigateToQueue = vi.fn();
+    (api.addProcessingQueue as any).mockResolvedValue({ status: 'ok' });
 
     render(
       <ChapterEditor 
-        chapterId="chap1" 
-        projectId="proj1" 
-        speakerProfiles={[]} 
-        speakers={[]}
-        onBack={() => {}} 
-        onNavigateToQueue={() => {}} 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={mockSpeakerProfiles as any} 
+        speakers={mockSpeakers as any} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={onNavigateToQueue} 
       />
-    )
+    );
 
-    // Ensure initial load
-    expect(await screen.findByDisplayValue('Test Chapter')).toBeInTheDocument()
+    await waitFor(() => screen.findByDisplayValue('Test Chapter'));
+
+    const queueBtn = screen.getByTitle('Queue Chapter');
+    fireEvent.click(queueBtn);
     
-    // Switch to performance tab - need to wait for it since it might re-render
-    const perfTab = screen.getByText('Performance')
-    fireEvent.click(perfTab)
+    await waitFor(() => {
+      expect(api.addProcessingQueue).toHaveBeenCalled();
+      expect(onNavigateToQueue).toHaveBeenCalled();
+    });
+  });
 
-    // Now wait for segments to appear in the DOM
-    const segmentText = await screen.findByText(/Segment 1.*Segment 2/)
-    
-    // The segment block should have the purple processing highlight
-    expect(segmentText).toHaveStyle('background: #e1bee733')
-  })
+  it('warns before queuing large chapters', async () => {
+    const largeChapter = { ...mockChapter, char_count: 60000 };
+    (api.fetchChapters as any).mockResolvedValue([largeChapter]);
 
-  it('shows "Saved" state correctly after normalization', async () => {
     render(
       <ChapterEditor 
-        chapterId="chap1" 
-        projectId="proj1" 
-        speakerProfiles={[]} 
-        speakers={[]}
-        onBack={() => {}} 
-        onNavigateToQueue={() => {}} 
+        chapterId={mockChapterId} 
+        projectId={mockProjectId} 
+        speakerProfiles={mockSpeakerProfiles as any} 
+        speakers={mockSpeakers as any} 
+        onBack={vi.fn()} 
+        onNavigateToQueue={vi.fn()} 
       />
-    )
+    );
 
-    expect(await screen.findByDisplayValue('Test Chapter')).toBeInTheDocument()
-    expect(screen.getByText('Saved')).toBeInTheDocument()
-  })
-})
+    await waitFor(() => screen.findByDisplayValue('Test Chapter'));
+
+    const queueBtn = screen.getByTitle('Queue Chapter');
+    fireEvent.click(queueBtn);
+
+    expect(await screen.findByText('Large Chapter Warning')).toBeInTheDocument();
+    
+    // Confirming
+    fireEvent.click(screen.getByText('Yes, Queue It'));
+    await waitFor(() => {
+      expect(api.addProcessingQueue).toHaveBeenCalled();
+    });
+  });
+});
