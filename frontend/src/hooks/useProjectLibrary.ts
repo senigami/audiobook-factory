@@ -85,19 +85,22 @@ export const useProjectLibrary = (onSelectProject?: (projectId: string) => void)
         setSubmitting(true);
         try {
             const res = await api.createProject({ name: title, series, author, cover: coverFile || undefined });
+            console.log("Project created:", res);
             if (res.status === 'ok') {
-                setShowModal(false);
+                // Clear state immediately
                 setTitle('');
                 setSeries('');
                 setAuthor('');
                 setCoverFile(null);
                 setCoverPreview(null);
-                loadProjects();
+                setShowModal(false);
+                
+                await loadProjects();
                 onSelectProject?.(res.project_id);
                 navigate(`/project/${res.project_id}`);
             }
         } catch (e) {
-            console.error(e);
+            console.error("Failed to create project:", e);
         } finally {
             setSubmitting(false);
         }

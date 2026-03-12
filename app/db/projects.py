@@ -53,6 +53,12 @@ def delete_project(project_id: str) -> bool:
     with _db_lock:
         with get_connection() as conn:
             cursor = conn.cursor()
+            # 1. First, get project info for path cleanup
+            from .. import config
+            import shutil
+            pdir = config.get_project_dir(project_id)
+
+            # 2. Delete from DB
             # Delete related characters
             cursor.execute("DELETE FROM characters WHERE project_id = ?", (project_id,))
             # Delete related segments implicitly if we delete chapters, or explicitly
@@ -61,4 +67,12 @@ def delete_project(project_id: str) -> bool:
             cursor.execute("DELETE FROM chapters WHERE project_id = ?", (project_id,))
             cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             conn.commit()
+
+            # 3. Physical cleanup
+            if pdir.exists():
+                try:
+                    shutil.rmtree(pdir)
+                except Exception as e:
+                    print(f"Warning: Failed to remove project directory {pdir}: {e}")
+
             return cursor.rowcount > 0

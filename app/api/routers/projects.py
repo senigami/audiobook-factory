@@ -11,7 +11,8 @@ from ...db import (
     create_project, get_project, list_projects, update_project, 
     delete_project, list_chapters as db_list_chapters, reorder_chapters
 )
-from ...config import COVER_DIR, AUDIOBOOK_DIR, PROJECTS_DIR, XTTS_OUT_DIR, get_project_m4b_dir
+from ...config import COVER_DIR, PROJECTS_DIR, XTTS_OUT_DIR, get_project_m4b_dir
+import urllib.parse
 from ...jobs import enqueue
 from ...engines import get_audio_duration
 from ...state import put_job, update_job, get_jobs
@@ -107,7 +108,8 @@ def api_list_project_audiobooks(project_id: str):
     m4b_files = []
     if m4b_dir.exists():
         for p in m4b_dir.glob("*.m4b"):
-            m4b_files.append((p, f"/projects/{project_id}/m4b/{p.name}"))
+            encoded_name = urllib.parse.quote(p.name)
+            m4b_files.append((p, f"/projects/{project_id}/m4b/{encoded_name}"))
 
     seen_paths = set()
     unique_files = []
@@ -148,7 +150,8 @@ def api_list_project_audiobooks(project_id: str):
         for ext in [".jpg", ".png", ".jpeg", ".webp"]:
             target_img = p.with_suffix(ext)
             if target_img.exists() and target_img.stat().st_size > 0:
-                item["cover_url"] = url.replace(".m4b", ext)
+                encoded_ext = urllib.parse.quote(target_img.name)
+                item["cover_url"] = f"/projects/{project_id}/m4b/{encoded_ext}"
                 break
         res.append(item)
     return res
@@ -196,9 +199,13 @@ def assemble_project(project_id: str, chapter_ids: Optional[str] = Form(None)):
 
     jid = uuid.uuid4().hex[:12]
     cover_path = project.get('cover_image_path', None)
-    if cover_path and cover_path.startswith('/out/covers/'):
-        filename = cover_path.replace('/out/covers/', '')
-        cover_path = str(COVER_DIR / filename)
+    if cover_path:
+        if cover_path.startswith('/out/covers/'):
+            filename = cover_path.replace('/out/covers/', '')
+            cover_path = str(COVER_DIR / filename)
+        elif cover_path.startswith(f'/projects/{project_id}/'):
+            filename = cover_path.replace(f'/projects/{project_id}/', '')
+            cover_path = str(PROJECTS_DIR / project_id / filename)
 
     j = Job(
         id=jid,

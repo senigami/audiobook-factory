@@ -60,4 +60,7 @@ def api_delete_queue_item(queue_id: str):
     cancel_job(queue_id)
     # Remove from DB
     remove_from_queue(queue_id)
+    # Remove from live state memory
+    from ...state import delete_jobs
+    delete_jobs([queue_id])
     return JSONResponse({"status": "ok"})

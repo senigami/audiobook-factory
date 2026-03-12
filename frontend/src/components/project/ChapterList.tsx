@@ -135,7 +135,7 @@ export const ChapterList: React.FC<ChapterListProps> = ({
                     <div style={{ width: '100%', maxWidth: '600px' }}>
                         <PredictiveProgressBar 
                           progress={activeJob.progress || 0} 
-                          startedAt={activeJob.status === 'running' ? activeJob.started_at : undefined} 
+                          startedAt={activeJob.status !== 'queued' ? activeJob.started_at : undefined} 
                           etaSeconds={activeJob.eta_seconds}
                           label={activeJob.status} 
                         />
