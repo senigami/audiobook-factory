@@ -1,6 +1,8 @@
+import logging
 import os
 from pathlib import Path
 from itertools import groupby
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
@@ -11,6 +13,8 @@ from ...textops import (
     pack_text_to_limit, sanitize_for_xtts, get_text_stats, format_duration
 )
 from ...config import SENT_CHAR_LIMIT, BASELINE_XTTS_CPS
+
+logger = logging.getLogger(__name__)
 
 # Compatibility for tests that monkeypatch these
 CHAPTER_DIR = config.CHAPTER_DIR
@@ -24,6 +28,55 @@ class AnalysisError(Exception):
         super().__init__(self.message)
 
 
+class VoiceChunk(BaseModel):
+    character_name: str
+    character_color: str
+    text: str
+    raw_length: int
+    sent_count: int
+
+
+class UncleanableSentence(BaseModel):
+    length: int
+    text: str
+
+
+class AnalysisStats(BaseModel):
+    char_count: int
+    word_count: int
+    sent_count: int
+    predicted_seconds: float
+
+
+class ChapterAnalysisResponse(BaseModel):
+    status: str = "ok"
+    voice_chunks: List[VoiceChunk]
+    threshold: int
+    char_count: int
+    word_count: int
+    sent_count: int
+    predicted_seconds: float
+    raw_long_sentences: int
+    auto_fixed: int
+    uncleanable: int
+    uncleanable_sentences: List[UncleanableSentence]
+
+
+class TextAnalysisResponse(BaseModel):
+    status: str = "ok"
+    char_count: int
+    word_count: int
+    sent_count: int
+    predicted_seconds: float
+    raw_long_sentences: int
+    auto_fixed: int
+    uncleanable: int
+    uncleanable_sentences: List[UncleanableSentence]
+    threshold: int
+    safe_text: str
+    split_sentences: List[str]
+
+
 def get_chapter_dir() -> Path:
     return CHAPTER_DIR
 
@@ -34,7 +87,7 @@ def get_report_dir() -> Path:
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
-@router.get("/chapters/{chapter_id}/analyze")
+@router.get("/chapters/{chapter_id}/analyze", response_model=ChapterAnalysisResponse)
 def api_analyze_chapter(chapter_id: str):
     try:
         chap = get_chapter(chapter_id)
@@ -130,22 +183,22 @@ def api_analyze_chapter(chapter_id: str):
 
         res = process_chapter()
 
-        return JSONResponse({
-            "status": "ok",
-            "voice_chunks": res["voice_chunks"],
-            "threshold": SENT_CHAR_LIMIT,
-            "char_count": res["stats"]["char_count"],
-            "word_count": res["stats"]["word_count"],
-            "sent_count": res["stats"]["sent_count"],
-            "predicted_seconds": res["stats"]["predicted_seconds"],
-            "raw_long_sentences": len(res["raw_hits"]),
-            "auto_fixed": res["auto_fixed"],
-            "uncleanable": res["uncleanable"],
-            "uncleanable_sentences": [
-                {"length": clen, "text": s}
+        return ChapterAnalysisResponse(
+            status="ok",
+            voice_chunks=res["voice_chunks"],
+            threshold=SENT_CHAR_LIMIT,
+            char_count=res["stats"]["char_count"],
+            word_count=res["stats"]["word_count"],
+            sent_count=res["stats"]["sent_count"],
+            predicted_seconds=res["stats"]["predicted_seconds"],
+            raw_long_sentences=len(res["raw_hits"]),
+            auto_fixed=res["auto_fixed"],
+            uncleanable=res["uncleanable"],
+            uncleanable_sentences=[
+                UncleanableSentence(length=clen, text=s)
                 for idx, clen, start, end, s in res["cleaned_hits"]
             ]
-        })
+        )
     except AnalysisError:
         raise
 
@@ -153,7 +206,7 @@ def api_analyze_chapter(chapter_id: str):
 class AnalyzeTextRequest(BaseModel):
     text_content: str = Field(..., max_length=1000000)
 
-@router.post("/analyze_text")
+@router.post("/analyze_text", response_model=TextAnalysisResponse)
 def api_analyze_text(req: AnalyzeTextRequest):
     def process_text():
         text_content = req.text_content
@@ -180,23 +233,23 @@ def api_analyze_text(req: AnalyzeTextRequest):
 
     res = process_text()
 
-    return JSONResponse({
-        "status": "ok",
-        "char_count": res["stats"]["char_count"],
-        "word_count": res["stats"]["word_count"],
-        "sent_count": res["stats"]["sent_count"],
-        "predicted_seconds": res["stats"]["predicted_seconds"],
-        "raw_long_sentences": len(res["raw_hits"]),
-        "auto_fixed": res["auto_fixed"],
-        "uncleanable": res["uncleanable"],
-        "uncleanable_sentences": [
-            {"length": clen, "text": s}
+    return TextAnalysisResponse(
+        status="ok",
+        char_count=res["stats"]["char_count"],
+        word_count=res["stats"]["word_count"],
+        sent_count=res["stats"]["sent_count"],
+        predicted_seconds=res["stats"]["predicted_seconds"],
+        raw_long_sentences=len(res["raw_hits"]),
+        auto_fixed=res["auto_fixed"],
+        uncleanable=res["uncleanable"],
+        uncleanable_sentences=[
+            UncleanableSentence(length=clen, text=s)
             for idx, clen, start, end, s in res["cleaned_hits"]
         ],
-        "threshold": SENT_CHAR_LIMIT,
-        "safe_text": res["packed_text"],
-        "split_sentences": res["split_text"].split("\n")
-    })
+        threshold=SENT_CHAR_LIMIT,
+        safe_text=res["packed_text"],
+        split_sentences=res["split_text"].split("\n")
+    )
 
 
 def _run_analysis(
@@ -204,12 +257,24 @@ def _run_analysis(
     chapter_dir: Path,
     report_dir: Path
 ):
-    # Ensure safe basename to prevent path traversal
-    safe_filename = os.path.basename(chapter_file)
-    p = chapter_dir / safe_filename
+    # Path Traversal Safety
+    try:
+        # Construct and resolve path
+        safe_path = (chapter_dir / chapter_file).resolve()
+        # Verify it's within the intended directory
+        if not safe_path.is_relative_to(chapter_dir.resolve()):
+            logger.warning(f"Blocking path traversal attempt: {chapter_file}")
+            raise AnalysisError("Invalid chapter path", 403)
 
-    if not p.exists():
-        raise AnalysisError(f"Chapter file '{safe_filename}' not found.", 404)
+        if not safe_path.exists():
+            raise AnalysisError(f"Chapter file '{chapter_file}' not found.", 404)
+
+        p = safe_path
+    except Exception as e:
+        if isinstance(e, AnalysisError):
+            raise
+        logger.error(f"Error resolving path {chapter_file}: {e}")
+        raise AnalysisError("Invalid chapter path", 403)
 
     text = p.read_text(encoding="utf-8", errors="replace")
     stats = get_text_stats(text)
@@ -268,11 +333,26 @@ def report(
     name: str,
     report_dir: Path = Depends(get_report_dir)
 ):
-    safe_name = os.path.basename(name).replace("..", "")
-    report_path = report_dir / f"long_sentences_{safe_name}.txt"
-    if not report_path.exists():
+    # Path Traversal Safety
+    try:
+        report_path = (report_dir / f"long_sentences_{name}.txt").resolve()
+        if not report_path.is_relative_to(report_dir.resolve()):
+            logger.warning(f"Blocking report traversal attempt: {name}")
+            return JSONResponse(
+                {"status": "error", "message": "Invalid report name"},
+                status_code=403
+            )
+
+        if not report_path.exists():
+            return JSONResponse(
+                {"status": "error", "message": "Report not found"},
+                status_code=404
+            )
+    except Exception as e:
+        logger.error(f"Error resolving report path {name}: {e}")
         return JSONResponse(
-            {"status": "error", "message": "Report not found"},
-            status_code=404
+            {"status": "error", "message": "Invalid report name"},
+            status_code=403
         )
+
     return FileResponse(report_path)

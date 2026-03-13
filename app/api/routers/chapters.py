@@ -1,4 +1,6 @@
 import anyio
+import logging
+import os
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Form, File, UploadFile, Request, Depends
@@ -21,6 +23,8 @@ from ...state import update_job, delete_jobs, get_settings
 # Compatibility for tests that monkeypatch these
 CHAPTER_DIR = config.CHAPTER_DIR
 XTTS_OUT_DIR = config.XTTS_OUT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def get_chapter_dir() -> Path:
@@ -120,7 +124,7 @@ def cancel_chapter_generation_route(chapter_id: str):
             cursor.execute("UPDATE chapter_segments SET audio_status = 'unprocessed' WHERE chapter_id = ? AND audio_status = 'processing'", (chapter_id,))
             conn.commit()
     except Exception as e:
-        print(f"Error cancelling chapter {chapter_id} in DB: {e}")
+        logger.error(f"Error cancelling chapter {chapter_id} in DB: {e}")
 
     return JSONResponse({"status": "ok", "cancelled_count": cancelled_count})
 
@@ -192,25 +196,39 @@ def reset_chapter_legacy(
     xtts_out_dir: Path = Depends(get_xtts_out_dir)
 ):
     existing = get_jobs()
-    import os
-    # Safe basename for protection
-    safe_chapter_file = os.path.basename(chapter_file)
-    stem = Path(safe_chapter_file).stem
-    for jid, j in existing.items():
-        if j.chapter_file == safe_chapter_file:
-            cancel_job(jid)
-            update_job(jid, status="cancelled", log="Cancelled by chapter reset.")
+    try:
+        # Construct and resolve path
+        safe_base = os.path.basename(chapter_file)
+        # Cancel any active jobs for this chapter file
+        for jid, j in existing.items():
+            if j.chapter_file == safe_base:
+                cancel_job(jid)
+                update_job(jid, status="cancelled", log="Cancelled by chapter reset.")
 
-    count = 0
-    for ext in [".wav", ".mp3", ".m4a"]:
-        f = xtts_out_dir / f"{stem}{ext}"
-        if f.exists():
-            f.unlink()
-            count += 1
-    return JSONResponse({
-        "status": "ok",
-        "message": f"Reset {safe_chapter_file}, deleted {count} files"
-    })
+        # However, for reset we check both Chapter existence and Output existence
+        # Check output stem
+        stem = Path(safe_base).stem
+
+        # Security: ensure we aren't leaking out
+        for ext in [".wav", ".mp3", ".m4a"]:
+            f = (xtts_out_dir / f"{stem}{ext}").resolve()
+            if not f.is_relative_to(xtts_out_dir.resolve()):
+                logger.warning(f"Blocking reset traversal attempt: {chapter_file}")
+                return JSONResponse({"status": "error", "message": "Invalid chapter file"}, status_code=403)
+
+        count = 0
+        for ext in [".wav", ".mp3", ".m4a"]:
+            f = xtts_out_dir / f"{stem}{ext}"
+            if f.exists():
+                f.unlink()
+                count += 1
+        return JSONResponse({
+            "status": "ok",
+            "message": f"Reset {safe_base}, deleted {count} files"
+        })
+    except Exception as e:
+        logger.error(f"Error resetting chapter {chapter_file}: {e}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @router.delete("/chapter/{filename}")
 def api_delete_legacy_chapter(
@@ -218,31 +236,40 @@ def api_delete_legacy_chapter(
     chapter_dir: Path = Depends(get_chapter_dir),
     xtts_out_dir: Path = Depends(get_xtts_out_dir)
 ):
-    import os
-    safe_filename = os.path.basename(filename)
-    path = chapter_dir / safe_filename
-    stem = path.stem
-    for ext in [".wav", ".mp3"]:
-        f = xtts_out_dir / f"{stem}{ext}"
-        if f.exists():
-            f.unlink()
+    try:
+        safe_filename = os.path.basename(filename)
+        path = (chapter_dir / safe_filename).resolve()
 
-    existing = get_jobs()
-    to_del = []
-    for jid, j in existing.items():
-        if j.chapter_file == safe_filename:
-            cancel_job(jid)
-            to_del.append(jid)
+        if not path.is_relative_to(chapter_dir.resolve()):
+            logger.warning(f"Blocking delete traversal attempt: {filename}")
+            return JSONResponse({"status": "error", "message": "Invalid filename"}, status_code=403)
 
-    if to_del:
-        delete_jobs(to_del)
+        stem = path.stem
+        for ext in [".wav", ".mp3"]:
+            f = (xtts_out_dir / f"{stem}{ext}").resolve()
+            if f.is_relative_to(xtts_out_dir.resolve()) and f.exists():
+                f.unlink()
 
-    if path.exists():
-        path.unlink()
-        return JSONResponse({
-            "status": "ok",
-            "message": f"Deleted chapter {safe_filename}"
-        })
+        existing = get_jobs()
+        to_del = []
+        for jid, j in existing.items():
+            if j.chapter_file == safe_filename:
+                cancel_job(jid)
+                to_del.append(jid)
+
+        if to_del:
+            delete_jobs(to_del)
+
+        if path.exists():
+            path.unlink()
+            return JSONResponse({
+                "status": "ok",
+                "message": f"Deleted chapter {safe_filename}"
+            })
+
+    except Exception as e:
+        logger.error(f"Error deleting chapter {filename}: {e}")
+        return JSONResponse({"status": "error", "message": "Delete failed"}, status_code=500)
 
     return JSONResponse(
         {"status": "error", "message": "Chapter not found"},
@@ -257,12 +284,20 @@ def api_preview(
 ):
     from ..utils import read_preview
     import re
-    import os
 
-    safe_filename = os.path.basename(chapter_file)
-    p = chapter_dir / safe_filename
-    if not p.exists():
-        return JSONResponse({"error": "not found"}, status_code=404)
+    try:
+        safe_filename = os.path.basename(chapter_file)
+        p = (chapter_dir / safe_filename).resolve()
+
+        if not p.is_relative_to(chapter_dir.resolve()):
+            logger.warning(f"Blocking preview traversal attempt: {chapter_file}")
+            return JSONResponse({"error": "invalid path"}, status_code=403)
+
+        if not p.exists():
+            return JSONResponse({"error": "not found"}, status_code=404)
+    except Exception as e:
+        logger.error(f"Error resolving preview path {chapter_file}: {e}")
+        return JSONResponse({"error": "invalid path"}, status_code=403)
 
     text = read_preview(p, max_chars=1000000)
     analysis = None

@@ -4,6 +4,7 @@ import time
 import json
 import shutil
 import anyio
+import logging
 from pathlib import Path
 from typing import Optional, List, Any
 from fastapi import APIRouter, Form, UploadFile, File, Request, Depends
@@ -25,6 +26,8 @@ COVER_DIR = config.COVER_DIR
 AUDIOBOOK_DIR = config.AUDIOBOOK_DIR
 VOICES_DIR = config.VOICES_DIR
 XTTS_OUT_DIR = config.XTTS_OUT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def get_upload_dir() -> Path:
@@ -159,9 +162,20 @@ async def upload(
     safe_filename = os.path.basename(file.filename)
 
     def process_file():
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = upload_dir / safe_filename
-        temp_path.write_bytes(file_content)
+        try:
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            safe_filename = os.path.basename(file.filename)
+            temp_path = (upload_dir / safe_filename).resolve()
+
+            if not temp_path.is_relative_to(upload_dir.resolve()):
+                logger.warning(f"Blocking upload traversal attempt: {file.filename}")
+                raise HTTPException(status_code=403, detail="Invalid filename")
+
+            temp_path.write_bytes(file_content)
+        except Exception as e:
+            if isinstance(e, HTTPException): raise
+            logger.error(f"Upload failed for {file.filename}: {e}")
+            raise HTTPException(status_code=500, detail="Upload failed")
 
         # Logic to split file
         content = temp_path.read_text(encoding="utf-8", errors="replace")
@@ -215,18 +229,29 @@ async def create_audiobook(
 
     cover_path = None
     if cover:
-        # Use safe basename for filename
-        safe_cover_filename = os.path.basename(cover.filename)
-        ext = Path(safe_cover_filename).suffix
-        cover_filename = f"{uuid.uuid4().hex}{ext}"
-        cover_path = str(cover_dir / cover_filename)
-        cover_content = await cover.read()
+        try:
+            # Use safe basename for filename
+            safe_cover_filename = os.path.basename(cover.filename)
+            ext = Path(safe_cover_filename).suffix
+            cover_filename = f"{uuid.uuid4().hex}{ext}"
 
-        def save_cover():
-            with open(cover_path, "wb") as f:
-                f.write(cover_content)
+            # Target path
+            dest = (cover_dir / cover_filename).resolve()
+            if not dest.is_relative_to(cover_dir.resolve()):
+                 raise HTTPException(status_code=403, detail="Invalid cover path")
 
-        await anyio.to_thread.run_sync(save_cover)
+            cover_path = str(dest)
+            cover_content = await cover.read()
+
+            def save_cover():
+                with open(cover_path, "wb") as f:
+                    f.write(cover_content)
+
+            await anyio.to_thread.run_sync(save_cover)
+        except Exception as e:
+            if isinstance(e, HTTPException): raise
+            logger.error(f"Error saving cover: {e}")
+            raise HTTPException(status_code=500, detail="Cover save failed")
 
     jid = uuid.uuid4().hex[:12]
     j = Job(
