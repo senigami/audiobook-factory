@@ -1,0 +1,156 @@
+import React from 'react';
+import type { Speaker, SpeakerProfile } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import { RecordingGuide } from './RecordingGuide';
+import {
+    NewVoiceModal,
+    RenameVoiceModal,
+    AddVariantModal,
+    MoveVariantModal,
+    Drawer,
+    ScriptEditor
+} from './voices';
+
+interface VoicesModalsProps {
+    // New Voice Modal
+    isCreateModalOpen: boolean;
+    setIsCreateModalOpen: (open: boolean) => void;
+    newVoiceName: string;
+    setNewVoiceName: (name: string) => void;
+    isCreatingVoice: boolean;
+    handleCreateVoice: () => void;
+
+    // Rename Modal
+    isRenameModalOpen: boolean;
+    setIsRenameModalOpen: (open: boolean) => void;
+    originalSpeakerName: string;
+    newSpeakerName: string;
+    setNewSpeakerName: (name: string) => void;
+    isRenamingSpeaker: boolean;
+    handleRenameSpeaker: () => void;
+
+    // Add Variant Modal
+    isAddVariantModalOpen: boolean;
+    setIsAddVariantModalOpen: (open: boolean) => void;
+    addVariantSpeaker: { speaker: Speaker } | null;
+    newVariantNameModal: string;
+    setNewVariantNameModal: (name: string) => void;
+    isAddingVariantModal: boolean;
+    handleAddVariant: () => void;
+
+    // Move Variant Modal
+    isMoveVariantModalOpen: boolean;
+    setIsMoveVariantModalOpen: (open: boolean) => void;
+    moveVariantProfile: SpeakerProfile | null;
+    allVoices: any[];
+    selectedMoveSpeakerId: string;
+    setSelectedMoveSpeakerId: (id: string) => void;
+    isMovingVariant: boolean;
+    handleMoveVariant: () => void;
+
+    // Guide Drawer
+    showGuide: boolean;
+    setShowGuide: (show: boolean) => void;
+
+    // Script Editor Drawer
+    editingProfile: SpeakerProfile | null;
+    setEditingProfile: (profile: SpeakerProfile | null) => void;
+    variantName: string;
+    setVariantName: (name: string) => void;
+    testText: string;
+    setTestText: (text: string) => void;
+    isSavingText: boolean;
+    handleResetTestText: () => void;
+    handleSaveTestText: () => void;
+
+    // Global Confirm
+    confirmConfig: any;
+    setConfirmConfig: (config: any) => void;
+}
+
+export const VoicesModals: React.FC<VoicesModalsProps> = (props) => {
+    return (
+        <>
+            <NewVoiceModal
+                isOpen={props.isCreateModalOpen}
+                onClose={() => props.setIsCreateModalOpen(false)}
+                value={props.newVoiceName}
+                onChange={props.setNewVoiceName}
+                onSubmit={props.handleCreateVoice}
+                isCreating={props.isCreatingVoice}
+            />
+
+            <RenameVoiceModal
+                isOpen={props.isRenameModalOpen}
+                onClose={() => props.setIsRenameModalOpen(false)}
+                originalName={props.originalSpeakerName}
+                value={props.newSpeakerName}
+                onChange={props.setNewSpeakerName}
+                isRenaming={props.isRenamingSpeaker}
+                onSubmit={props.handleRenameSpeaker}
+            />
+
+            <AddVariantModal
+                isOpen={props.isAddVariantModalOpen}
+                onClose={() => props.setIsAddVariantModalOpen(false)}
+                speakerName={props.addVariantSpeaker?.speaker.name || ''}
+                value={props.newVariantNameModal}
+                onChange={props.setNewVariantNameModal}
+                isAdding={props.isAddingVariantModal}
+                onSubmit={props.handleAddVariant}
+            />
+
+            <MoveVariantModal
+                isOpen={props.isMoveVariantModalOpen}
+                onClose={() => props.setIsMoveVariantModalOpen(false)}
+                variantName={props.moveVariantProfile?.variant_name || props.moveVariantProfile?.name || ''}
+                speakers={props.allVoices.filter(v => {
+                    if (props.moveVariantProfile?.speaker_id && v.id === props.moveVariantProfile.speaker_id) return false;
+                    if (!props.moveVariantProfile?.speaker_id && v.id === `unassigned-${props.moveVariantProfile?.name}`) return false;
+                    return true;
+                })}
+                selectedSpeakerId={props.selectedMoveSpeakerId}
+                onSelectSpeaker={props.setSelectedMoveSpeakerId}
+                isMoving={props.isMovingVariant}
+                onSubmit={props.handleMoveVariant}
+            />
+
+            <Drawer 
+                isOpen={props.showGuide} 
+                onClose={() => props.setShowGuide(false)} 
+                title="Recording Guide"
+            >
+                <RecordingGuide />
+            </Drawer>
+
+            <Drawer
+                isOpen={!!props.editingProfile}
+                onClose={() => props.setEditingProfile(null)}
+                title={`Edit: ${props.editingProfile?.variant_name || props.editingProfile?.name || ''}`}
+            >
+                <ScriptEditor
+                    variantName={props.variantName}
+                    onVariantNameChange={props.setVariantName}
+                    testText={props.testText}
+                    onTestTextChange={props.setTestText}
+                    onResetTestText={props.handleResetTestText}
+                    onSave={props.handleSaveTestText}
+                    isSaving={props.isSavingText}
+                />
+            </Drawer>
+
+            <ConfirmModal
+                isOpen={!!props.confirmConfig}
+                title={props.confirmConfig?.title || ''}
+                message={props.confirmConfig?.message || ''}
+                isDestructive={props.confirmConfig?.isDestructive}
+                isAlert={props.confirmConfig?.isAlert}
+                onConfirm={() => {
+                    props.confirmConfig?.onConfirm();
+                    props.setConfirmConfig(null);
+                }}
+                onCancel={() => props.setConfirmConfig(null)}
+            />
+        </>
+    );
+};

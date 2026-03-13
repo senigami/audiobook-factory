@@ -16,11 +16,16 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
   totalSegments = 0, 
 }) => {
   // 1. Determine priority states
-  const isError = chap.audio_status === 'error';
+  const isError = chap.audio_status === 'error' || chap.audio_status === 'failed';
   const isStale = !!(chap.text_last_modified && chap.audio_generated_at && (chap.text_last_modified > chap.audio_generated_at));
-  const isProcessing = chap.audio_status === 'processing' || !!activeJob;
+  
+  // We only count it as 'processing' (spinner) if we HAVE a live active job.
+  // Otherwise, it's a "stuck" indicator and we should show it as partial/unprocessed but stale.
+  const isTrulyProcessing = !!activeJob;
+  const isStuckProcessing = !activeJob && chap.audio_status === 'processing';
+  
   const isComplete = chap.audio_status === 'done' && chap.has_wav;
-  const isPartial = !isStale && !isProcessing && doneSegments > 0 && doneSegments < totalSegments && !chap.has_wav;
+  const isPartial = !isStale && !isTrulyProcessing && doneSegments > 0 && doneSegments < totalSegments && !chap.has_wav;
 
   // Ornaments
   const hasMp3 = chap.has_mp3;
@@ -40,14 +45,16 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
     fill = 'var(--error)';
     content = <span style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold', lineHeight: '1' }}>!</span>;
     tooltip = 'Render failed. View Queue for details.';
-  } else if (isStale) {
+  } else if (isStale || isStuckProcessing) {
     fill = 'var(--warning)';
     orbRadius = 8.5; // Slightly larger
     orbStroke = 'var(--warning-text)'; // Orange border
     orbStrokeWidth = 1.2;
     content = <AlertTriangle size={10} color="#000" strokeWidth={3} style={{ display: 'block' }} />;
-    tooltip = 'Needs rebuild: script or voice assignment changed since last render';
-  } else if (isProcessing) {
+    tooltip = isStuckProcessing 
+      ? 'Render was interrupted. Needs rebuild.' 
+      : 'Needs rebuild: script or voice assignment changed since last render';
+  } else if (isTrulyProcessing) {
     fill = 'var(--surface-light)'; // Neutral/subtle blue or grey
     content = <RefreshCw size={10} color="var(--accent)" className="animate-spin" style={{ display: 'block' }} />;
     tooltip = 'Rendering... (see Queue for progress)';
@@ -112,7 +119,7 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
             strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
             strokeDashoffset={segmentLength + 1.5} // Position on left
             strokeLinecap="round"
-            style={{ opacity: hasM4a ? 0.8 : 0.3, transition: 'all 0.3s' }}
+            style={{ opacity: isStale ? 0 : (hasM4a ? 0.8 : 0.3), transition: 'all 0.3s' }}
           />
 
           {/* MP3 Arc (Top-Right) */}
@@ -124,7 +131,7 @@ export const StatusOrb: React.FC<StatusOrbProps> = ({
             strokeDasharray={`${segmentLength} ${ringCircumference - segmentLength}`}
             strokeDashoffset={-1.5} // Position on right
             strokeLinecap="round"
-            style={{ opacity: hasMp3 ? 0.8 : 0.3, transition: 'all 0.3s' }}
+            style={{ opacity: isStale ? 0 : (hasMp3 ? 0.8 : 0.3), transition: 'all 0.3s' }}
           />
 
           {/* Base Orb */}

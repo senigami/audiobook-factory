@@ -3,7 +3,7 @@ from pathlib import Path
 
 BASE_DIR = Path(os.getenv("AUDIOBOOK_BASE_DIR", str(Path(__file__).resolve().parents[1])))
 
-CHAPTER_DIR = Path(os.getenv("CHAPTER_DIR", str(BASE_DIR / "chapters_out")))
+CHAPTER_DIR = Path(os.getenv("CHAPTER_DIR", str(BASE_DIR / "chapters" if (BASE_DIR / "chapters").exists() else BASE_DIR / "chapters_out")))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads")))
 REPORT_DIR = Path(os.getenv("REPORT_DIR", str(BASE_DIR / "reports")))
 XTTS_OUT_DIR = Path(os.getenv("XTTS_OUT_DIR", str(BASE_DIR / "xtts_audio")))
@@ -13,6 +13,7 @@ COVER_DIR = Path(os.getenv("COVER_DIR", str(UPLOAD_DIR / "covers")))
 SAMPLES_DIR = Path(os.getenv("SAMPLES_DIR", str(BASE_DIR / "samples")))
 ASSETS_DIR = Path(os.getenv("ASSETS_DIR", str(BASE_DIR / "assets")))
 PROJECTS_DIR = Path(os.getenv("PROJECTS_DIR", str(BASE_DIR / "projects")))
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
 def get_project_dir(project_id: str) -> Path:
     d = PROJECTS_DIR / project_id
@@ -46,3 +47,4 @@ PART_CHAR_LIMIT = 30000
 MAKE_MP3_DEFAULT = False
 MP3_QUALITY = "2"  # ffmpeg -q:a 2
 AUDIOBOOK_BITRATE = "64k"
+BASELINE_XTTS_CPS = 16.7

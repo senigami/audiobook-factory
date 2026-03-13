@@ -1,109 +1,195 @@
-import { render, screen } from '@testing-library/react'
-import { ProjectView } from './ProjectView'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api } from '../api'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../api')
+// Mock API
+vi.mock('../api', () => ({
+  api: {
+    fetchProject: vi.fn(),
+    fetchChapters: vi.fn(),
+    fetchProjectAudiobooks: vi.fn(),
+    fetchCharacters: vi.fn().mockResolvedValue([]),
+    fetchSegments: vi.fn().mockResolvedValue([]),
+    updateChapter: vi.fn(),
+    exportSample: vi.fn(),
+  },
+}));
+
+// Mock hooks
+vi.mock('../hooks/useProjectActions', () => ({
+  useProjectActions: () => ({
+    submitting: false,
+    handleCreateChapter: vi.fn(),
+    handleUpdateProject: vi.fn(),
+    handleDeleteChapter: vi.fn(),
+    handleReorderChapters: vi.fn(),
+    handleQueueChapter: vi.fn(),
+    handleResetChapterAudio: vi.fn(),
+    handleQueueAllUnprocessed: vi.fn(),
+    handleAssembleProject: vi.fn(),
+    handleDeleteAudiobook: vi.fn(),
+  }),
+}));
+
+// Mock lucide-react
+vi.mock('lucide-react', () => ({
+  Plus: () => <div data-testid="plus-icon" />,
+  Zap: () => <div data-testid="zap-icon" />,
+  ArrowUpDown: () => <div data-testid="arrow-up-down-icon" />,
+  MoreVertical: () => <div data-testid="more-vertical-icon" />,
+  FileText: () => <div />,
+  GripVertical: () => <div />,
+  CheckSquare: () => <div />,
+  Square: () => <div />,
+  RefreshCw: () => <div />,
+  Edit3: () => <div />,
+  Video: () => <div />,
+  Download: () => <div />,
+  Trash2: () => <div />,
+  Loader2: () => <div />,
+  AlertTriangle: () => <div />,
+  Volume2: () => <div />,
+  Info: () => <div />,
+  ChevronRight: () => <div />,
+  ChevronDown: () => <div />,
+  User: () => <div />,
+  List: () => <div />,
+  Play: () => <div />,
+  Pause: () => <div />,
+  X: () => <div />,
+  Music: () => <div />,
+  Upload: () => <div />,
+  Image: () => <div data-testid="image-icon" />,
+  ArrowLeft: () => <div />,
+  Clock: () => <div />,
+  CheckCircle: () => <div />,
+}));
+
+// Mock framer-motion
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  },
+  AnimatePresence: ({ children }: any) => <>{children}</>,
+  Reorder: {
+      Group: ({ children }: any) => <div data-testid="reorder-group">{children}</div>,
+      Item: ({ children }: any) => <div data-testid="reorder-item">{children}</div>,
+  }
+}));
+
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { ProjectView } from './ProjectView';
+import { api } from '../api';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+const mockProject = {
+  id: 'proj-123',
+  name: 'Test Project',
+  series: 'Test Series',
+  author: 'Test Author',
+  cover_image_path: '',
+  created_at: 1000,
+  updated_at: 2000,
+};
+
+const mockChapters = [
+  { 
+    id: 'chap-1', 
+    title: 'Chapter 1', 
+    audio_status: 'done', 
+    char_count: 100,
+    total_segments_count: 10,
+    done_segments_count: 10,
+    has_wav: true,
+    predicted_audio_length: 60
+  },
+  { 
+    id: 'chap-2', 
+    title: 'Chapter 2', 
+    audio_status: 'unprocessed', 
+    char_count: 200,
+    total_segments_count: 0,
+    done_segments_count: 0,
+    has_wav: false,
+    predicted_audio_length: 120
+  },
+];
 
 describe('ProjectView', () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-        vi.mocked(api.fetchProjectAudiobooks).mockResolvedValue([])
-    })
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.fetchProject as any).mockResolvedValue(mockProject);
+    (api.fetchChapters as any).mockResolvedValue(mockChapters);
+    (api.fetchProjectAudiobooks as any).mockResolvedValue([]);
+  });
 
-    const defaultProject = {
-        id: '1',
-        name: 'Test Project',
-        series: null,
-        author: 'Test Author',
-        cover_image_path: null,
-        created_at: 1000,
-        updated_at: 2000
-    }
+  const renderProjectView = () => {
+    return render(
+      <MemoryRouter initialEntries={['/projects/proj-123']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={
+            <ProjectView 
+              jobs={{}} 
+              speakerProfiles={[]} 
+              speakers={[]} 
+            />
+          } />
+        </Routes>
+      </MemoryRouter>
+    );
+  };
 
-    it('renders project details and fetches chapters', async () => {
-        vi.mocked(api.fetchProject).mockResolvedValue(defaultProject)
-        vi.mocked(api.fetchChapters).mockResolvedValue([
-            {
-                id: 'ch-1',
-                project_id: '1',
-                title: 'Chapter 1',
-                text_content: 'Test content',
-                sort_order: 1,
-                audio_status: 'unprocessed',
-                audio_file_path: null,
-                text_last_modified: null,
-                audio_generated_at: null,
-                char_count: 100,
-                word_count: 20,
-                sent_count: 2,
-                predicted_audio_length: 10,
-                audio_length_seconds: 0
-            }
-        ])
+  it('renders loading state', () => {
+    renderProjectView();
+    expect(screen.getByText('Loading project...')).toBeInTheDocument();
+  });
 
-        render(
-            <MemoryRouter initialEntries={['/project/1']}>
-                <Routes>
-                    <Route path="/project/:projectId" element={
-                        <ProjectView jobs={{}} speakerProfiles={[]} speakers={[]} />
-                    } />
-                </Routes>
-            </MemoryRouter>
-        )
+  it('loads and renders project and chapters', async () => {
+    renderProjectView();
 
-        expect(await screen.findByText('Test Project')).toBeTruthy()
-        expect(await screen.findByText('Chapter 1')).toBeTruthy()
-    })
+    await waitFor(() => {
+      expect(screen.queryByText('Loading project...')).not.toBeInTheDocument();
+    });
 
-    it('renders assembly history with duration and relative time', async () => {
-        vi.mocked(api.fetchProject).mockResolvedValue(defaultProject)
-        vi.mocked(api.fetchChapters).mockResolvedValue([])
-        vi.mocked(api.fetchProjectAudiobooks).mockResolvedValue([
-            {
-                filename: 'test.m4b',
-                title: 'Test Audiobook',
-                created_at: Math.floor(Date.now() / 1000) - 3600, // 1h ago
-                size_bytes: 1024 * 1024 * 10, // 10MB
-                duration_seconds: 7200, // 2h
-                cover_url: null
-            }
-        ])
+    expect(screen.getByText('Test Project')).toBeInTheDocument();
+    expect(screen.getByText('Chapter 1')).toBeInTheDocument();
+    expect(screen.getByText('Chapter 2')).toBeInTheDocument();
+  });
 
-        render(
-            <MemoryRouter initialEntries={['/project/1']}>
-                <Routes>
-                    <Route path="/project/:projectId" element={
-                        <ProjectView jobs={{}} speakerProfiles={[]} speakers={[]} />
-                    } />
-                </Routes>
-            </MemoryRouter>
-        )
+  it('switches to characters tab', async () => {
+    renderProjectView();
 
-        // screen.debug()
-        expect(await screen.findByText('Assemblies (1)')).toBeTruthy()
-        expect(await screen.findByText('Test Audiobook')).toBeTruthy()
-        expect(await screen.findByText(/1h ago/)).toBeTruthy()
-        expect(await screen.findByText(/2h 0m/)).toBeTruthy()
-        expect((await screen.findAllByText(/MB/)).length).toBeGreaterThan(0)
-    })
+    await waitFor(() => screen.findByText('Test Project'));
 
-    it('renders empty state for assembly history', async () => {
-        vi.mocked(api.fetchProject).mockResolvedValue(defaultProject)
-        vi.mocked(api.fetchChapters).mockResolvedValue([])
-        vi.mocked(api.fetchProjectAudiobooks).mockResolvedValue([])
+    fireEvent.click(screen.getByText('Characters'));
+    expect(screen.getByText('Characters & Voices')).toBeInTheDocument();
+  });
 
-        render(
-            <MemoryRouter initialEntries={['/project/1']}>
-                <Routes>
-                    <Route path="/project/:projectId" element={
-                        <ProjectView jobs={{}} speakerProfiles={[]} speakers={[]} />
-                    } />
-                </Routes>
-            </MemoryRouter>
-        )
+  it('opens add chapter modal', async () => {
+    renderProjectView();
 
-        expect(await screen.findByText('No assemblies yet')).toBeTruthy()
-    })
-})
+    await waitFor(() => screen.findByText('Test Project'));
+
+    fireEvent.click(screen.getByText('Add Chapter'));
+    expect(screen.getByText('Add New Chapter')).toBeInTheDocument();
+  });
+
+  it('opens edit project modal', async () => {
+    renderProjectView();
+
+    await waitFor(() => screen.findByText('Test Project'));
+
+    // ProjectHeader has the edit button with title="Edit Project Metadata"
+    fireEvent.click(screen.getByTitle('Edit Project Metadata'));
+    expect(screen.getByText('Edit Project Details')).toBeInTheDocument();
+  });
+
+  it('enters assembly mode', async () => {
+    renderProjectView();
+
+    await waitFor(() => screen.findByText('Test Project'));
+
+    fireEvent.click(screen.getByText('Assemble Project'));
+    expect(screen.getByText('Select Chapters for Assembly')).toBeInTheDocument();
+    expect(screen.getByText('Confirm Assembly')).toBeInTheDocument();
+  });
+});

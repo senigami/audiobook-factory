@@ -86,11 +86,14 @@ def get_settings() -> Dict[str, Any]:
         return state.get("settings", {})
 
 
-def update_settings(**updates) -> None:
+def update_settings(updates: dict = None, **kwargs) -> None:
     with _STATE_LOCK:
         state = _load_state_no_lock()
         state.setdefault("settings", {})
-        state["settings"].update(updates)
+        if updates:
+            state["settings"].update(updates)
+        if kwargs:
+            state["settings"].update(kwargs)
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
 
 
@@ -157,22 +160,27 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
                 }
                 new_p = status_priority.get(v, 0)
                 old_p = status_priority.get(current_status, 0)
-                if new_p < old_p:
-                    # Allow regression only if explicitly resetting (e.g. back to queued)
+                if not force_broadcast and new_p < old_p:
+                    # Allow regression only if explicitly resetting (e.g. back to queued from a terminal state)
                     # But if we're in the middle of a run, don't let a stray 'queued' msg win.
-                    if not (v == "queued" and current_status in ("preparing", "running", "finalizing")):
-                         print(f"DEBUG: Allowing status regression for {job_id}: {current_status} -> {v}")
-                    else:
+                    is_reset = v == "queued" and current_status in ("done", "failed", "cancelled")
+                    if not is_reset and (v == "queued" and current_status in ("preparing", "running", "finalizing")):
+                        print(f"DEBUG: Preventing status regression for {job_id}: {current_status} -> {v}")
+                        continue
+                    elif not is_reset:
                         print(f"DEBUG: Preventing status regression for {job_id}: {current_status} -> {v}")
                         continue
 
             # 2. Progress regression protection
             if k == "progress":
-                current_status = j.get("status")
-                if current_status not in ("queued", "preparing"):
-                    if v < (j.get("progress") or 0.0):
-                        print(f"DEBUG: Skipping progress regression for {job_id}: {j.get('progress')} -> {v}")
-                        continue
+                if v is not None:
+                    v = round(float(v), 2)
+                if not force_broadcast:
+                    current_status = j.get("status")
+                    if current_status not in ("queued", "preparing"):
+                        if v < (j.get("progress") or 0.0):
+                            print(f"DEBUG: Skipping progress regression for {job_id}: {j.get('progress')} -> {v}")
+                            continue
 
             if j.get(k) != v:
                 j[k] = v
@@ -227,7 +235,7 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
                 update_queue_item(job_id, new_status, audio_length_seconds=audio_length, force_chapter_id=j.get("chapter_id"), output_file=output_file)
 
                 try:
-                    from .web import broadcast_queue_update
+                    from .api.ws import broadcast_queue_update
                     broadcast_queue_update()
                 except ImportError:
                     pass
@@ -242,6 +250,39 @@ def update_job(job_id: str, force_broadcast: bool = False, **updates) -> None:
                 callback(job_id, updates)
             except Exception as e:
                 print(f"Error in job listener: {e}")
+
+        # PRUNING: If job is done/failed/cancelled, we can remove it from state.json
+        # because the historical record is now in SQLite's processing_queue table.
+        if updates.get("status", j.get("status")) in ("done", "failed", "cancelled"):
+            # We keep it just long enough for the final broadcast to reach clients (approx 1s)
+            # Or we can just prune it now. Let's do a 'soft' prune by calling a dedicated function.
+            prune_completed_jobs()
+
+
+def prune_completed_jobs() -> None:
+    """
+    Removes jobs from the state if they are in a terminal state.
+    We keep a small buffer of recent completions (e.g. 50) to allow UI transitions.
+    """
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        jobs = state.get("jobs", {})
+
+        terminal_jobs = [
+            (jid, jdata.get("finished_at", 0) or jdata.get("created_at", 0))
+            for jid, jdata in jobs.items()
+            if jdata.get("status") in ("done", "failed", "cancelled")
+        ]
+
+        # Sort by completion time, keep the most recent 50
+        terminal_jobs.sort(key=lambda x: x[1], reverse=True)
+        to_prune = [jid for jid, _ in terminal_jobs[50:]]
+
+        if to_prune:
+            for jid in to_prune:
+                del jobs[jid]
+            _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+            print(f"DEBUG: Pruned {len(to_prune)} terminal jobs from state.json")
 
 
 def delete_jobs(job_ids: list[str]) -> None:
@@ -259,3 +300,15 @@ def clear_all_jobs() -> None:
         state = _load_state_no_lock()
         state["jobs"] = {}
         _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+
+def purge_jobs_for_chapter(chapter_id: str) -> None:
+    """Removes all existing jobs for a specific chapter from the state."""
+    with _STATE_LOCK:
+        state = _load_state_no_lock()
+        jobs = state.get("jobs", {})
+        to_delete = [jid for jid, jdata in jobs.items() if jdata.get("chapter_id") == chapter_id]
+        if to_delete:
+            for jid in to_delete:
+                del jobs[jid]
+            _atomic_write_text(STATE_FILE, json.dumps(state, indent=2))
+            print(f"DEBUG: Purged {len(to_delete)} stale jobs for chapter {chapter_id}")

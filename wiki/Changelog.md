@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-13
+
+### Architecture
+- **Code Modularization**: Reorganized the backend into a `routers/` pattern for better maintainability and faster navigation.
+- **Standardized Rules**: Added `.agent/rules.md` to enforce code quality and file size limits for future development.
+
+### Performance & Stability
+- **Non-blocking I/O**: Optimized file system interactions within the API layer to support higher concurrency.
+- **Robust Analysis**: Integrated `sanitize_for_xtts` directly into the analysis pipeline to ensure "What You See Is What You Get" metrics for audiobook generation.
+- **Structured Response Models**: Implemented Pydantic models for all major routes to provide a strict and documented API contract.
+
+### Security
+- **Path Sanitization**: Implemented robust path traversal protection using `Path.resolve()` and `is_relative_to()` to prevent unauthorized file access.
+- **Input Hardening**: Added stricter validation for text inputs and chapter file paths to prevent resource exhaustion.
+- **Granular Exception Handling**: Refined the error handling logic to provide more descriptive feedback with specific HTTP status codes (403, 404, 422).
+
+### Quality Assurance
+- **Expanded Test Suite**: Added `test_api_analysis_extended.py` and front-end unit tests for the `StatusOrb` and `ScriptEditor` components.
+- **Full Regression Testing**: Verified 100% pass rate across the entire test suite (181 tests) after the backend refactor.
+
 ## [1.3.0] - 2026-03-06
 
 ### Added

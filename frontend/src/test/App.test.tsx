@@ -75,7 +75,7 @@ describe('App', () => {
     fireEvent.click(voicesTab)
 
     await waitFor(() => {
-        expect(screen.getByText(/Voices/i, { selector: 'h2' })).toBeTruthy()
+        expect(screen.getByText('Voices', { selector: 'h2' })).toBeTruthy()
     })
   })
 })

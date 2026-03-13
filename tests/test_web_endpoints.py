@@ -48,7 +48,7 @@ def test_chapter_endpoints():
     assert res.status_code == 200
 
     # test analyze
-    res = client.post("/api/analyze_text", data={"text_content": "A" * 500})
+    res = client.post("/api/analyze_text", json={"text_content": "A" * 500})
     assert res.status_code == 200
 
     # Add another chapter for reordering

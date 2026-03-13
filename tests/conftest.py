@@ -1,10 +1,14 @@
 import os
 import tempfile
 import pytest
+import atexit
 from pathlib import Path
 
 # 1. Create a session-wide temp directory for storage isolation
-SESSION_TEMP = Path(tempfile.mkdtemp())
+_temp_dir = tempfile.TemporaryDirectory()
+atexit.register(_temp_dir.cleanup)
+SESSION_TEMP = Path(_temp_dir.name)
+
 os.environ["AUDIOBOOK_BASE_DIR"] = str(SESSION_TEMP)
 os.environ["DB_PATH"] = str(SESSION_TEMP / "test_audiobook_studio.db")
 os.environ["STATE_FILE"] = str(SESSION_TEMP / "test_state.json")
