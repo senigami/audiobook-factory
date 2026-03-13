@@ -61,7 +61,8 @@ def test_api_report_success(tmp_path, monkeypatch):
     from app.api.routers.analysis import REPORT_DIR
     mock_report_dir = tmp_path / "reports"
     mock_report_dir.mkdir()
-    monkeypatch.setattr("app.api.routers.analysis.REPORT_DIR", mock_report_dir)
+    monkeypatch.setattr("app.config.REPORT_DIR", mock_report_dir)
+    monkeypatch.setattr("app.web.REPORT_DIR", mock_report_dir)
 
     report_file = mock_report_dir / "long_sentences_test_report.txt"
     report_file.write_text("Report content")

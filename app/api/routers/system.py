@@ -12,32 +12,43 @@ from ... import config
 from ...state import get_settings, update_settings, get_jobs, put_job, update_job
 from ...jobs import paused, set_paused, cleanup_and_reconcile, enqueue
 from ...db import list_speakers
+from ...models import Job
+from ..utils import (
+    read_preview, output_exists, xtts_outputs_for,
+    legacy_list_chapters, list_audiobooks
+)
+
+# Compatibility for tests that monkeypatch these
+UPLOAD_DIR = config.UPLOAD_DIR
+CHAPTER_DIR = config.CHAPTER_DIR
+COVER_DIR = config.COVER_DIR
+AUDIOBOOK_DIR = config.AUDIOBOOK_DIR
+VOICES_DIR = config.VOICES_DIR
+XTTS_OUT_DIR = config.XTTS_OUT_DIR
 
 
 def get_upload_dir() -> Path:
-    return config.UPLOAD_DIR
+    return UPLOAD_DIR
 
 
 def get_chapter_dir() -> Path:
-    return config.CHAPTER_DIR
+    return CHAPTER_DIR
 
 
 def get_cover_dir() -> Path:
-    return config.COVER_DIR
+    return COVER_DIR
 
 
 def get_audiobook_dir() -> Path:
-    return config.AUDIOBOOK_DIR
+    return AUDIOBOOK_DIR
 
 
 def get_voices_dir() -> Path:
-    return config.VOICES_DIR
+    return VOICES_DIR
 
 
 def get_xtts_out_dir() -> Path:
-    return config.XTTS_OUT_DIR
-from ...models import Job
-from ..utils import read_preview, output_exists, xtts_outputs_for, legacy_list_chapters, list_audiobooks
+    return XTTS_OUT_DIR
 
 router = APIRouter(prefix="/api", tags=["system"])
 

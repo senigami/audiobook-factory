@@ -15,6 +15,7 @@ from .config import (
 )
 from .db import init_db
 from .api import projects, chapters, voices, queue, settings, generation, system, analysis, jobs, migration, manager
+from .api.routers.analysis import AnalysisError
 
 app = FastAPI()
 
@@ -39,7 +40,9 @@ async def legacy_upload(request: Request):
     return await upload(
         file=form.get("file"),
         mode=form.get("mode", "parts"),
-        max_chars=form.get("max_chars")
+        max_chars=form.get("max_chars"),
+        upload_dir=UPLOAD_DIR,
+        chapter_dir=CHAPTER_DIR
     )
 
 @app.post("/create_audiobook")
@@ -51,7 +54,9 @@ async def legacy_create_audiobook(request: Request):
         author=form.get("author"),
         narrator=form.get("narrator"),
         chapters=form.get("chapters", "[]"),
-        cover=form.get("cover")
+        cover=form.get("cover"),
+        cover_dir=COVER_DIR,
+        audiobook_dir=AUDIOBOOK_DIR
     )
 
 @app.post("/settings")
@@ -95,12 +100,19 @@ async def legacy_clear_completed():
 async def legacy_chapter_reset(request: Request):
     from .api.routers.chapters import reset_chapter_legacy
     form = await request.form()
-    return reset_chapter_legacy(form.get("chapter_file"))
+    return reset_chapter_legacy(
+        chapter_file=form.get("chapter_file"),
+        xtts_out_dir=XTTS_OUT_DIR
+    )
 
 @app.delete("/api/chapter/{filename}")
 async def legacy_delete_chapter(filename: str):
     from .api.routers.chapters import api_delete_legacy_chapter
-    return api_delete_legacy_chapter(filename)
+    return api_delete_legacy_chapter(
+        filename,
+        chapter_dir=CHAPTER_DIR,
+        xtts_out_dir=XTTS_OUT_DIR
+    )
 
 @app.post("/queue/start_xtts")
 async def legacy_start_xtts():
@@ -136,6 +148,13 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"WS error: {e}")
         manager.disconnect(websocket)
+
+@app.exception_handler(AnalysisError)
+async def analysis_error_handler(request: Request, exc: AnalysisError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "message": exc.message}
+    )
 
 # --- Lifecycle Events ---
 @app.on_event("startup")
@@ -206,6 +225,21 @@ async def sync_config_middleware(request: Request, call_next):
     config.PROJECTS_DIR = PROJECTS_DIR
     config.COVER_DIR = COVER_DIR
     config.ASSETS_DIR = ASSETS_DIR
+
+    # Sync router-level variables for legacy tests that monkeypatch them
+    from .api.routers import analysis as r_analysis, system as r_system, chapters as r_chapters, voices as r_voices
+    r_analysis.CHAPTER_DIR = config.CHAPTER_DIR
+    r_analysis.REPORT_DIR = config.REPORT_DIR
+    r_system.UPLOAD_DIR = config.UPLOAD_DIR
+    r_system.CHAPTER_DIR = config.CHAPTER_DIR
+    r_system.COVER_DIR = config.COVER_DIR
+    r_system.AUDIOBOOK_DIR = config.AUDIOBOOK_DIR
+    r_system.VOICES_DIR = config.VOICES_DIR
+    r_system.XTTS_OUT_DIR = config.XTTS_OUT_DIR
+    r_chapters.CHAPTER_DIR = config.CHAPTER_DIR
+    r_chapters.XTTS_OUT_DIR = config.XTTS_OUT_DIR
+    r_voices.VOICES_DIR = config.VOICES_DIR
+
     return await call_next(request)
 
 # --- Include Routers ---

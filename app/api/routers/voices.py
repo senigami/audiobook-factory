@@ -18,9 +18,12 @@ from ...jobs import get_speaker_settings, update_speaker_settings, enqueue
 from ...models import Job
 from fastapi import Depends
 
+# Compatibility for tests that monkeypatch these
+VOICES_DIR = config.VOICES_DIR
+
 
 def get_voices_dir() -> Path:
-    return config.VOICES_DIR
+    return VOICES_DIR
 
 router = APIRouter(prefix="/api", tags=["voices"])
 

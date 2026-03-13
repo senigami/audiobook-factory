@@ -10,6 +10,7 @@ from ...db import (
     sync_chapter_segments, reset_chapter_audio, get_connection
 )
 from ... import config
+from ...config import get_project_audio_dir, SENT_CHAR_LIMIT, BASELINE_XTTS_CPS
 from ...textops import (
     compute_chapter_metrics, sanitize_for_xtts,
     safe_split_long_sentences, pack_text_to_limit
@@ -17,13 +18,17 @@ from ...textops import (
 from ...jobs import cancel as cancel_job, get_jobs
 from ...state import update_job, delete_jobs, get_settings
 
+# Compatibility for tests that monkeypatch these
+CHAPTER_DIR = config.CHAPTER_DIR
+XTTS_OUT_DIR = config.XTTS_OUT_DIR
+
 
 def get_chapter_dir() -> Path:
-    return config.CHAPTER_DIR
+    return CHAPTER_DIR
 
 
 def get_xtts_out_dir() -> Path:
-    return config.XTTS_OUT_DIR
+    return XTTS_OUT_DIR
 
 router = APIRouter(prefix="/api", tags=["chapters"])
 

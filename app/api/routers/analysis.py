@@ -4,17 +4,17 @@ from itertools import groupby
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
-from ...config import (
-    CHAPTER_DIR as CFG_CHAPTER_DIR,
-    REPORT_DIR as CFG_REPORT_DIR,
-    SENT_CHAR_LIMIT,
-    BASELINE_XTTS_CPS
-)
+from ... import config
 from ...db import get_chapter, get_chapter_segments, get_characters
 from ...textops import (
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences,
     pack_text_to_limit, sanitize_for_xtts, get_text_stats, format_duration
 )
+from ...config import SENT_CHAR_LIMIT, BASELINE_XTTS_CPS
+
+# Compatibility for tests that monkeypatch these
+CHAPTER_DIR = config.CHAPTER_DIR
+REPORT_DIR = config.REPORT_DIR
 
 
 class AnalysisError(Exception):
@@ -25,11 +25,11 @@ class AnalysisError(Exception):
 
 
 def get_chapter_dir() -> Path:
-    return CFG_CHAPTER_DIR
+    return CHAPTER_DIR
 
 
 def get_report_dir() -> Path:
-    return CFG_REPORT_DIR
+    return REPORT_DIR
 
 
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -146,8 +146,8 @@ def api_analyze_chapter(chapter_id: str):
                 for idx, clen, start, end, s in res["cleaned_hits"]
             ]
         })
-    except AnalysisError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except AnalysisError:
+        raise
 
 
 class AnalyzeTextRequest(BaseModel):
