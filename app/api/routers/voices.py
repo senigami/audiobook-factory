@@ -13,19 +13,23 @@ from ...db import (
     update_voice_profile_references
 )
 from ... import config
-from ...state import get_settings, update_settings
+from ...state import get_settings, update_settings, get_jobs, put_job, update_job
 from ...jobs import get_speaker_settings, update_speaker_settings, enqueue
 from ...models import Job
-from ...state import put_job, update_job
+from fastapi import Depends
+
+
+def get_voices_dir() -> Path:
+    return config.VOICES_DIR
 
 router = APIRouter(prefix="/api", tags=["voices"])
 
 @router.get("/speaker-profiles")
-def list_speaker_profiles():
-    if not config.VOICES_DIR.exists():
+def list_speaker_profiles(voices_dir: Path = Depends(get_voices_dir)):
+    if not voices_dir.exists():
         return []
 
-    dirs = sorted([d for d in config.VOICES_DIR.iterdir() if d.is_dir()], key=lambda x: x.name)
+    dirs = sorted([d for d in voices_dir.iterdir() if d.is_dir()], key=lambda x: x.name)
     settings = get_settings()
     default_speaker = settings.get("default_speaker_profile")
 
@@ -55,7 +59,7 @@ def list_speaker_profiles():
         if len([b for b in built_samples if (d / b).exists()]) < len(built_samples):
              is_rebuild_required = True
 
-        test_wav = config.VOICES_DIR / d.name / "sample.wav"
+        test_wav = voices_dir / d.name / "sample.wav"
         if not test_wav.exists() and len(raw_wavs) > 0:
             is_rebuild_required = True
 
@@ -77,10 +81,13 @@ def list_speaker_profiles():
 @router.post("/speaker-profiles")
 def api_create_speaker_profile(
     speaker_id: str = Form(...),
-    variant_name: str = Form(...)
+    variant_name: str = Form(...),
+    voices_dir: Path = Depends(get_voices_dir)
 ):
     name = f"{speaker_id}_{variant_name}"
-    path = config.VOICES_DIR / name
+    # Safe name check
+    safe_name = os.path.basename(name)
+    path = voices_dir / safe_name
     if path.exists():
         return JSONResponse({"status": "error", "message": "Profile already exists"}, status_code=400)
 
@@ -134,10 +141,16 @@ def api_delete_speaker_route(speaker_id: str):
     return JSONResponse({"status": "ok"})
 
 @router.post("/voices/rename-profile")
-def api_rename_voice_profile(old_name: str = Form(...), new_name: str = Form(...)):
+def api_rename_voice_profile(
+    old_name: str = Form(...),
+    new_name: str = Form(...),
+    voices_dir: Path = Depends(get_voices_dir)
+):
     import json
-    old_dir = config.VOICES_DIR / old_name
-    new_dir = config.VOICES_DIR / new_name
+    safe_old = os.path.basename(old_name)
+    safe_new = os.path.basename(new_name)
+    old_dir = voices_dir / safe_old
+    new_dir = voices_dir / safe_new
     if old_dir.exists() and not new_dir.exists():
         os.rename(old_dir, new_dir)
         update_voice_profile_references(old_name, new_name)
@@ -175,9 +188,11 @@ def update_speaker_speed(name: str, speed: float = Form(...)):
 @router.post("/speaker-profiles/{name}/build")
 async def build_speaker_profile(
     name: str,
-    files: List[UploadFile] = File(default=[])
+    files: List[UploadFile] = File(default=[]),
+    voices_dir: Path = Depends(get_voices_dir)
 ):
-    path = config.VOICES_DIR / name
+    safe_name = os.path.basename(name)
+    path = voices_dir / safe_name
     path.mkdir(parents=True, exist_ok=True)
 
     saved_files = []
@@ -208,24 +223,36 @@ async def build_speaker_profile(
     return JSONResponse({"status": "ok", "job_id": jid})
 
 @router.post("/speaker-profiles/{name}/rename")
-def api_rename_voice_profile_path(name: str, new_name: str = Form(...)):
-    from .voices import api_rename_voice_profile
-    return api_rename_voice_profile(old_name=name, new_name=new_name)
+def api_rename_voice_profile_path(
+    name: str,
+    new_name: str = Form(...),
+    voices_dir: Path = Depends(get_voices_dir)
+):
+    return api_rename_voice_profile(
+        old_name=name,
+        new_name=new_name,
+        voices_dir=voices_dir
+    )
 
 @router.post("/speaker-profiles/build")
 async def legacy_build_speaker_profile(
     name: str = Form(...),
-    files: List[UploadFile] = File(default=[])
+    files: List[UploadFile] = File(default=[]),
+    voices_dir: Path = Depends(get_voices_dir)
 ):
-    return await build_speaker_profile(name, files)
+    return await build_speaker_profile(name, files, voices_dir=voices_dir)
 
 @router.post("/speaker-profiles/test")
 def legacy_test_speaker_profile(name: str = Form(...)):
     return test_speaker_profile(name)
 
 @router.delete("/speaker-profiles/{name}")
-def delete_speaker_profile(name: str):
-    path = config.VOICES_DIR / name
+def delete_speaker_profile(
+    name: str,
+    voices_dir: Path = Depends(get_voices_dir)
+):
+    safe_name = os.path.basename(name)
+    path = voices_dir / safe_name
     if path.exists():
         shutil.rmtree(path)
         return JSONResponse({"status": "ok"})

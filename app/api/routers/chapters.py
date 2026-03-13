@@ -1,7 +1,7 @@
 import anyio
 from pathlib import Path
 from typing import Optional, List
-from fastapi import APIRouter, Form, File, UploadFile, Request
+from fastapi import APIRouter, Form, File, UploadFile, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from ...db import (
     list_chapters, reconcile_project_audio, create_chapter, update_chapter, 
@@ -10,9 +10,20 @@ from ...db import (
     sync_chapter_segments, reset_chapter_audio, get_connection
 )
 from ... import config
-from ...textops import compute_chapter_metrics, sanitize_for_xtts, safe_split_long_sentences, pack_text_to_limit
+from ...textops import (
+    compute_chapter_metrics, sanitize_for_xtts,
+    safe_split_long_sentences, pack_text_to_limit
+)
 from ...jobs import cancel as cancel_job, get_jobs
-from ...state import update_job, delete_jobs
+from ...state import update_job, delete_jobs, get_settings
+
+
+def get_chapter_dir() -> Path:
+    return config.CHAPTER_DIR
+
+
+def get_xtts_out_dir() -> Path:
+    return config.XTTS_OUT_DIR
 
 router = APIRouter(prefix="/api", tags=["chapters"])
 
@@ -50,29 +61,23 @@ def api_get_chapter_details(chapter_id: str):
     return JSONResponse(c)
 
 @router.put("/chapters/{chapter_id}")
-async def api_update_chapter_details(
+def api_update_chapter_details(
     chapter_id: str,
     title: Optional[str] = Form(None),
     text_content: Optional[str] = Form(None)
 ):
     updates = {}
-    if title is not None: updates["title"] = title
+    if title is not None:
+        updates["title"] = title
     if text_content is not None:
         updates["text_content"] = text_content
         metrics = compute_chapter_metrics(text_content)
         updates.update(metrics)
 
     if updates:
+        update_chapter(chapter_id, **updates)
 
-        def do_update():
-            update_chapter(chapter_id, **updates)
-            return get_chapter(chapter_id)
-
-        chapter_data = await anyio.to_thread.run_sync(do_update)
-    else:
-        chapter_data = await anyio.to_thread.run_sync(get_chapter, chapter_id)
-
-    return JSONResponse({"status": "ok", "chapter": chapter_data})
+    return JSONResponse({"status": "ok", "chapter": get_chapter(chapter_id)})
 
 @router.delete("/chapters/{chapter_id}")
 def api_delete_chapter_route(chapter_id: str):
@@ -177,34 +182,50 @@ def api_reset_chapter_id(chapter_id: str):
     return JSONResponse({"status": "ok"})
 
 @router.post("/chapter/reset")
-def reset_chapter_legacy(chapter_file: str = Form(...)):
+def reset_chapter_legacy(
+    chapter_file: str = Form(...),
+    xtts_out_dir: Path = Depends(get_xtts_out_dir)
+):
     existing = get_jobs()
-    stem = Path(chapter_file).stem
+    import os
+    # Safe basename for protection
+    safe_chapter_file = os.path.basename(chapter_file)
+    stem = Path(safe_chapter_file).stem
     for jid, j in existing.items():
-        if j.chapter_file == chapter_file:
+        if j.chapter_file == safe_chapter_file:
             cancel_job(jid)
             update_job(jid, status="cancelled", log="Cancelled by chapter reset.")
 
     count = 0
     for ext in [".wav", ".mp3", ".m4a"]:
-        f = config.XTTS_OUT_DIR / f"{stem}{ext}"
+        f = xtts_out_dir / f"{stem}{ext}"
         if f.exists():
             f.unlink()
             count += 1
-    return JSONResponse({"status": "ok", "message": f"Reset {chapter_file}, deleted {count} files"})
+    return JSONResponse({
+        "status": "ok",
+        "message": f"Reset {safe_chapter_file}, deleted {count} files"
+    })
 
 @router.delete("/chapter/{filename}")
-def api_delete_legacy_chapter(filename: str):
-    path = config.CHAPTER_DIR / filename
+def api_delete_legacy_chapter(
+    filename: str,
+    chapter_dir: Path = Depends(get_chapter_dir),
+    xtts_out_dir: Path = Depends(get_xtts_out_dir)
+):
+    import os
+    safe_filename = os.path.basename(filename)
+    path = chapter_dir / safe_filename
     stem = path.stem
     for ext in [".wav", ".mp3"]:
-        f = config.XTTS_OUT_DIR / f"{stem}{ext}"
-        if f.exists(): f.unlink()
+        f = xtts_out_dir / f"{stem}{ext}"
+        if f.exists():
+            f.unlink()
 
     existing = get_jobs()
     to_del = []
     for jid, j in existing.items():
-        if j.chapter_file == filename:
+        if j.chapter_file == safe_filename:
             cancel_job(jid)
             to_del.append(jid)
 
@@ -213,17 +234,28 @@ def api_delete_legacy_chapter(filename: str):
 
     if path.exists():
         path.unlink()
-        return JSONResponse({"status": "ok", "message": f"Deleted chapter {filename}"})
+        return JSONResponse({
+            "status": "ok",
+            "message": f"Deleted chapter {safe_filename}"
+        })
 
-    return JSONResponse({"status": "error", "message": "Chapter not found"}, status_code=404)
+    return JSONResponse(
+        {"status": "error", "message": "Chapter not found"},
+        status_code=404
+    )
 
 @router.get("/preview/{chapter_file}")
-def api_preview(chapter_file: str, processed: bool = False):
-    from ...state import get_settings
+def api_preview(
+    chapter_file: str,
+    processed: bool = False,
+    chapter_dir: Path = Depends(get_chapter_dir)
+):
     from ..utils import read_preview
     import re
+    import os
 
-    p = config.CHAPTER_DIR / chapter_file
+    safe_filename = os.path.basename(chapter_file)
+    p = chapter_dir / safe_filename
     if not p.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
 
@@ -237,15 +269,21 @@ def api_preview(chapter_file: str, processed: bool = False):
             text = sanitize_for_xtts(text)
             text = safe_split_long_sentences(text)
         else:
-            text = re.sub(r'[^\x00-\x7F]+', '', text)
+            text = re.sub(r"[^\x00-\x7F]+", "", text)
             text = text.strip()
         text = pack_text_to_limit(text, pad=True)
 
     return JSONResponse({"text": text, "analysis": analysis})
 @router.post("/chapter/{chapter_id}/export-sample")
-async def api_export_chapter_sample(chapter_id: str, project_id: Optional[str] = None):
+async def api_export_chapter_sample(
+    chapter_id: str,
+    project_id: Optional[str] = None,
+    xtts_out_dir: Path = Depends(get_xtts_out_dir)
+):
     chapter = get_chapter(chapter_id)
-    pdir = config.get_project_audio_dir(project_id) if project_id else config.XTTS_OUT_DIR
+    pdir = (
+        get_project_audio_dir(project_id) if project_id else xtts_out_dir
+    )
 
     wav_path = None
     if chapter and chapter.get("audio_file_path"):
@@ -271,9 +309,15 @@ async def api_export_chapter_sample(chapter_id: str, project_id: Optional[str] =
     return JSONResponse({"status": "ok", "url": rel_path})
 
 @router.get("/chapters/{chapter_id}/stream")
-def api_stream_chapter(chapter_id: str, project_id: Optional[str] = None):
+def api_stream_chapter(
+    chapter_id: str,
+    project_id: Optional[str] = None,
+    xtts_out_dir: Path = Depends(get_xtts_out_dir)
+):
     chapter = get_chapter(chapter_id)
-    pdir = config.get_project_audio_dir(project_id) if project_id else config.XTTS_OUT_DIR
+    pdir = (
+        get_project_audio_dir(project_id) if project_id else xtts_out_dir
+    )
 
     wav_path = None
     if chapter and chapter.get("audio_file_path"):

@@ -6,25 +6,52 @@ import shutil
 import anyio
 from pathlib import Path
 from typing import Optional, List, Any
-from fastapi import APIRouter, Form, UploadFile, File, Request
+from fastapi import APIRouter, Form, UploadFile, File, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from ... import config
 from ...state import get_settings, update_settings, get_jobs, put_job, update_job
 from ...jobs import paused, set_paused, cleanup_and_reconcile, enqueue
 from ...db import list_speakers
+
+
+def get_upload_dir() -> Path:
+    return config.UPLOAD_DIR
+
+
+def get_chapter_dir() -> Path:
+    return config.CHAPTER_DIR
+
+
+def get_cover_dir() -> Path:
+    return config.COVER_DIR
+
+
+def get_audiobook_dir() -> Path:
+    return config.AUDIOBOOK_DIR
+
+
+def get_voices_dir() -> Path:
+    return config.VOICES_DIR
+
+
+def get_xtts_out_dir() -> Path:
+    return config.XTTS_OUT_DIR
 from ...models import Job
 from ..utils import read_preview, output_exists, xtts_outputs_for, legacy_list_chapters, list_audiobooks
 
 router = APIRouter(prefix="/api", tags=["system"])
 
 @router.get("/home")
-def api_home():
+def api_home(
+    voices_dir: Path = Depends(get_voices_dir),
+    xtts_out_dir: Path = Depends(get_xtts_out_dir)
+):
     """Returns initial data for the React SPA."""
     cleanup_and_reconcile()
 
     from .voices import list_speaker_profiles
 
-    profiles = list_speaker_profiles()
+    profiles = list_speaker_profiles(voices_dir=voices_dir)
     speakers = list_speakers()
     settings = get_settings()
 
@@ -35,9 +62,9 @@ def api_home():
     xtts_mp3 = []
     for c in chapters:
         stem = Path(c).stem
-        if (config.XTTS_OUT_DIR / f"{stem}.mp3").exists():
+        if (xtts_out_dir / f"{stem}.mp3").exists():
             xtts_mp3.append(c)
-        if (config.XTTS_OUT_DIR / f"{stem}.wav").exists():
+        if (xtts_out_dir / f"{stem}.wav").exists():
             xtts_wav_only.append(c)
 
     return {
@@ -45,7 +72,7 @@ def api_home():
         "jobs": jobs,
         "settings": settings,
         "paused": paused(),
-        "narrator_ok": (config.VOICES_DIR / "Default").exists(),
+        "narrator_ok": (voices_dir / "Default").exists(),
         "xtts_mp3": xtts_mp3,
         "xtts_wav_only": xtts_wav_only,
         "audiobooks": list_audiobooks(),
@@ -112,20 +139,24 @@ def api_import_legacy():
 async def upload(
     file: UploadFile = File(...),
     mode: str = "parts",
-    max_chars: Optional[int] = None
+    max_chars: Optional[int] = None,
+    upload_dir: Path = Depends(get_upload_dir),
+    chapter_dir: Path = Depends(get_chapter_dir)
 ):
     file_content = await file.read()
+    # Safe basename for protection
+    safe_filename = os.path.basename(file.filename)
 
     def process_file():
-        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        temp_path = config.UPLOAD_DIR / file.filename
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = upload_dir / safe_filename
         temp_path.write_bytes(file_content)
 
         # Logic to split file
         content = temp_path.read_text(encoding="utf-8", errors="replace")
         import re
         chapter_filenames = []
-        config.CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+        chapter_dir.mkdir(parents=True, exist_ok=True)
 
         # Simple split: "Chapter X:" or similar
         parts = re.split(r'(?i)(Chapter\s+\d+.*?(?:\n|$))', content)
@@ -135,19 +166,23 @@ async def upload(
                 header = parts[i]
                 body = parts[i+1] if i+1 < len(parts) else ""
                 fname = f"part_{len(chapter_filenames)+1:04d}.txt"
-                (config.CHAPTER_DIR / fname).write_text(
+                (chapter_dir / fname).write_text(
                     header + body, encoding="utf-8"
                 )
                 chapter_filenames.append(fname)
         else:
             fname = "part_0001.txt"
-            (config.CHAPTER_DIR / fname).write_text(content, encoding="utf-8")
+            (chapter_dir / fname).write_text(content, encoding="utf-8")
             chapter_filenames.append(fname)
         return chapter_filenames
 
     chapter_filenames = await anyio.to_thread.run_sync(process_file)
 
-    return JSONResponse({"status": "success", "filename": file.filename, "chapters": chapter_filenames})
+    return JSONResponse({
+        "status": "success",
+        "filename": safe_filename,
+        "chapters": chapter_filenames
+    })
 
 @router.post("/create_audiobook")
 async def create_audiobook(
@@ -155,21 +190,25 @@ async def create_audiobook(
     author: str = Form(None),
     narrator: str = Form(None),
     chapters: str = Form("[]"),
-    cover: Optional[UploadFile] = File(None)
+    cover: Optional[UploadFile] = File(None),
+    cover_dir: Path = Depends(get_cover_dir),
+    audiobook_dir: Path = Depends(get_audiobook_dir)
 ):
     try:
         chapter_list = json.loads(chapters)
     except:
         chapter_list = []
 
-    config.COVER_DIR.mkdir(parents=True, exist_ok=True)
-    config.AUDIOBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    cover_dir.mkdir(parents=True, exist_ok=True)
+    audiobook_dir.mkdir(parents=True, exist_ok=True)
 
     cover_path = None
     if cover:
-        ext = Path(cover.filename).suffix
+        # Use safe basename for filename
+        safe_cover_filename = os.path.basename(cover.filename)
+        ext = Path(safe_cover_filename).suffix
         cover_filename = f"{uuid.uuid4().hex}{ext}"
-        cover_path = str(config.COVER_DIR / cover_filename)
+        cover_path = str(cover_dir / cover_filename)
         cover_content = await cover.read()
 
         def save_cover():
