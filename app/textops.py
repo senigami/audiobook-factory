@@ -548,7 +548,7 @@ def get_text_stats(text: str) -> dict:
 
 
 def format_duration(seconds: int) -> str:
-    """Formats seconds into readable string (e.g. 1h 2m or 2m 5s or 45s)."""
+    """Formats seconds into readable string (e.g. 1 hour 2m or 2m 5s or 45s)."""
     if seconds < 60:
         return f"{seconds}s"
     minutes = seconds // 60
