@@ -135,7 +135,9 @@ async def api_update_segment_route(segment_id: str, request: Request):
         if k in updates and updates[k] == "":
             updates[k] = None
 
-    success = await anyio.to_thread.run_sync(update_segment, segment_id, **updates)
+    success = await anyio.to_thread.run_sync(
+        lambda: update_segment(segment_id, **updates)
+    )
     return JSONResponse({"status": "ok" if success else "error"})
 
 @router.put("/segments")
@@ -143,7 +145,9 @@ async def api_legacy_bulk_update_segments_put(request: Request):
     form = await request.form()
     sids = form.get("segment_ids", "").split(",")
     updates = {k: v for k, v in form.items() if k != "segment_ids"}
-    await anyio.to_thread.run_sync(update_segments_bulk, sids, **updates)
+    await anyio.to_thread.run_sync(
+        lambda: update_segments_bulk(sids, **updates)
+    )
     return JSONResponse({"status": "ok"})
 
 @router.post("/chapters/{chapter_id}/segments/bulk-status")
@@ -152,8 +156,10 @@ def api_bulk_update_segment_status(chapter_id: str, segment_ids: List[str], stat
     return JSONResponse({"status": "ok"})
 
 @router.post("/segments/bulk-update")
-def api_bulk_update_segments(segment_ids: List[str], updates: dict):
-    update_segments_bulk(segment_ids, **updates)
+async def api_bulk_update_segments(segment_ids: List[str], updates: dict):
+    await anyio.to_thread.run_sync(
+        lambda: update_segments_bulk(segment_ids, **updates)
+    )
     return JSONResponse({"status": "ok"})
 
 @router.post("/chapters/{chapter_id}/sync-segments")
