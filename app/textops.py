@@ -548,14 +548,14 @@ def get_text_stats(text: str) -> dict:
 
 
 def format_duration(seconds: int) -> str:
-    """Formats seconds into readable string (e.g. 1 hour 2m or 2m 5s or 45s)."""
+    """Formats seconds into readable string (e.g. 1 hour 2m 3s or 45s)."""
     if seconds < 60:
         return f"{seconds}s"
-    minutes = seconds // 60
+    minutes, secs = divmod(seconds, 60)
     if minutes < 60:
-        return f"{minutes}m {seconds % 60}s"
-    hours = minutes // 60
-    return f"{hours}h {minutes % 60}m"
+        return f"{minutes}m {secs}s"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins}m {secs}s"
 
 
 def compute_chapter_metrics(text: str) -> dict:

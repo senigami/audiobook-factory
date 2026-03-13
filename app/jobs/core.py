@@ -32,14 +32,14 @@ def _estimate_seconds(text_chars: int, cps: float) -> int:
     return max(5, int(text_chars / max(1.0, cps)))
 
 def format_seconds(seconds: int) -> str:
-    """Formats seconds into readable string (e.g. 1h 2m or 2m 5s or 45s)."""
+    """Formats seconds into readable string (e.g. 1h 2m 3s or 45s)."""
     if seconds < 60:
         return f"{seconds}s"
-    minutes = seconds // 60
+    minutes, secs = divmod(seconds, 60)
     if minutes < 60:
-        return f"{minutes}m {seconds % 60}s"
-    hours = minutes // 60
-    return f"{hours}h {minutes % 60}m"
+        return f"{minutes}m {secs}s"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h {mins}m {secs}s"
 
 def calculate_predicted_progress(job, now: float, start_time: float, eta: int, limit: float = 0.85, prepare_limit: float = 0.05, prepare_step: float = 0.005) -> float:
     """Safely calculates the predicted progress floor for a job."""

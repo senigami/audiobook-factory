@@ -17,14 +17,17 @@ def mock_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.api.routers.analysis.CHAPTER_DIR", tmp_path / "chapters")
     monkeypatch.setattr("app.api.routers.analysis.REPORT_DIR", tmp_path / "reports")
+    monkeypatch.setattr("app.migration.CHAPTER_DIR", tmp_path / "chapters")
+    monkeypatch.setattr("app.migration.XTTS_OUT_DIR", tmp_path / "xtts")
 
     (tmp_path / "chapters").mkdir(parents=True, exist_ok=True)
     (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "xtts").mkdir(parents=True, exist_ok=True)
     return tmp_path
 
 def test_analysis_router_endpoints(mock_state):
     # Test analyze_text endpoint (POST)
-    response = client.post("/api/analyze_text", data={"text_content": "This is a short sentence. This is another one."})
+    response = client.post("/api/analyze_text", json={"text_content": "This is a short sentence. This is another one."})
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
