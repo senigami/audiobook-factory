@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 import threading
+import logging
 from typing import Optional, List
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -16,6 +17,8 @@ from .config import (
 from .db import init_db
 from .api import projects, chapters, voices, queue, settings, generation, system, analysis, jobs, migration, manager
 from .api.routers.analysis import AnalysisError
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -146,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
-        print(f"WS error: {e}")
+        logger.error(f"WS error: {e}")
         manager.disconnect(websocket)
 
 @app.exception_handler(AnalysisError)
@@ -178,7 +181,7 @@ def startup_event():
     stuck_jids = [jid for jid, j in jobs.items() if j.status in ("queued", "running", "preparing", "finalizing")]
     if stuck_jids:
         delete_jobs(stuck_jids)
-        print(f"Startup: Cleared {len(stuck_jids)} stuck jobs from memory state.")
+        logger.info(f"Startup: Cleared {len(stuck_jids)} stuck jobs from memory state.")
 
     # 2. Reconcile Database tables (Clear ghost indicators)
     try:
@@ -192,15 +195,15 @@ def startup_event():
 
         reconcile_all_chapter_statuses(active_chapter_ids)
         reconcile_queue_status(active_ids)
-        print("Startup: Database reconciliation complete.")
+        logger.info("Startup: Database reconciliation complete.")
     except Exception as e:
-        print(f"Startup Warning: Database reconciliation failed: {e}")
+        logger.warning(f"Startup Warning: Database reconciliation failed: {e}")
 
     # 3. Register job listener for WebSocket updates
     from .state import add_job_listener
     from .api.ws import broadcast_job_updated
     add_job_listener(broadcast_job_updated)
-    print("Startup: Job listeners registered.")
+    logger.info("Startup: Job listeners registered.")
 
 @app.on_event("shutdown")
 def shutdown_event():

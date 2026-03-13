@@ -23,11 +23,12 @@ export function useChapterAnalysis(chapterId: string, text: string) {
     
     setAnalyzing(true);
     try {
-      const formData = new FormData();
-      formData.set('text_content', textContent);
       const res = await fetch('/api/analyze_text', { 
           method: 'POST', 
-          body: formData,
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ text_content: textContent }),
           signal: controller.signal
       });
       const data = await res.json();
