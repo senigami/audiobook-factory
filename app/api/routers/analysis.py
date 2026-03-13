@@ -1,14 +1,13 @@
-from pathlib import Path
-from typing import List, Optional
-from fastapi import APIRouter, Form
+from itertools import groupby
+from pydantic import BaseModel
+from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
-from ...config import CHAPTER_DIR, REPORT_DIR, SENT_CHAR_LIMIT
+from ...config import CHAPTER_DIR, REPORT_DIR, SENT_CHAR_LIMIT, BASELINE_XTTS_CPS
 from ...db import get_chapter, get_chapter_segments, get_characters
 from ...textops import (
     find_long_sentences, clean_text_for_tts, safe_split_long_sentences, 
-    pack_text_to_limit, sanitize_for_xtts
+    pack_text_to_limit, sanitize_for_xtts, get_text_stats, format_duration
 )
-from ...jobs import BASELINE_XTTS_CPS
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -22,18 +21,13 @@ async def api_analyze_chapter(chapter_id: str):
     chars = get_characters(chap['project_id'])
     char_map = {c['id']: c for c in chars}
 
-    # 1. Group segments by consecutive character
+    # 1. Group segments by consecutive character using itertools.groupby
     groups = []
-    if segs:
-        curr_group = {"character_id": segs[0]['character_id'], "segments": [segs[0]]}
-        for i in range(1, len(segs)):
-            s = segs[i]
-            if s['character_id'] == curr_group['character_id']:
-                curr_group['segments'].append(s)
-            else:
-                groups.append(curr_group)
-                curr_group = {"character_id": s['character_id'], "segments": [s]}
-        groups.append(curr_group)
+    for char_id, seg_iterator in groupby(segs, key=lambda s: s['character_id']):
+        groups.append({
+            "character_id": char_id,
+            "segments": list(seg_iterator)
+        })
 
     # 2. Within each group, reproduce the exact character-limit grouping from jobs.py
     voice_chunks = []
@@ -81,10 +75,7 @@ async def api_analyze_chapter(chapter_id: str):
 
     # Stats
     full_text = chap.get('text_content') or ''
-    char_count = len(full_text)
-    word_count = len(full_text.split())
-    sent_count = full_text.count('.') + full_text.count('?') + full_text.count('!')
-    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+    stats = get_text_stats(full_text)
 
     raw_hits = find_long_sentences(full_text)
     cleaned_text = clean_text_for_tts(full_text)
@@ -97,22 +88,23 @@ async def api_analyze_chapter(chapter_id: str):
         "status": "ok",
         "voice_chunks": voice_chunks,
         "threshold": SENT_CHAR_LIMIT,
-        "char_count": char_count,
-        "word_count": word_count,
-        "sent_count": sent_count,
-        "predicted_seconds": pred_seconds,
+        "char_count": stats["char_count"],
+        "word_count": stats["word_count"],
+        "sent_count": stats["sent_count"],
+        "predicted_seconds": stats["predicted_seconds"],
         "raw_long_sentences": len(raw_hits),
         "auto_fixed": auto_fixed,
         "uncleanable": uncleanable,
         "uncleanable_sentences": [{"length": clen, "text": s} for idx, clen, start, end, s in cleaned_hits]
     })
 
+class AnalyzeTextRequest(BaseModel):
+    text_content: str
+
 @router.post("/analyze_text")
-async def api_analyze_text(text_content: str = Form(...)):
-    char_count = len(text_content)
-    word_count = len(text_content.split())
-    sent_count = text_content.count('.') + text_content.count('?') + text_content.count('!')
-    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+async def api_analyze_text(req: AnalyzeTextRequest):
+    text_content = req.text_content
+    stats = get_text_stats(text_content)
 
     raw_hits = find_long_sentences(text_content)
     cleaned_text = clean_text_for_tts(text_content)
@@ -125,10 +117,10 @@ async def api_analyze_text(text_content: str = Form(...)):
 
     return JSONResponse({
         "status": "ok",
-        "char_count": char_count,
-        "word_count": word_count,
-        "sent_count": sent_count,
-        "predicted_seconds": pred_seconds,
+        "char_count": stats["char_count"],
+        "word_count": stats["word_count"],
+        "sent_count": stats["sent_count"],
+        "predicted_seconds": stats["predicted_seconds"],
         "raw_long_sentences": len(raw_hits),
         "auto_fixed": auto_fixed,
         "uncleanable": uncleanable,
@@ -141,12 +133,9 @@ async def api_analyze_text(text_content: str = Form(...)):
 def _run_analysis(chapter_file: str):
     p = CHAPTER_DIR / chapter_file
     if not p.exists():
-        return None, "Chapter file not found."
+        raise HTTPException(status_code=404, detail=f"Chapter file '{chapter_file}' not found.")
     text = p.read_text(encoding="utf-8", errors="replace")
-    char_count = len(text)
-    word_count = len(text.split())
-    sent_count = text.count('.') + text.count('?') + text.count('!')
-    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+    stats = get_text_stats(text)
     raw_hits = find_long_sentences(text)
     cleaned_text = clean_text_for_tts(text)
     split_text = safe_split_long_sentences(cleaned_text)
@@ -155,12 +144,14 @@ def _run_analysis(chapter_file: str):
     auto_fixed = len(raw_hits) - uncleanable
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORT_DIR / f"long_sentences_{Path(chapter_file).stem}.txt"
+    # Sanitize stem for safety
+    safe_stem = Path(chapter_file).stem.replace("..", "")
+    report_path = REPORT_DIR / f"long_sentences_{safe_stem}.txt"
     lines = [
-        f"Character Count   : {char_count:,}",
-        f"Word Count        : {word_count:,}",
-        f"Sentence Count    : {sent_count:,} (approx)",
-        f"Predicted Time    : {pred_seconds // 60}m {pred_seconds % 60}s (@ {BASELINE_XTTS_CPS} cps)",
+        f"Character Count   : {stats['char_count']:,}",
+        f"Word Count        : {stats['word_count']:,}",
+        f"Sentence Count    : {stats['sent_count']:,} (approx)",
+        f"Predicted Time    : {stats['formatted_duration']} (@ {BASELINE_XTTS_CPS} cps)",
     ]
     if len(raw_hits) > 0:
         lines.extend([

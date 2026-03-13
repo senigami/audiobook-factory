@@ -44,7 +44,7 @@ def test_api_analyze_chapter_success():
 
 def test_api_analyze_text():
     text = "Short sentence. " + "A" * 300 + ". End."
-    response = client.post("/api/analyze_text", data={"text_content": text})
+    response = client.post("/api/analyze_text", json={"text_content": text})
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"

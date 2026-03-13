@@ -42,7 +42,7 @@ TEXT PROCESSING PIPELINE - ORDER OF OPERATIONS
 import re
 from pathlib import Path
 from typing import List, Tuple
-from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT
+from .config import SAFE_SPLIT_TARGET, SENT_CHAR_LIMIT, BASELINE_XTTS_CPS
 
 # Semicolons serve as the pause character for TTS output.
 # They survive all text cleaning (pure ASCII), and xtts_inference.py splits on them
@@ -484,18 +484,42 @@ def pack_text_to_limit(text: str, limit: int = SENT_CHAR_LIMIT, pad: bool = Fals
 
     return '\n'.join(packed)
 
-def compute_chapter_metrics(text: str) -> dict:
-    """Computes word, character, and sentence counts for a given text."""
+def get_text_stats(text: str) -> dict:
+    """Centralized stats for analysis and DB."""
     if not text:
-        return {"char_count": 0, "word_count": 0, "predicted_audio_length": 0.0}
-
+        return {
+            "char_count": 0, "word_count": 0, "sent_count": 0, 
+            "predicted_seconds": 0, "formatted_duration": "0s"
+        }
     char_count = len(text)
     word_count = len(text.split())
-    # Simple sentence count approximation
-    # In jobs.py it uses CPS for prediction
-    # We'll return the raw counts for the DB
+    # Count periods, exclamation marks, and question marks as sentence markers
+    sent_count = text.count('.') + text.count('?') + text.count('!')
+    pred_seconds = int(char_count / BASELINE_XTTS_CPS)
+
     return {
         "char_count": char_count,
         "word_count": word_count,
-        "predicted_audio_length": char_count / 16.7 # Using baseline CPS
+        "sent_count": sent_count,
+        "predicted_seconds": pred_seconds,
+        "formatted_duration": format_duration(pred_seconds)
+    }
+
+def format_duration(seconds: int) -> str:
+    """Formats seconds into readable string (e.g. 1h 2m or 2m 5s or 45s)."""
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m {seconds % 60}s"
+    hours = minutes // 60
+    return f"{hours}h {minutes % 60}m"
+
+def compute_chapter_metrics(text: str) -> dict:
+    """Legacy wrapper for DB updates, now uses centralized helper."""
+    stats = get_text_stats(text)
+    return {
+        "char_count": stats["char_count"],
+        "word_count": stats["word_count"],
+        "predicted_audio_length": float(stats["predicted_seconds"])
     }

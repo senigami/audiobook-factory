@@ -2,6 +2,7 @@ import queue
 import threading
 from typing import Dict
 from ..state import get_settings
+from ..config import BASELINE_XTTS_CPS
 
 # Queues and Flags
 job_queue: "queue.Queue[str]" = queue.Queue()
@@ -10,7 +11,7 @@ cancel_flags: Dict[str, threading.Event] = {}
 pause_flag = threading.Event()
 
 # Default fallbacks
-BASELINE_XTTS_CPS = 16.7
+# BASELINE_XTTS_CPS moved to config.py
 
 def paused() -> bool:
     return pause_flag.is_set()
@@ -31,12 +32,14 @@ def _estimate_seconds(text_chars: int, cps: float) -> int:
     return max(5, int(text_chars / max(1.0, cps)))
 
 def format_seconds(seconds: int) -> str:
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    if h > 0:
-        return f"{h}h {m}m {s}s"
-    return f"{m}m {s}s"
+    """Formats seconds into readable string (e.g. 1h 2m or 2m 5s or 45s)."""
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m {seconds % 60}s"
+    hours = minutes // 60
+    return f"{hours}h {minutes % 60}m"
 
 def calculate_predicted_progress(job, now: float, start_time: float, eta: int, limit: float = 0.85, prepare_limit: float = 0.05, prepare_step: float = 0.005) -> float:
     """Safely calculates the predicted progress floor for a job."""
