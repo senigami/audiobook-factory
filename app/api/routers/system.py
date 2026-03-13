@@ -3,6 +3,7 @@ import uuid
 import time
 import json
 import shutil
+import anyio
 from pathlib import Path
 from typing import Optional, List, Any
 from fastapi import APIRouter, Form, UploadFile, File, Request
@@ -113,31 +114,38 @@ async def upload(
     mode: str = "parts",
     max_chars: Optional[int] = None
 ):
-    config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    temp_path = config.UPLOAD_DIR / file.filename
-    with open(temp_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    file_content = await file.read()
 
-    # Logic to split file
-    content = temp_path.read_text(encoding="utf-8", errors="replace")
-    import re
-    chapter_filenames = []
-    config.CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+    def process_file():
+        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        temp_path = config.UPLOAD_DIR / file.filename
+        temp_path.write_bytes(file_content)
 
-    # Simple split: "Chapter X:" or similar
-    parts = re.split(r'(?i)(Chapter\s+\d+.*?(?:\n|$))', content)
-    if len(parts) > 1:
-        # Re-assemble
-        for i in range(1, len(parts), 2):
-            header = parts[i]
-            body = parts[i+1] if i+1 < len(parts) else ""
-            fname = f"part_{len(chapter_filenames)+1:04d}.txt"
-            (config.CHAPTER_DIR / fname).write_text(header + body, encoding="utf-8")
+        # Logic to split file
+        content = temp_path.read_text(encoding="utf-8", errors="replace")
+        import re
+        chapter_filenames = []
+        config.CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Simple split: "Chapter X:" or similar
+        parts = re.split(r'(?i)(Chapter\s+\d+.*?(?:\n|$))', content)
+        if len(parts) > 1:
+            # Re-assemble
+            for i in range(1, len(parts), 2):
+                header = parts[i]
+                body = parts[i+1] if i+1 < len(parts) else ""
+                fname = f"part_{len(chapter_filenames)+1:04d}.txt"
+                (config.CHAPTER_DIR / fname).write_text(
+                    header + body, encoding="utf-8"
+                )
+                chapter_filenames.append(fname)
+        else:
+            fname = "part_0001.txt"
+            (config.CHAPTER_DIR / fname).write_text(content, encoding="utf-8")
             chapter_filenames.append(fname)
-    else:
-        fname = "part_0001.txt"
-        (config.CHAPTER_DIR / fname).write_text(content, encoding="utf-8")
-        chapter_filenames.append(fname)
+        return chapter_filenames
+
+    chapter_filenames = await anyio.to_thread.run_sync(process_file)
 
     return JSONResponse({"status": "success", "filename": file.filename, "chapters": chapter_filenames})
 
@@ -162,8 +170,13 @@ async def create_audiobook(
         ext = Path(cover.filename).suffix
         cover_filename = f"{uuid.uuid4().hex}{ext}"
         cover_path = str(config.COVER_DIR / cover_filename)
-        with open(cover_path, "wb") as f:
-            shutil.copyfileobj(cover.file, f)
+        cover_content = await cover.read()
+
+        def save_cover():
+            with open(cover_path, "wb") as f:
+                f.write(cover_content)
+
+        await anyio.to_thread.run_sync(save_cover)
 
     jid = uuid.uuid4().hex[:12]
     j = Job(

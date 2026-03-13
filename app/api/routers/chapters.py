@@ -1,3 +1,4 @@
+import anyio
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Form, File, UploadFile, Request
@@ -33,9 +34,13 @@ async def api_create_chapter(
         content = await file.read()
         text = content.decode("utf-8", errors="replace")
 
-    metrics = compute_chapter_metrics(text)
-    cid = create_chapter(project_id, title, text, sort_order, **metrics)
-    return JSONResponse({"status": "ok", "chapter": get_chapter(cid)})
+    def process():
+        metrics = compute_chapter_metrics(text)
+        cid = create_chapter(project_id, title, text, sort_order, **metrics)
+        return get_chapter(cid)
+
+    chapter_data = await anyio.to_thread.run_sync(process)
+    return JSONResponse({"status": "ok", "chapter": chapter_data})
 
 @router.get("/chapters/{chapter_id}")
 def api_get_chapter_details(chapter_id: str):
@@ -58,9 +63,16 @@ async def api_update_chapter_details(
         updates.update(metrics)
 
     if updates:
-        update_chapter(chapter_id, **updates)
 
-    return JSONResponse({"status": "ok", "chapter": get_chapter(chapter_id)})
+        def do_update():
+            update_chapter(chapter_id, **updates)
+            return get_chapter(chapter_id)
+
+        chapter_data = await anyio.to_thread.run_sync(do_update)
+    else:
+        chapter_data = await anyio.to_thread.run_sync(get_chapter, chapter_id)
+
+    return JSONResponse({"status": "ok", "chapter": chapter_data})
 
 @router.delete("/chapters/{chapter_id}")
 def api_delete_chapter_route(chapter_id: str):
@@ -123,7 +135,7 @@ async def api_update_segment_route(segment_id: str, request: Request):
         if k in updates and updates[k] == "":
             updates[k] = None
 
-    success = update_segment(segment_id, **updates)
+    success = await anyio.to_thread.run_sync(update_segment, segment_id, **updates)
     return JSONResponse({"status": "ok" if success else "error"})
 
 @router.put("/segments")
@@ -131,7 +143,7 @@ async def api_legacy_bulk_update_segments_put(request: Request):
     form = await request.form()
     sids = form.get("segment_ids", "").split(",")
     updates = {k: v for k, v in form.items() if k != "segment_ids"}
-    update_segments_bulk(sids, **updates)
+    await anyio.to_thread.run_sync(update_segments_bulk, sids, **updates)
     return JSONResponse({"status": "ok"})
 
 @router.post("/chapters/{chapter_id}/segments/bulk-status")
@@ -149,7 +161,7 @@ async def api_sync_segments(chapter_id: str, request: Request):
     data = await request.json()
     text = data.get("text")
     if text is not None:
-        sync_chapter_segments(chapter_id, text)
+        await anyio.to_thread.run_sync(sync_chapter_segments, chapter_id, text)
     return JSONResponse({"status": "ok"})
 
 @router.post("/chapters/{chapter_id}/reset")

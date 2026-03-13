@@ -2,6 +2,7 @@ import uuid
 import os
 import shutil
 import time
+import anyio
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, Form, File, UploadFile
@@ -181,10 +182,15 @@ async def build_speaker_profile(
 
     saved_files = []
     for f in files:
-        if not f.filename: continue
+        if not f.filename:
+            continue
         content = await f.read()
         dest = path / f.filename
-        dest.write_bytes(content)
+
+        def save_file(data, target):
+            target.write_bytes(data)
+
+        await anyio.to_thread.run_sync(save_file, content, dest)
         saved_files.append(f.filename)
 
     # Create build job
